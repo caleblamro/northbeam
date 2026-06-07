@@ -1,0 +1,4 @@
+# E2B sandbox template — stub kept for structural parity with brink.
+# Not used by the Northbeam design system / app at this stage.
+template_name = "northbeam-dev"
+dockerfile = "infra/e2b/e2b.Dockerfile"

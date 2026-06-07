@@ -1,0 +1,24 @@
+# Local dev compose. Credentials come from .env.local (passed via --env-file by
+# `pnpm dev`), with obvious dev fallbacks. `pnpm dev:down` to stop.
+name: northbeam-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-northbeam}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-northbeam}
+      POSTGRES_DB: ${POSTGRES_DB:-northbeam}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-northbeam} -d ${POSTGRES_DB:-northbeam}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

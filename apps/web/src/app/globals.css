@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+/* Northbeam design tokens + components — ported from design_handoff_northbeam/.
+   Light is the default; dark is opt-in via [data-theme="dark"]. */
+@import "./tokens.css";
+@import "./components.css";
+@import "./components-forms.css";
+@import "./components-nav.css";
+@import "./components-doc.css";
+@import "./components-app.css";
+
+/* Expose the font vars to Tailwind so `font-sans` / `font-mono` utilities work.
+   next/font sets --font-sans / --font-mono on <html> (see app/layout.tsx). */
+@theme {
+  --font-sans: var(--font-sans), "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ─── Brand accent variants (Tweak → pick one for production) ────────────────
+   Each sets --brand and its derived shades. Default (no attribute) is the
+   blurple defined in tokens.css. Hover/active mirror the handoff's mix()
+   (12% / 22% toward black); ring is 40% alpha. */
+[data-accent="iris"] {
+  --brand: #4f46e5;
+  --brand-hover: color-mix(in srgb, #4f46e5 88%, #000);
+  --brand-active: color-mix(in srgb, #4f46e5 78%, #000);
+  --brand-ring: color-mix(in srgb, #4f46e5 40%, transparent);
+}
+[data-accent="sky"] {
+  --brand: #0284c7;
+  --brand-hover: color-mix(in srgb, #0284c7 88%, #000);
+  --brand-active: color-mix(in srgb, #0284c7 78%, #000);
+  --brand-ring: color-mix(in srgb, #0284c7 40%, transparent);
+}
+[data-accent="emerald"] {
+  --brand: #0e9f6e;
+  --brand-hover: color-mix(in srgb, #0e9f6e 88%, #000);
+  --brand-active: color-mix(in srgb, #0e9f6e 78%, #000);
+  --brand-ring: color-mix(in srgb, #0e9f6e 40%, transparent);
+}
+[data-accent="violet"] {
+  --brand: #7c3aed;
+  --brand-hover: color-mix(in srgb, #7c3aed 88%, #000);
+  --brand-active: color-mix(in srgb, #7c3aed 78%, #000);
+  --brand-ring: color-mix(in srgb, #7c3aed 40%, transparent);
+}
+[data-accent="slate"] {
+  --brand: #334155;
+  --brand-hover: color-mix(in srgb, #334155 88%, #000);
+  --brand-active: color-mix(in srgb, #334155 78%, #000);
+  --brand-ring: color-mix(in srgb, #334155 40%, transparent);
+}
+
+/* ─── Neutral palette presets (Tweak) ───────────────────────────────────────
+   Ported from design_handoff_northbeam/theme-presets.js. Applied via
+   [data-palette]; brand + semantic colors stay theme-driven. */
+[data-theme="light"][data-palette="pure-white"] {
+  --bg-page: #ffffff;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f7f7f8;
+  --surface-hover: #f5f5f6;
+  --surface-active: #ededee;
+  --overlay: rgba(17, 17, 24, 0.4);
+  --border: #ececee;
+  --border-strong: #dcdce0;
+  --border-field: #dfdfe3;
+  --divider: #f1f1f2;
+  --ink: #18181b;
+  --ink-secondary: #3f3f46;
+  --ink-muted: #71717a;
+  --ink-subtle: #9a9aa3;
+  --ink-disabled: #c4c4cc;
+  --field-bg: #ffffff;
+  --field-bg-disabled: #f7f7f8;
+  --placeholder: #a1a1aa;
+}
+[data-theme="light"][data-palette="warm-sand"] {
+  --bg-page: #f6f4ef;
+  --bg: #fffdf9;
+  --surface: #fffdf9;
+  --surface-raised: #fffefb;
+  --surface-sunken: #f3efe7;
+  --surface-hover: #f4f0e8;
+  --surface-active: #ece6da;
+  --overlay: rgba(60, 45, 30, 0.38);
+  --border: #e7e0d3;
+  --border-strong: #d8cfbd;
+  --border-field: #ddd4c4;
+  --divider: #efe9dd;
+  --ink: #2b2519;
+  --ink-secondary: #524a3a;
+  --ink-muted: #807663;
+  --ink-subtle: #9c9180;
+  --ink-disabled: #c0b7a4;
+  --field-bg: #fffdf9;
+  --field-bg-disabled: #f3efe7;
+  --placeholder: #aaa18d;
+}
+[data-theme="dark"][data-palette="slate"] {
+  --bg-page: #0b0e14;
+  --bg: #10141c;
+  --surface: #161b24;
+  --surface-raised: #1e2531;
+  --surface-sunken: #0e121a;
+  --surface-hover: #1c222d;
+  --surface-active: #262e3b;
+  --overlay: rgba(5, 8, 14, 0.62);
+  --border: #272f3d;
+  --border-strong: #38414f;
+  --border-field: #313a49;
+  --divider: #1d242f;
+  --ink: #f2f5f9;
+  --ink-secondary: #c0c8d4;
+  --ink-muted: #8b96a6;
+  --ink-subtle: #6a7484;
+  --ink-disabled: #4c5666;
+  --field-bg: #0f141d;
+  --field-bg-disabled: #131922;
+  --placeholder: #5f6b7c;
+}
+[data-theme="dark"][data-palette="carbon"] {
+  --bg-page: #0a0a0b;
+  --bg: #121214;
+  --surface: #18181b;
+  --surface-raised: #202023;
+  --surface-sunken: #0f0f11;
+  --surface-hover: #1f1f22;
+  --surface-active: #29292d;
+  --overlay: rgba(0, 0, 0, 0.65);
+  --border: #2a2a2e;
+  --border-strong: #3a3a3f;
+  --border-field: #323237;
+  --divider: #1f1f22;
+  --ink: #fafafa;
+  --ink-secondary: #c9c9ce;
+  --ink-muted: #8e8e96;
+  --ink-subtle: #6b6b73;
+  --ink-disabled: #4d4d54;
+  --field-bg: #101012;
+  --field-bg-disabled: #161618;
+  --placeholder: #5f5f66;
+}
+
+/* ─── Theme switch reveal (View Transitions API) ─────────────────────────────
+   The circular clip-path animation is applied in lib/theme.ts. Disable the
+   default cross-fade and stack the new snapshot on top so the wipe reveals the
+   incoming theme over the outgoing one. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 9999;
+}

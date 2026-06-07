@@ -1,0 +1,41 @@
+node_modules/
+.pnpm-store/
+.turbo/
+dist/
+build/
+.next/
+out/
+
+# Env
+.env
+.env.local
+.env.production
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+tsconfig.tsbuildinfo
+
+# Testing
+.nyc_output/
+
+# IDE
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Drizzle migration artifacts (committed migrations live in packages/db/drizzle)
+packages/db/.drizzle/
+
+# Secrets (extra paranoia)
+**/secrets/
+**/*.pem
+**/*.key
+.mcp.json

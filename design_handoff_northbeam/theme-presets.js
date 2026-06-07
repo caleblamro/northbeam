@@ -1,0 +1,226 @@
+/* theme-presets.js — full neutral + elevation palettes per appearance mode.
+   Applied as inline CSS vars on <html> for the ACTIVE mode, so they win over
+   tokens.css and follow the light/dark toggle. Brand/semantic stay theme-driven. */
+(() => {
+  var LIGHT_SHADOWS = {
+    '--shadow-xs': '0 1px 1px rgba(10,37,64,.06)',
+    '--shadow-sm': '0 1px 2px rgba(10,37,64,.08), 0 1px 1px rgba(10,37,64,.04)',
+    '--shadow-md': '0 4px 10px -3px rgba(10,37,64,.12), 0 2px 4px -2px rgba(10,37,64,.06)',
+    '--shadow-lg': '0 16px 32px -10px rgba(10,37,64,.20), 0 6px 12px -6px rgba(10,37,64,.10)',
+    '--shadow-pop': '0 12px 28px -8px rgba(10,37,64,.22), 0 4px 10px -4px rgba(10,37,64,.12)',
+  };
+  var DARK_SHADOWS = {
+    '--shadow-xs': '0 1px 1px rgba(0,0,0,.30)',
+    '--shadow-sm': '0 1px 2px rgba(0,0,0,.40), 0 1px 1px rgba(0,0,0,.30)',
+    '--shadow-md': '0 6px 14px -4px rgba(0,0,0,.55), 0 2px 5px -2px rgba(0,0,0,.40)',
+    '--shadow-lg': '0 22px 40px -12px rgba(0,0,0,.70), 0 8px 16px -8px rgba(0,0,0,.50)',
+    '--shadow-pop': '0 18px 38px -10px rgba(0,0,0,.68), 0 6px 14px -6px rgba(0,0,0,.50)',
+  };
+  function mk(base, shadows, semantic) {
+    return Object.assign({}, base, shadows, semantic);
+  }
+  var SEM_LIGHT = {
+    '--success': '#117a52',
+    '--success-bg': '#ddf3ea',
+    '--success-border': '#a6e0cd',
+    '--warning': '#9a6800',
+    '--warning-bg': '#fcefcf',
+    '--warning-border': '#f4d98a',
+    '--danger': '#df1b41',
+    '--danger-bg': '#ffeef1',
+    '--danger-border': '#f8c2cd',
+    '--danger-hover': '#c70f37',
+    '--danger-active': '#b00c30',
+    '--danger-ring': 'rgba(223,27,65,.30)',
+    '--info': '#3d5afe',
+    '--info-bg': '#e8edff',
+  };
+  var SEM_DARK = {
+    '--success': '#2bd4a0',
+    '--success-bg': '#0f2e26',
+    '--success-border': '#1d5645',
+    '--warning': '#f5c451',
+    '--warning-bg': '#2e2611',
+    '--warning-border': '#5a4a1c',
+    '--danger': '#ff6b85',
+    '--danger-bg': '#2e1620',
+    '--danger-border': '#5a2434',
+    '--danger-hover': '#ff829a',
+    '--danger-active': '#f0566f',
+    '--danger-ring': 'rgba(255,107,133,.34)',
+    '--info': '#7d9bff',
+    '--info-bg': '#15203b',
+  };
+
+  var LIGHT = {
+    'Cool gray': mk(
+      {
+        '--bg-page': '#f5f7fb',
+        '--bg': '#ffffff',
+        '--surface': '#ffffff',
+        '--surface-raised': '#ffffff',
+        '--surface-sunken': '#f6f9fc',
+        '--surface-hover': '#f6f8fb',
+        '--surface-active': '#eef1f6',
+        '--overlay': 'rgba(10,37,64,.40)',
+        '--border': '#e3e8ee',
+        '--border-strong': '#d2dae3',
+        '--border-field': '#d5dce4',
+        '--divider': '#edf0f4',
+        '--ink': '#0a2540',
+        '--ink-secondary': '#3c4257',
+        '--ink-muted': '#697386',
+        '--ink-subtle': '#8792a2',
+        '--ink-disabled': '#aab7c4',
+        '--field-bg': '#ffffff',
+        '--field-bg-disabled': '#f6f8fb',
+        '--placeholder': '#9aa6b6',
+      },
+      LIGHT_SHADOWS,
+      SEM_LIGHT,
+    ),
+    'Pure white': mk(
+      {
+        '--bg-page': '#ffffff',
+        '--bg': '#ffffff',
+        '--surface': '#ffffff',
+        '--surface-raised': '#ffffff',
+        '--surface-sunken': '#f7f7f8',
+        '--surface-hover': '#f5f5f6',
+        '--surface-active': '#ededee',
+        '--overlay': 'rgba(17,17,24,.40)',
+        '--border': '#ececee',
+        '--border-strong': '#dcdce0',
+        '--border-field': '#dfdfe3',
+        '--divider': '#f1f1f2',
+        '--ink': '#18181b',
+        '--ink-secondary': '#3f3f46',
+        '--ink-muted': '#71717a',
+        '--ink-subtle': '#9a9aa3',
+        '--ink-disabled': '#c4c4cc',
+        '--field-bg': '#ffffff',
+        '--field-bg-disabled': '#f7f7f8',
+        '--placeholder': '#a1a1aa',
+      },
+      LIGHT_SHADOWS,
+      SEM_LIGHT,
+    ),
+    'Warm sand': mk(
+      {
+        '--bg-page': '#f6f4ef',
+        '--bg': '#fffdf9',
+        '--surface': '#fffdf9',
+        '--surface-raised': '#fffefb',
+        '--surface-sunken': '#f3efe7',
+        '--surface-hover': '#f4f0e8',
+        '--surface-active': '#ece6da',
+        '--overlay': 'rgba(60,45,30,.38)',
+        '--border': '#e7e0d3',
+        '--border-strong': '#d8cfbd',
+        '--border-field': '#ddd4c4',
+        '--divider': '#efe9dd',
+        '--ink': '#2b2519',
+        '--ink-secondary': '#524a3a',
+        '--ink-muted': '#807663',
+        '--ink-subtle': '#9c9180',
+        '--ink-disabled': '#c0b7a4',
+        '--field-bg': '#fffdf9',
+        '--field-bg-disabled': '#f3efe7',
+        '--placeholder': '#aaa18d',
+      },
+      LIGHT_SHADOWS,
+      SEM_LIGHT,
+    ),
+  };
+
+  var DARK = {
+    Slate: mk(
+      {
+        '--bg-page': '#0b0e14',
+        '--bg': '#10141c',
+        '--surface': '#161b24',
+        '--surface-raised': '#1e2531',
+        '--surface-sunken': '#0e121a',
+        '--surface-hover': '#1c222d',
+        '--surface-active': '#262e3b',
+        '--overlay': 'rgba(5,8,14,.62)',
+        '--border': '#272f3d',
+        '--border-strong': '#38414f',
+        '--border-field': '#313a49',
+        '--divider': '#1d242f',
+        '--ink': '#f2f5f9',
+        '--ink-secondary': '#c0c8d4',
+        '--ink-muted': '#8b96a6',
+        '--ink-subtle': '#6a7484',
+        '--ink-disabled': '#4c5666',
+        '--field-bg': '#0f141d',
+        '--field-bg-disabled': '#131922',
+        '--placeholder': '#5f6b7c',
+      },
+      DARK_SHADOWS,
+      SEM_DARK,
+    ),
+    Navy: mk(
+      {
+        '--bg-page': '#0a101e',
+        '--bg': '#0e1525',
+        '--surface': '#141d31',
+        '--surface-raised': '#1a2540',
+        '--surface-sunken': '#0e1626',
+        '--surface-hover': '#1c2740',
+        '--surface-active': '#243153',
+        '--overlay': 'rgba(3,8,18,.62)',
+        '--border': '#283450',
+        '--border-strong': '#364463',
+        '--border-field': '#313e5e',
+        '--divider': '#1e2942',
+        '--ink': '#f5f8fd',
+        '--ink-secondary': '#c3cce0',
+        '--ink-muted': '#8d9bb8',
+        '--ink-subtle': '#6b7a96',
+        '--ink-disabled': '#4f5d7a',
+        '--field-bg': '#0f1828',
+        '--field-bg-disabled': '#121b2c',
+        '--placeholder': '#61708f',
+      },
+      DARK_SHADOWS,
+      SEM_DARK,
+    ),
+    Carbon: mk(
+      {
+        '--bg-page': '#0a0a0b',
+        '--bg': '#121214',
+        '--surface': '#18181b',
+        '--surface-raised': '#202023',
+        '--surface-sunken': '#0f0f11',
+        '--surface-hover': '#1f1f22',
+        '--surface-active': '#29292d',
+        '--overlay': 'rgba(0,0,0,.65)',
+        '--border': '#2a2a2e',
+        '--border-strong': '#3a3a3f',
+        '--border-field': '#323237',
+        '--divider': '#1f1f22',
+        '--ink': '#fafafa',
+        '--ink-secondary': '#c9c9ce',
+        '--ink-muted': '#8e8e96',
+        '--ink-subtle': '#6b6b73',
+        '--ink-disabled': '#4d4d54',
+        '--field-bg': '#101012',
+        '--field-bg-disabled': '#161618',
+        '--placeholder': '#5f5f66',
+      },
+      DARK_SHADOWS,
+      SEM_DARK,
+    ),
+  };
+
+  window.DS_THEMES = { light: LIGHT, dark: DARK };
+  window.DS_THEME_KEYS = { light: Object.keys(LIGHT), dark: Object.keys(DARK) };
+
+  window.applyTheme = (mode, lightKey, darkKey) => {
+    var preset =
+      mode === 'dark' ? DARK[darkKey] || DARK.Slate : LIGHT[lightKey] || LIGHT['Cool gray'];
+    var s = document.documentElement.style;
+    for (var k in preset) s.setProperty(k, preset[k]);
+  };
+})();

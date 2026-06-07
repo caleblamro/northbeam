@@ -1,0 +1,254 @@
+/* ============================================================
+   CRM Design System — Foundations
+   Stripe-inspired: cool grays, navy ink, blurple brand,
+   layered soft shadows, restrained radii.
+   ============================================================ */
+
+/* ---- Tweakable knobs (overridden by Tweaks panel) ---- */
+:root {
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, monospace;
+
+  /* brand hue — replaced by tweak */
+  --brand: #635bff;
+  --brand-hover: #5249f5;
+  --brand-active: #463cf0;
+  --brand-ring: rgba(99, 91, 255, 0.4);
+  --brand-contrast: #ffffff;
+  --on-brand-shadow: rgba(45, 35, 120, 0.45);
+
+  /* radius scale (base is tweakable) */
+  --radius-base: 6px;
+  --radius-xs: 3px;
+  --radius-sm: calc(var(--radius-base) - 2px);
+  --radius-md: var(--radius-base);
+  --radius-lg: calc(var(--radius-base) + 3px);
+  --radius-xl: calc(var(--radius-base) + 8px);
+  --radius-full: 999px;
+
+  /* control heights (density scales these) */
+  --h-sm: 30px;
+  --h-md: 38px;
+  --h-lg: 46px;
+  --pad-x-sm: 10px;
+  --pad-x-md: 14px;
+  --pad-x-lg: 18px;
+  --row-gap: 14px;
+
+  /* spacing scale (4px base) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* type scale */
+  --text-xs: 11.5px;
+  --text-sm: 12.5px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 25px;
+  --text-3xl: 32px;
+  --text-display: 46px;
+
+  --lh-tight: 1.15;
+  --lh-snug: 1.35;
+  --lh-base: 1.5;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---- Density variants ---- */
+:root[data-density="compact"] {
+  --h-sm: 26px;
+  --h-md: 32px;
+  --h-lg: 40px;
+  --pad-x-sm: 8px;
+  --pad-x-md: 11px;
+  --pad-x-lg: 15px;
+  --row-gap: 10px;
+}
+:root[data-density="spacious"] {
+  --h-sm: 34px;
+  --h-md: 44px;
+  --h-lg: 52px;
+  --pad-x-sm: 13px;
+  --pad-x-md: 18px;
+  --pad-x-lg: 22px;
+  --row-gap: 18px;
+}
+
+/* ============================================================
+   LIGHT THEME (default)
+   ============================================================ */
+:root,
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-page: #f5f7fb;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f6f9fc;
+  --surface-hover: #f6f8fb;
+  --surface-active: #eef1f6;
+  --overlay: rgba(10, 37, 64, 0.4);
+
+  --border: #e3e8ee;
+  --border-strong: #d2dae3;
+  --border-field: #d5dce4;
+  --divider: #edf0f4;
+
+  --ink: #0a2540;
+  --ink-secondary: #3c4257;
+  --ink-muted: #697386;
+  --ink-subtle: #8792a2;
+  --ink-disabled: #aab7c4;
+  --ink-onfill: #ffffff;
+
+  --field-bg: #ffffff;
+  --field-bg-disabled: #f6f8fb;
+  --placeholder: #9aa6b6;
+
+  --success: #117a52;
+  --success-bg: #ddf3ea;
+  --success-border: #a6e0cd;
+  --warning: #9a6800;
+  --warning-bg: #fcefcf;
+  --warning-border: #f4d98a;
+  --danger: #df1b41;
+  --danger-hover: #c70f37;
+  --danger-active: #b00c30;
+  --danger-ring: rgba(223, 27, 65, 0.3);
+  --danger-bg: #ffeef1;
+  --danger-border: #f8c2cd;
+  --info: #3d5afe;
+  --info-bg: #e8edff;
+
+  --shadow-xs: 0 1px 1px rgba(10, 37, 64, 0.06);
+  --shadow-sm: 0 1px 2px rgba(10, 37, 64, 0.08), 0 1px 1px rgba(10, 37, 64, 0.04);
+  --shadow-md: 0 4px 10px -3px rgba(10, 37, 64, 0.12), 0 2px 4px -2px rgba(10, 37, 64, 0.06);
+  --shadow-lg: 0 16px 32px -10px rgba(10, 37, 64, 0.2), 0 6px 12px -6px rgba(10, 37, 64, 0.1);
+  --shadow-pop: 0 12px 28px -8px rgba(10, 37, 64, 0.22), 0 4px 10px -4px rgba(10, 37, 64, 0.12);
+  --shadow-btn: 0 1px 1px rgba(10, 37, 64, 0.06), 0 1px 2px rgba(10, 37, 64, 0.08);
+  --shadow-btn-brand: 0 1px 1px rgba(10, 37, 64, 0.08), 0 2px 5px var(--on-brand-shadow);
+  --ring-focus: 0 0 0 1px var(--brand), 0 0 0 4px var(--brand-ring);
+  --inset-hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+/* ============================================================
+   DARK THEME — deep navy slate
+   ============================================================ */
+:root[data-theme="dark"] {
+  --bg: #0e1525;
+  --bg-page: #0a101e;
+  --surface: #141d31;
+  --surface-raised: #1a2540;
+  --surface-sunken: #0e1626;
+  --surface-hover: #1c2740;
+  --surface-active: #243153;
+  --overlay: rgba(3, 8, 18, 0.62);
+
+  --border: #283450;
+  --border-strong: #364463;
+  --border-field: #313e5e;
+  --divider: #1e2942;
+
+  --ink: #f5f8fd;
+  --ink-secondary: #c3cce0;
+  --ink-muted: #8d9bb8;
+  --ink-subtle: #6b7 а96;
+  --ink-subtle: #6b7a96;
+  --ink-disabled: #4f5d7a;
+  --ink-onfill: #ffffff;
+
+  --field-bg: #0f1828;
+  --field-bg-disabled: #121b2c;
+  --placeholder: #61708f;
+
+  --brand: #7d76ff;
+  --brand-hover: #8d87ff;
+  --brand-active: #6b63f5;
+  --brand-ring: rgba(125, 118, 255, 0.4);
+  --brand-contrast: #ffffff;
+  --on-brand-shadow: rgba(0, 0, 0, 0.45);
+
+  --success: #2bd4a0;
+  --success-bg: #0f2e26;
+  --success-border: #1d5645;
+  --warning: #f5c451;
+  --warning-bg: #2e2611;
+  --warning-border: #5a4a1c;
+  --danger: #ff6b85;
+  --danger-hover: #ff829a;
+  --danger-active: #f0566f;
+  --danger-ring: rgba(255, 107, 133, 0.34);
+  --danger-bg: #2e1620;
+  --danger-border: #5a2434;
+  --info: #7d9bff;
+  --info-bg: #15203b;
+
+  --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 6px 14px -4px rgba(0, 0, 0, 0.55), 0 2px 5px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 22px 40px -12px rgba(0, 0, 0, 0.7), 0 8px 16px -8px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 18px 38px -10px rgba(0, 0, 0, 0.68), 0 6px 14px -6px rgba(0, 0, 0, 0.5);
+  --shadow-btn: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-btn-brand: 0 1px 2px rgba(0, 0, 0, 0.55);
+  --ring-focus: 0 0 0 1px var(--brand), 0 0 0 4px var(--brand-ring);
+  --inset-hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* ============================================================
+   BASE
+   ============================================================ */
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--lh-base);
+  color: var(--ink);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv05" 1, "cv08" 1, "ss01" 1;
+  transition: background 0.25s var(--ease), color 0.25s var(--ease);
+}
+::selection {
+  background: var(--brand-ring);
+}
+*:focus-visible {
+  outline: none;
+}
+
+/* thin scrollbars inside the doc */
+.ds-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.ds-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 3px solid var(--surface);
+}
+.ds-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
