@@ -92,10 +92,10 @@ const STATUS: Record<Status, { label: string; variant?: 'success' | 'warning' | 
 
 function confColor(c: number) {
   return c >= 90
-    ? DEAL_STAGE_TONE.won.color
+    ? DEAL_STAGE_TONE.won.fg
     : c >= 75
-      ? DEAL_STAGE_TONE.negotiation.color
-      : DEAL_STAGE_TONE.lost.color;
+      ? DEAL_STAGE_TONE.negotiation.fg
+      : DEAL_STAGE_TONE.lost.fg;
 }
 
 export default function MigratePage() {

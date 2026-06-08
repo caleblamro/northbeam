@@ -1,170 +1,153 @@
 'use client';
 
 import { PageActions } from '@/components/northbeam/app-shell';
-
-import {
-  KVList,
-  RecordDrawer,
-  SegTabs,
-  StageTag,
-  Toolbar,
-  ToolbarSearch,
-  ToolbarSpacer,
-} from '@/components/northbeam/app-bits';
-import { type Column, DataTable } from '@/components/northbeam/data-table';
+import { type FieldDefLite, FieldValue } from '@/components/northbeam/field-render';
+import { Icon } from '@/components/northbeam/icons';
 import { EmptyState } from '@/components/northbeam/page-head';
-import { Avatar, Badge } from '@/components/northbeam/primitives';
-import { Button } from '@/components/ui/button';
-import { CONTACTS, type Contact, accountById } from '@/lib/mock-crm';
-import { useMemo, useState } from 'react';
+import { Spinner } from '@/components/northbeam/primitives';
+import { RecordFormDrawer } from '@/components/northbeam/record-form';
+import { Button, MenuButton, type MenuItem } from '@/components/ui/button';
+import { trpc } from '@/lib/api';
+import { useState } from 'react';
 
-type Filter = 'all' | 'active' | 'won' | 'lost';
-const ACTIVE = new Set(['new', 'qualified', 'negotiation']);
+const OBJECT_KEY = 'contact';
+// Columns surfaced in the list (besides the computed Name). Resolved against the
+// object's real field defs so this stays correct as fields change.
+const COLUMN_KEYS = ['email', 'account', 'title', 'stage'];
+
+type Editing = { id: string; data: Record<string, unknown> } | 'new' | null;
 
 export default function ContactsPage() {
   const [q, setQ] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
-  const [selected, setSelected] = useState<Contact | null>(null);
+  const [editing, setEditing] = useState<Editing>(null);
 
-  const rows = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    return CONTACTS.filter((c) => {
-      if (filter === 'active' && !ACTIVE.has(c.stage)) return false;
-      if (filter === 'won' && c.stage !== 'won') return false;
-      if (filter === 'lost' && c.stage !== 'lost') return false;
-      if (!s) return true;
-      const acct = accountById(c.accountId)?.name ?? '';
-      return `${c.name} ${c.email} ${c.title} ${acct}`.toLowerCase().includes(s);
-    });
-  }, [q, filter]);
+  const utils = trpc.useUtils();
+  const list = trpc.record.list.useQuery({ objectKey: OBJECT_KEY, search: q || undefined });
+  const remove = trpc.record.remove.useMutation({
+    onSuccess: () => utils.record.list.invalidate(),
+  });
 
-  const columns: Column<Contact>[] = [
-    {
-      key: 'name',
-      header: 'Name',
-      render: (c) => (
-        <div className="tbl__name">
-          <Avatar name={c.name} className="cmdk__avatar" style={{ width: 32, height: 32 }} />
-          <div className="tbl__two">
-            <b>{c.name}</b>
-            <small>{c.email}</small>
-          </div>
-        </div>
-      ),
-    },
-    { key: 'account', header: 'Account', render: (c) => accountById(c.accountId)?.name ?? '—' },
-    { key: 'title', header: 'Title', render: (c) => c.title },
-    { key: 'stage', header: 'Stage', render: (c) => <StageTag stage={c.stage} /> },
-    {
-      key: 'owner',
-      header: 'Owner',
-      render: (c) => (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <Avatar
-            name={c.owner.name}
-            className="cmdk__avatar"
-            style={{ width: 22, height: 22, fontSize: 9 }}
-          />
-          {c.owner.name}
-        </span>
-      ),
-    },
-    {
-      key: 'last',
-      header: 'Last activity',
-      align: 'right',
-      render: (c) => <span style={{ color: 'var(--ink-muted)' }}>{c.lastActivity}</span>,
-    },
-  ];
-
-  const acct = selected ? accountById(selected.accountId) : undefined;
+  const fields = (list.data?.fields ?? []) as FieldDefLite[];
+  const rows = list.data?.rows ?? [];
+  const refLabels = list.data?.refLabels ?? {};
+  const objectLabel = list.data?.object.label ?? 'Contact';
+  const columns = COLUMN_KEYS.map((k) => fields.find((f) => f.key === k)).filter(
+    (f): f is FieldDefLite => !!f,
+  );
 
   return (
     <>
       <PageActions>
-        <Button variant="primary" icon="user-plus">
+        <Button variant="secondary" icon="upload-simple">
+          Import
+        </Button>
+        <Button variant="primary" icon="user-plus" onClick={() => setEditing('new')}>
           New contact
         </Button>
       </PageActions>
 
-      <Toolbar>
-        <ToolbarSearch value={q} onChange={setQ} placeholder="Search contacts…" />
-        <SegTabs
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: 'all', label: 'All', count: CONTACTS.length },
-            { value: 'active', label: 'Active' },
-            { value: 'won', label: 'Won' },
-            { value: 'lost', label: 'Lost' },
-          ]}
-        />
-        <ToolbarSpacer />
-        <Button variant="secondary" icon="funnel">
-          Filter
-        </Button>
-      </Toolbar>
+      <div className="toolbar">
+        <div className="input-wrap" style={{ width: 280 }}>
+          <span className="input-wrap__icon">
+            <Icon name="magnifying-glass" size={16} />
+          </span>
+          <input placeholder="Search contacts…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <span className="toolbar__spacer" />
+      </div>
 
-      <DataTable
-        columns={columns}
-        rows={rows}
-        onRowClick={setSelected}
-        empty={
+      <div className="tbl-card">
+        <div className="tbl-scroll">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Name</th>
+                {columns.map((c) => (
+                  <th key={c.key}>{c.label}</th>
+                ))}
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const rowMenu: MenuItem[] = [
+                  {
+                    icon: 'pencil-simple',
+                    label: 'Edit',
+                    onSelect: () => setEditing({ id: r.id, data: r.data }),
+                  },
+                  { separator: true },
+                  {
+                    icon: 'trash',
+                    label: 'Delete',
+                    danger: true,
+                    onSelect: () => remove.mutate({ id: r.id }),
+                  },
+                ];
+                return (
+                  <tr
+                    key={r.id}
+                    data-clickable="true"
+                    onClick={() => setEditing({ id: r.id, data: r.data })}
+                  >
+                    <td>
+                      <b style={{ color: 'var(--ink)', fontWeight: 600 }}>{r.name}</b>
+                    </td>
+                    {columns.map((c) => (
+                      <td key={c.key}>
+                        <FieldValue
+                          field={c}
+                          value={r.data[c.key]}
+                          referenceLabel={refLabels[String(r.data[c.key])]}
+                        />
+                      </td>
+                    ))}
+                    <td className="shrink" onClick={(e) => e.stopPropagation()}>
+                      <MenuButton iconBtn="dots-three" align="right" items={rowMenu} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {list.isLoading && (
+          <div style={{ display: 'grid', placeItems: 'center', padding: 48 }}>
+            <Spinner style={{ color: 'var(--brand)' }} />
+          </div>
+        )}
+        {!list.isLoading && rows.length === 0 && (
           <EmptyState
             icon="users-three"
-            title="No contacts match"
-            body="Try a different search or filter."
+            title={q ? 'No contacts match' : 'No contacts yet'}
+            body={
+              q
+                ? 'Try a different search.'
+                : 'Create your first contact, or run a Salesforce migration to import them.'
+            }
+            action={
+              !q && (
+                <Button variant="primary" icon="user-plus" onClick={() => setEditing('new')}>
+                  New contact
+                </Button>
+              )
+            }
           />
-        }
-      />
-
-      <RecordDrawer
-        open={!!selected}
-        onClose={() => setSelected(null)}
-        title={selected?.name ?? ''}
-        subtitle={selected?.title}
-        avatar={
-          selected ? (
-            <Avatar
-              name={selected.name}
-              className="cmdk__avatar"
-              style={{ width: 44, height: 44, fontSize: 16 }}
-            />
-          ) : undefined
-        }
-        footer={
-          <>
-            <Button variant="secondary" icon="envelope-simple">
-              Email
-            </Button>
-            <Button variant="secondary" icon="phone">
-              Call
-            </Button>
-            <span className="spacer" />
-            <Button variant="primary" icon="pencil-simple">
-              Edit
-            </Button>
-          </>
-        }
-      >
-        {selected && (
-          <>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <StageTag stage={selected.stage} />
-              {acct && <Badge variant="brand">{acct.plan}</Badge>}
-            </div>
-            <KVList
-              items={[
-                { k: 'Email', v: selected.email },
-                { k: 'Phone', v: selected.phone },
-                { k: 'Account', v: acct?.name ?? '—' },
-                { k: 'Owner', v: selected.owner.name },
-                { k: 'Last activity', v: selected.lastActivity },
-              ]}
-            />
-          </>
         )}
-      </RecordDrawer>
+      </div>
+
+      {editing && (
+        <RecordFormDrawer
+          open
+          onClose={() => setEditing(null)}
+          objectKey={OBJECT_KEY}
+          objectLabel={objectLabel}
+          fields={fields}
+          record={editing === 'new' ? null : editing}
+          refLabels={refLabels}
+        />
+      )}
     </>
   );
 }

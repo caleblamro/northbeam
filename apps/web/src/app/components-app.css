@@ -309,26 +309,20 @@
   justify-content: center;
 }
 
-/* page header (Stripe-style: large title, muted subtitle, actions right) */
+/* page header (Attio-style: slim single row — small title, actions right) */
 .page-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
-  margin-bottom: 26px;
+  margin-bottom: 18px;
+  min-height: 34px;
 }
 .page-head h1 {
-  font-size: 28px;
+  font-size: var(--text-xl);
   font-weight: var(--fw-semibold);
-  letter-spacing: -0.022em;
-  margin: 0 0 5px;
-  line-height: 1.15;
-}
-.page-head p {
+  letter-spacing: -0.015em;
   margin: 0;
-  color: var(--ink-muted);
-  font-size: var(--text-md);
-  max-width: 70ch;
-  line-height: var(--lh-snug);
+  line-height: 1.2;
 }
 .page-head__actions {
   margin-left: auto;
@@ -399,7 +393,7 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-subtle);
-  padding: 11px 16px;
+  padding: 8px 14px;
   background: var(--surface-sunken);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
@@ -408,7 +402,7 @@
   text-align: right;
 }
 .tbl tbody td {
-  padding: 12px 16px;
+  padding: 9px 14px;
   border-bottom: 1px solid var(--divider);
   color: var(--ink-secondary);
   vertical-align: middle;
@@ -643,7 +637,7 @@
   box-shadow: var(--shadow-xs);
 }
 .metric {
-  padding: 18px 20px;
+  padding: 15px 18px;
   border-right: 1px solid var(--divider);
 }
 .metric:last-child {
@@ -652,17 +646,17 @@
 .metric__label {
   font-size: var(--text-sm);
   color: var(--ink-muted);
-  margin-bottom: 7px;
+  margin-bottom: 6px;
 }
 .metric__value {
-  font-size: var(--text-3xl);
+  font-size: var(--text-2xl);
   font-weight: var(--fw-semibold);
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 .metric__delta {
-  margin-top: 10px;
+  margin-top: 9px;
 }
 
 /* ---- right drawer ---- */
@@ -671,7 +665,6 @@
   inset: 0;
   z-index: 200;
   background: var(--overlay);
-  animation: fade-in .14s var(--ease);
   display: flex;
   justify-content: flex-end;
 }
@@ -684,7 +677,6 @@
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-  animation: drawer-in .22s var(--ease-out);
 }
 @keyframes drawer-in {
   from {
@@ -1400,4 +1392,452 @@
   font-variant-numeric: tabular-nums;
   width: 34px;
   text-align: right;
+}
+
+/* ---- micro-interactions (press feedback) ---- */
+.btn:active:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(0.985);
+}
+.icon-btn:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.obj-card {
+  transition: box-shadow .14s var(--ease), border-color .14s var(--ease), transform .08s var(--ease);
+}
+.obj-card:active {
+  transform: scale(0.994);
+}
+.kan-card:active {
+  transform: scale(0.99);
+}
+.sb__item,
+.toc__link {
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn:active,
+  .icon-btn:active,
+  .obj-card:active,
+  .kan-card:active {
+    transform: none;
+  }
+}
+
+/* ---- Attio calibration: calmer color usage ---- */
+/* Neutral active nav (reserve brand for true CTAs), scoped to the app shell */
+.app-side .sb__item[data-active="true"],
+.app-drawer .sb__item[data-active="true"] {
+  background: var(--surface-active);
+  color: var(--ink);
+}
+.app-side .sb__item[data-active="true"] svg,
+.app-drawer .sb__item[data-active="true"] svg {
+  color: var(--ink-secondary);
+}
+/* Marquee "Migrate" item: brand only on the icon, text stays neutral */
+.sb__item--accent {
+  color: var(--ink-secondary);
+}
+.sb__item--accent:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+/* Calmer theme toggle (neutral active instead of full brand fill) */
+.theme-toggle button[data-active="true"] {
+  background: var(--surface-active);
+  color: var(--ink);
+}
+
+/* ============================================================
+   MEETALO RE-SKIN — warm, floating-panel, quiet color
+   ============================================================ */
+
+/* floating white content panel on warm bg; sidebar sits on the bg */
+.app-side {
+  background: transparent;
+  border-right: none;
+}
+.app-main {
+  padding: 10px 10px 10px 2px;
+}
+.app-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.app-card .app-content {
+  flex: 1;
+  overflow-y: auto;
+}
+.app-card .app-wrap,
+.app-card .app-wrap--wide {
+  max-width: none;
+  margin: 0;
+  padding: 26px 30px 56px;
+}
+
+/* sidebar on warm bg: active item is a raised white pill */
+.app-side .sb__item[data-active="true"],
+.app-drawer .sb__item[data-active="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-xs);
+}
+.app-side .sb__item[data-active="true"] svg {
+  color: var(--ink);
+}
+.app-side .sb__org:hover,
+.app-side .sb__user:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+.app-side .sb__item:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+/* section dividers between nav groups */
+.sb__group + .sb__group {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* sidebar upgrade card */
+.sb__upsell {
+  margin: 8px 10px 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.sb__upsell p {
+  margin: 0 0 9px;
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
+}
+.sb__upsell-bar {
+  height: 5px;
+  border-radius: 99px;
+  background: var(--surface-active);
+  overflow: hidden;
+  margin-bottom: 11px;
+}
+.sb__upsell-bar span {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+  border-radius: 99px;
+}
+.sb__upsell a {
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.sb__upsell a svg {
+  color: var(--ink-subtle);
+}
+
+/* page-head mobile hamburger */
+.page-head__menu {
+  display: none;
+}
+
+/* Meetalo chips */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+}
+.chip-src {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--neutralchip);
+  background: var(--neutralchip-bg);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.chip-src svg {
+  color: var(--ink-subtle);
+}
+
+/* probability chip with mini bars */
+.prob {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px 0 6px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+}
+.prob__bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 10px;
+}
+.prob__bars i {
+  width: 2.5px;
+  background: currentColor;
+  border-radius: 1px;
+}
+.prob__bars i.off {
+  opacity: 0.3;
+}
+
+/* row checkbox */
+.cbx {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  padding: 0;
+  transition: background 0.1s var(--ease), border-color 0.1s var(--ease);
+}
+.cbx[data-checked="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.cbx svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* row inline actions (appear on hover) */
+.row-actions {
+  display: none;
+  align-items: center;
+  gap: 6px;
+}
+.tbl tbody tr:hover .row-actions {
+  display: inline-flex;
+}
+.tbl tbody tr:hover .row-when {
+  display: none;
+}
+
+/* floating bulk-action bar */
+.bulkbar {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #1c1b19;
+  color: #fff;
+  border-radius: 12px;
+  padding: 7px 8px 7px 14px;
+  box-shadow: var(--shadow-lg);
+}
+.bulkbar__count {
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  margin-right: 8px;
+  white-space: nowrap;
+}
+.bulkbar button {
+  border: none;
+  background: transparent;
+  color: #e8e6e2;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  padding: 6px 11px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bulkbar button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.bulkbar button.danger:hover {
+  background: rgba(225, 85, 43, 0.25);
+}
+
+/* view tabs (List / Board / Pipeline) */
+.vtabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.vtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+.vtab[data-active="true"] {
+  background: var(--surface-active);
+  color: var(--ink);
+}
+
+/* "Last 7 days" style quiet dropdown trigger */
+.quiet-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-md);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+  padding: 4px 0;
+}
+.quiet-select svg {
+  color: var(--ink-subtle);
+}
+
+/* ============================================================
+   RESTORE ORIGINAL CLAUDE DESIGN — overrides the Meetalo/Attio detour
+   (later rules win; keeps the file additive rather than surgically edited)
+   ============================================================ */
+.app {
+  background: var(--bg-page);
+  padding: 0;
+}
+.app-side {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.app-main {
+  padding: 0;
+}
+/* no floating card — edge-to-edge content like the Studio shell */
+.app-card {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+.app-card .app-content {
+  flex: 1;
+  overflow-y: auto;
+}
+.app-card .app-wrap,
+.app-card .app-wrap--wide {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 28px 34px 90px;
+}
+
+/* sidebar active = brand-tinted pill (original Studio), not the warm white pill */
+.app-side .sb__item[data-active="true"],
+.app-drawer .sb__item[data-active="true"] {
+  background: color-mix(in srgb, var(--brand) 12%, var(--surface));
+  color: var(--brand);
+  box-shadow: none;
+}
+.app-side .sb__item[data-active="true"] svg {
+  color: var(--brand);
+}
+.app-side .sb__item:hover,
+.app-side .sb__org:hover,
+.app-side .sb__user:hover {
+  background: var(--surface-hover);
+}
+.sb__group + .sb__group {
+  margin-top: 6px;
+  padding-top: 0;
+  border-top: none;
+}
+.sb__item--accent {
+  color: var(--brand);
+}
+.sb__item--accent svg {
+  color: var(--brand) !important;
+}
+
+/* page header = Studio: gradient icon + large title + description + actions */
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 22px;
+  min-height: 0;
+}
+.page-head__icon {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-lg);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+  background: linear-gradient(150deg, var(--brand), color-mix(in srgb, var(--brand) 55%, #11d1c4));
+}
+.page-head h1 {
+  font-size: var(--text-2xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin: 0;
+}
+.page-head__text p {
+  margin: 4px 0 0;
+  color: var(--ink-muted);
+  font-size: var(--text-md);
+  max-width: 64ch;
+  line-height: var(--lh-snug);
+}
+
+/* status chip back to the design-system badge feel (cool) */
+.chip {
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.02em;
+  text-transform: none;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
 }

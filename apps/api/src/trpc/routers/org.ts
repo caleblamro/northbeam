@@ -2,7 +2,7 @@
 // Lets the dashboard create, switch, list, update, delete orgs and manage
 // members + pending invitations without a separate client SDK.
 
-import { ROLES, schema } from '@northbeam/db';
+import { ROLES, schema, seedStandardObjects } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -42,6 +42,9 @@ export const orgRouter = router({
         if (!result) {
           throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'org creation failed' });
         }
+        // Seed the standard objects (account/contact/deal/activity) so the new
+        // workspace has its metadata + the targets SF standard objects map onto.
+        await seedStandardObjects(ctx.db, result.id);
         await setActiveOrganization(result.id, ctx.req.headers);
         return result;
       } catch (err) {

@@ -66,9 +66,9 @@ export function isNavActive(item: NavItem, pathname: string): boolean {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-// Page chrome (title + subtitle) the (app) layout renders — so individual pages
-// don't re-declare a header. Keyed by route.
-export type PageMeta = { title: string; subtitle?: string };
+// Page chrome (icon + title + subtitle) the (app) layout renders — so individual
+// pages don't re-declare a header. Keyed by route; icon comes from the nav.
+export type PageMeta = { title: string; subtitle?: string; icon?: IconName };
 
 export const PAGE_META: Record<string, PageMeta> = {
   '/': { title: 'Home', subtitle: "Here's what's moving across your workspace today." },
@@ -104,9 +104,16 @@ export const PAGE_META: Record<string, PageMeta> = {
 
 export function pageMetaFor(pathname: string): PageMeta {
   const exact = PAGE_META[pathname];
-  if (exact) return exact;
-  const key = Object.keys(PAGE_META)
-    .filter((k) => k !== '/' && pathname.startsWith(k))
-    .sort((a, b) => b.length - a.length)[0];
-  return (key ? PAGE_META[key] : undefined) ?? { title: 'Northbeam' };
+  const meta =
+    exact ??
+    (() => {
+      const key = Object.keys(PAGE_META)
+        .filter((k) => k !== '/' && pathname.startsWith(k))
+        .sort((a, b) => b.length - a.length)[0];
+      return (key ? PAGE_META[key] : undefined) ?? { title: 'Northbeam' };
+    })();
+  // Icon comes from the matching nav item (single source of truth).
+  const navItem =
+    NAV_FLAT.find((n) => n.href === pathname) ?? NAV_FLAT.find((n) => isNavActive(n, pathname));
+  return { ...meta, icon: meta.icon ?? navItem?.icon };
 }

@@ -18,6 +18,8 @@ export type Account = {
   industry: string;
 };
 
+export type ProbLevel = 'low' | 'mid' | 'high';
+
 export type Contact = {
   id: string;
   name: string;
@@ -29,6 +31,40 @@ export type Contact = {
   lastActivity: string;
   stage: DealStage;
 };
+
+// Derived lead-style columns (source / size / interest / probability) for the
+// Contacts list — computed deterministically from a contact so the table reads
+// like a real leads board without bloating the mock records.
+const SOURCES: Array<[string, boolean]> = [
+  ['ORGANIC', false],
+  ['SB2024', true],
+  ['SUMMER2', true],
+  ['DTJ25', true],
+  ['AFF20', true],
+];
+const STAGE_PROB: Record<DealStage, ProbLevel> = {
+  new: 'low',
+  qualified: 'mid',
+  negotiation: 'high',
+  won: 'high',
+  lost: 'low',
+};
+function seed(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+export function leadView(c: Contact) {
+  const h = seed(c.id);
+  const [source, external] = SOURCES[h % SOURCES.length] as [string, boolean];
+  const size = (2 + (h % 22)) * 10_000_00; // $20k–$240k
+  const up = c.stage === 'won' || c.stage === 'negotiation' || c.stage === 'qualified';
+  const interest = Array.from({ length: 7 }, (_, i) => {
+    const drift = up ? i : 6 - i;
+    return 3 + ((seed(c.id + i) % 4) + drift) / 2;
+  });
+  return { source, external, size, interest, probability: STAGE_PROB[c.stage] };
+}
 
 export type Deal = {
   id: string;

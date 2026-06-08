@@ -9,7 +9,7 @@
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, monospace;
 
-  /* brand hue — replaced by tweak */
+  /* brand hue */
   --brand: #635bff;
   --brand-hover: #5249f5;
   --brand-active: #463cf0;
@@ -135,6 +135,10 @@
   --danger-border: #f8c2cd;
   --info: #3d5afe;
   --info-bg: #e8edff;
+  --neutralchip: #697386;
+  --neutralchip-bg: #eef1f6;
+  --lilac: #6a5acd;
+  --lilac-bg: #ebe9fb;
 
   --shadow-xs: 0 1px 1px rgba(10, 37, 64, 0.06);
   --shadow-sm: 0 1px 2px rgba(10, 37, 64, 0.08), 0 1px 1px rgba(10, 37, 64, 0.04);

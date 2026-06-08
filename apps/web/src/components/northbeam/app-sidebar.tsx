@@ -55,7 +55,7 @@ export function AppSidebar({
         height: '100%',
         border: 'none',
         borderRadius: 0,
-        background: 'var(--surface)',
+        background: 'transparent',
       }}
     >
       <OrgSwitcher activeName={orgName} compact={collapsed} />
@@ -102,6 +102,19 @@ export function AppSidebar({
           {!collapsed && <span className="sb__item-label">Design system</span>}
         </Link>
       </div>
+
+      {!collapsed && (
+        <div className="sb__upsell">
+          <p>You've used 86% of your free records.</p>
+          <div className="sb__upsell-bar">
+            <span style={{ width: '86%' }} />
+          </div>
+          <a href="/settings">
+            Upgrade plan
+            <Icon name="arrow-square-out" size={13} />
+          </a>
+        </div>
+      )}
 
       <div className="sb__footrow" data-collapsed={collapsed ? 'true' : undefined}>
         <UserMenu name={userName} email={userEmail} compact={collapsed} />

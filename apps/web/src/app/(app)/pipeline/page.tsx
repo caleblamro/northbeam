@@ -24,7 +24,7 @@ export default function PipelinePage() {
           return (
             <div className="kan-col" key={stage}>
               <div className="kan-col__h">
-                <span style={{ width: 8, height: 8, borderRadius: 99, background: tone.color }} />
+                <span style={{ width: 8, height: 8, borderRadius: 99, background: tone.fg }} />
                 <b>{tone.label}</b>
                 <span className="kan-col__count">{deals.length}</span>
               </div>

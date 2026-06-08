@@ -142,7 +142,7 @@ export default function HomePage() {
                         width: `${(b.sum / maxSum) * 100}%`,
                         height: '100%',
                         borderRadius: 99,
-                        background: DEAL_STAGE_TONE[b.stage].color,
+                        background: DEAL_STAGE_TONE[b.stage].fg,
                       }}
                     />
                   </div>

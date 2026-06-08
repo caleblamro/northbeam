@@ -5,7 +5,7 @@ import { Fragment } from 'react';
 import { IconButton } from '../ui/button';
 import { Icon } from './icons';
 import { Kbd } from './primitives';
-import { ThemeToggle, TweaksButton } from './theme-switcher';
+import { ThemeToggle } from './theme-switcher';
 
 export type Crumb = { label: string; href?: string };
 
@@ -45,7 +45,6 @@ export function AppTopbar({
         <span className="app-search__label">Search or jump to…</span>
         <Kbd>⌘K</Kbd>
       </button>
-      <TweaksButton />
       <ThemeToggle />
     </header>
   );
