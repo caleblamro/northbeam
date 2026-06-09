@@ -1,6 +1,5 @@
 import {
   boolean,
-  index,
   integer,
   jsonb,
   pgTable,
@@ -134,6 +133,9 @@ export const objectDef = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: 'cascade' }),
     key: text('key').notNull(), // API name, e.g. 'account', 'project__c'
+    // Physical Postgres table name for this object's records (in the org's schema).
+    // Set on insert via safeIdent(key); the dynamic record layer reads it.
+    tableName: text('table_name').notNull().default(''),
     label: text('label').notNull(),
     labelPlural: text('label_plural').notNull(),
     icon: text('icon').notNull().default('cube'),
@@ -166,6 +168,11 @@ export const fieldDef = pgTable(
       .notNull()
       .references(() => objectDef.id, { onDelete: 'cascade' }),
     key: text('key').notNull(), // API name, e.g. 'amount', 'renewal_date__c'
+    // Physical column name (f_<sanitized key>) + Postgres type for this field in the
+    // object's table, and whether it gets its own index. Set on insert.
+    columnName: text('column_name').notNull().default(''),
+    pgType: text('pg_type').notNull().default('text'),
+    indexed: boolean('indexed').notNull().default(false),
     label: text('label').notNull(),
     type: text('type').$type<FieldType>().notNull(),
     config: jsonb('config').$type<FieldConfig>().notNull().default({}),
@@ -182,33 +189,11 @@ export const fieldDef = pgTable(
   }),
 );
 
-// A single record of any object. Field values live in `data` (JSONB) keyed by
-// field_def.key — a metadata-driven document. `salesforceId` gives provenance so
-// re-syncs are idempotent (upsert on org+object+salesforceId).
-export const record = pgTable(
-  'record',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
-    objectId: uuid('object_id')
-      .notNull()
-      .references(() => objectDef.id, { onDelete: 'cascade' }),
-    data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
-    ownerId: text('owner_id').references(() => user.id, { onDelete: 'set null' }),
-    salesforceId: text('salesforce_id'),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
-    updatedAt: timestamp('updated_at').notNull().defaultNow(),
-  },
-  (t) => ({
-    objIdx: index('record_org_object_idx').on(t.organizationId, t.objectId),
-    // NULL salesforce_id rows (native records) are exempt — Postgres treats NULLs
-    // as distinct, so this only dedupes imported records.
-    sfUq: uniqueIndex('record_sf_uq').on(t.organizationId, t.objectId, t.salesforceId),
-    dataGin: index('record_data_gin').using('gin', t.data),
-  }),
-);
+// NOTE: record VALUES are no longer stored here. Per the fully-native data model
+// (docs/architecture-plan.md §A0), each object gets its own physical table in the
+// org's Postgres schema, with a real typed column per field. Those tables are
+// created/altered at runtime by the DDL engine (src/dynamic/ddl.ts) and queried by
+// the dynamic record layer (src/dynamic/records.ts) — not declared as Drizzle tables.
 
 /* ────────────────────────────────────────────────────────────────────────────
    SALESFORCE MIGRATION / MAPPING

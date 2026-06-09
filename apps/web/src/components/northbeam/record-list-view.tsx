@@ -111,7 +111,7 @@ export function RecordListView({
                     icon: 'trash',
                     label: 'Delete',
                     danger: true,
-                    onSelect: () => remove.mutate({ id: r.id }),
+                    onSelect: () => remove.mutate({ objectKey, id: r.id }),
                   },
                 ];
                 return (

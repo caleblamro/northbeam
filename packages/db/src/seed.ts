@@ -5,7 +5,11 @@
 
 import { and, eq } from 'drizzle-orm';
 import type { Database } from './client.js';
+import { createObjectTable, ensureSchema } from './dynamic/ddl.js';
+import { fieldColumnName, objectTableName } from './dynamic/identifiers.js';
+import { pgTypeFor } from './dynamic/pgtypes.js';
 import type { FieldConfig, FieldType, ObjectLayout } from './field-types.js';
+import { getObjectByKey } from './queries/crm.js';
 import { fieldDef, objectDef } from './schema.js';
 
 type SeedField = {
@@ -225,8 +229,10 @@ export const STANDARD_OBJECTS: SeedObject[] = [
   },
 ];
 
-/** Idempotently seed the standard objects + fields for an org. Safe to re-run. */
+/** Idempotently seed the standard objects + fields for an org, and create their
+ *  physical tables in the org's Postgres schema. Safe to re-run. */
 export async function seedStandardObjects(db: Database, organizationId: string): Promise<void> {
+  await ensureSchema(db, organizationId);
   for (const obj of STANDARD_OBJECTS) {
     const [existing] = await db
       .select({ id: objectDef.id })
@@ -241,6 +247,7 @@ export async function seedStandardObjects(db: Database, organizationId: string):
         .values({
           organizationId,
           key: obj.key,
+          tableName: objectTableName(obj.key),
           label: obj.label,
           labelPlural: obj.labelPlural,
           icon: obj.icon,
@@ -253,8 +260,11 @@ export async function seedStandardObjects(db: Database, organizationId: string):
         .returning({ id: objectDef.id });
       objectId = inserted?.id;
     } else {
-      // Backfill layout for orgs seeded before the layout column existed.
-      await db.update(objectDef).set({ layout: obj.layout }).where(eq(objectDef.id, objectId));
+      // Backfill layout + table name for orgs seeded before those columns existed.
+      await db
+        .update(objectDef)
+        .set({ layout: obj.layout, tableName: objectTableName(obj.key) })
+        .where(eq(objectDef.id, objectId));
     }
     if (!objectId) continue;
 
@@ -266,6 +276,8 @@ export async function seedStandardObjects(db: Database, organizationId: string):
           organizationId,
           objectId,
           key: f.key,
+          columnName: fieldColumnName(f.key),
+          pgType: pgTypeFor(f.type, f.config ?? {}),
           label: f.label,
           type: f.type,
           config: f.config ?? {},
@@ -276,5 +288,9 @@ export async function seedStandardObjects(db: Database, organizationId: string):
         })
         .onConflictDoNothing();
     }
+
+    // Create the object's physical table from the persisted defs.
+    const seeded = await getObjectByKey(db, organizationId, obj.key);
+    if (seeded) await createObjectTable(db, organizationId, seeded.object, seeded.fields);
   }
 }

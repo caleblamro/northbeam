@@ -85,7 +85,7 @@ export const recordRouter = router({
       const { object, fields } = await requireObject(ctx, input.objectKey);
       const rows = await listRecords(ctx.db, {
         orgId: ctx.auth.organizationId,
-        objectId: object.id,
+        object,
         fields,
         search: input.search,
         limit: input.limit,
@@ -111,7 +111,12 @@ export const recordRouter = router({
     .input(z.object({ objectKey: z.string(), id: z.string() }))
     .query(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey);
-      const row = await getRecord(ctx.db, ctx.auth.organizationId, input.id);
+      const row = await getRecord(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        object,
+        fields,
+        id: input.id,
+      });
       if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
       const refLabels = await resolveRefLabels(ctx.db, ctx.auth.organizationId, fields, [row]);
       return {
@@ -152,7 +157,8 @@ export const recordRouter = router({
       const { object, fields } = await requireObject(ctx, input.objectKey);
       return createRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
-        objectId: object.id,
+        object,
+        fields,
         data: sanitizeData(fields, input.data),
         ownerId: ctx.auth.userId,
       });
@@ -161,12 +167,19 @@ export const recordRouter = router({
   update: protectedProcedure
     .input(z.object({ objectKey: z.string(), id: z.string(), data: dataSchema }))
     .mutation(async ({ ctx, input }) => {
-      const { fields } = await requireObject(ctx, input.objectKey);
-      const existing = await getRecord(ctx.db, ctx.auth.organizationId, input.id);
+      const { object, fields } = await requireObject(ctx, input.objectKey);
+      const existing = await getRecord(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        object,
+        fields,
+        id: input.id,
+      });
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
       const merged = { ...existing.data, ...sanitizeData(fields, input.data) };
       const row = await updateRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
+        object,
+        fields,
         id: input.id,
         data: merged,
       });
@@ -174,9 +187,10 @@ export const recordRouter = router({
     }),
 
   remove: protectedProcedure
-    .input(z.object({ id: z.string() }))
+    .input(z.object({ objectKey: z.string(), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      await deleteRecord(ctx.db, ctx.auth.organizationId, input.id);
+      const { object } = await requireObject(ctx, input.objectKey);
+      await deleteRecord(ctx.db, { orgId: ctx.auth.organizationId, object, id: input.id });
       return { ok: true as const };
     }),
 
@@ -193,7 +207,7 @@ export const recordRouter = router({
       const { object, fields } = await requireObject(ctx, input.objectKey);
       const rows = await listRecords(ctx.db, {
         orgId: ctx.auth.organizationId,
-        objectId: object.id,
+        object,
         fields,
         search: input.q,
         limit: input.limit ?? 20,
