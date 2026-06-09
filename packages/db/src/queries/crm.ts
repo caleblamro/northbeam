@@ -3,7 +3,7 @@
 
 import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import type { FieldType } from '../field-types.js';
+import type { FieldConfig, FieldType } from '../field-types.js';
 import { fieldDef, objectDef, record } from '../schema.js';
 
 export type ObjectRow = typeof objectDef.$inferSelect;
@@ -159,6 +159,73 @@ export async function resolveRefLabels(
     for (const tr of targetRows) labels[tr.id] = displayName(target.fields, tr.data);
   }
   return labels;
+}
+
+export type RelatedGroup = {
+  object: ObjectRow;
+  /** The reference field on `object` that points back at the parent record. */
+  via: FieldRow;
+  fields: FieldRow[];
+  rows: RecordRow[];
+};
+
+/** Records on OTHER objects that reference this record (reverse lookups). Drives
+ *  the record page's Related panel — e.g. an Account's Contacts and Deals. */
+export async function listRelated(
+  db: Database,
+  orgId: string,
+  parentObjectKey: string,
+  recordId: string,
+  perGroup = 6,
+): Promise<RelatedGroup[]> {
+  // Every reference field in the org that targets the parent object.
+  const refFields = await db
+    .select()
+    .from(fieldDef)
+    .where(and(eq(fieldDef.organizationId, orgId), eq(fieldDef.type, 'reference')));
+  const pointers = refFields.filter(
+    (f) => (f.config as FieldConfig | null)?.targetObject === parentObjectKey,
+  );
+  if (!pointers.length) return [];
+
+  const groups: RelatedGroup[] = [];
+  for (const via of pointers) {
+    const target = await getObjectById(db, orgId, via.objectId);
+    if (!target) continue;
+    const rows = await db
+      .select()
+      .from(record)
+      .where(
+        and(
+          eq(record.organizationId, orgId),
+          eq(record.objectId, via.objectId),
+          sql`${record.data}->>${via.key} = ${recordId}`,
+        ),
+      )
+      .orderBy(desc(record.createdAt))
+      .limit(perGroup);
+    if (rows.length) groups.push({ object: target.object, via, fields: target.fields, rows });
+  }
+  return groups;
+}
+
+async function getObjectById(
+  db: Database,
+  orgId: string,
+  objectId: string,
+): Promise<ObjectWithFields | null> {
+  const [object] = await db
+    .select()
+    .from(objectDef)
+    .where(and(eq(objectDef.organizationId, orgId), eq(objectDef.id, objectId)))
+    .limit(1);
+  if (!object) return null;
+  const fields = await db
+    .select()
+    .from(fieldDef)
+    .where(eq(fieldDef.objectId, object.id))
+    .orderBy(asc(fieldDef.orderIndex));
+  return { object, fields };
 }
 
 /** Keep only keys that correspond to real (writable) fields on the object. */

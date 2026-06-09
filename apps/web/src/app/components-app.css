@@ -1841,3 +1841,271 @@
   border-radius: var(--radius-full);
   font-size: var(--text-sm);
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   RECORD DETAIL PAGE + LAYOUT  (ported structure from the On Q OS handoff;
+   styled with Northbeam's own cool tokens — no palette change.)
+   ════════════════════════════════════════════════════════════════════════════ */
+.rec {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* breadcrumb */
+.rec-crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+.rec-crumb a {
+  color: var(--ink-muted);
+}
+.rec-crumb a:hover {
+  color: var(--brand);
+}
+.rec-crumb .sep {
+  color: var(--ink-subtle);
+}
+.rec-crumb .here {
+  color: var(--ink-secondary);
+  font-weight: var(--fw-medium);
+}
+
+/* highlight header */
+.rec-hl {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.rec-hl__top {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px;
+}
+.rec-hl__text {
+  flex: 1;
+  min-width: 0;
+}
+.rec-eyebrow {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-subtle);
+  font-weight: var(--fw-semibold);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.rec-eyebrow .mono {
+  font-family: var(--font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.rec-title {
+  font-size: var(--text-xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 3px 0 8px;
+  line-height: 1.15;
+}
+.rec-compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.rec-compact > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-md);
+}
+.rec-compact .k {
+  color: var(--ink-muted);
+}
+.rec-hl__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* stat strip */
+.rec-stats {
+  display: flex;
+  gap: 0;
+  border-top: 1px solid var(--divider);
+  background: var(--surface-sunken);
+}
+.rec-stat {
+  flex: 1;
+  padding: 12px 20px;
+  border-right: 1px solid var(--divider);
+}
+.rec-stat:last-child {
+  border-right: none;
+}
+.rec-stat__lbl {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-subtle);
+  font-weight: var(--fw-semibold);
+  margin-bottom: 3px;
+}
+.rec-stat__val {
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+}
+
+/* sectioned detail grid */
+.rec-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+.rec-grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+.rcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+.rcard--full {
+  grid-column: 1 / -1;
+}
+.rcard__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--divider);
+}
+.rcard__title {
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--ink-secondary);
+}
+.rcard__head .count {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  background: var(--surface-active);
+  border-radius: var(--radius-full);
+  padding: 1px 8px;
+}
+.rcard__body {
+  padding: 16px;
+}
+
+/* field grid inside a card */
+.rfields {
+  display: grid;
+  gap: 16px 22px;
+}
+.rfield {
+  min-width: 0;
+}
+.rfield--full {
+  grid-column: 1 / -1;
+}
+.rfield__lbl {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-subtle);
+  font-weight: var(--fw-semibold);
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.rfield__lbl .req {
+  color: var(--danger);
+}
+.rfield__val {
+  font-size: var(--text-md);
+  color: var(--ink);
+  min-height: 22px;
+}
+.rfield__val--empty {
+  color: var(--ink-subtle);
+}
+
+/* click-to-edit affordance */
+.rfield__disp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s;
+}
+.rfield__disp:hover {
+  background: var(--surface-hover);
+}
+.rfield__disp .pencil {
+  color: var(--ink-subtle);
+  opacity: 0;
+  transition: opacity 0.12s;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.rfield__disp:hover .pencil {
+  opacity: 1;
+}
+.rfield__edit {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.rfield__edit-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* sectioned create/edit form (RecordFormDrawer) */
+.form-section + .form-section {
+  margin-top: 22px;
+}
+.form-section__label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-subtle);
+  font-weight: var(--fw-semibold);
+  padding-bottom: 7px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--divider);
+}
+.form-grid {
+  display: grid;
+  gap: 14px 18px;
+}
+
+/* narrow viewports: collapse record + form grids to one column */
+@media (max-width: 900px) {
+  .rec-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rfields {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .form-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}

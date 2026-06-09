@@ -9,6 +9,40 @@ import { IconButton } from '../ui/button';
 import { Icon } from './icons';
 import { Badge } from './primitives';
 
+/** Object monogram chip — a letter on the object's color. Icon-set-independent
+ *  (object icons aren't all mapped in our lucide barrel), so we use the initial. */
+export function ObjChip({
+  label,
+  color,
+  size = 26,
+}: {
+  label: string;
+  color?: string;
+  size?: number;
+}) {
+  const c = color ?? 'var(--brand)';
+  return (
+    <span
+      className="obj-chip"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: Math.round(size * 0.3),
+        background: `color-mix(in srgb, ${c} 16%, var(--surface))`,
+        color: c,
+        fontSize: Math.round(size * 0.46),
+        fontWeight: 700,
+        display: 'grid',
+        placeItems: 'center',
+        flexShrink: 0,
+        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${c} 26%, transparent)`,
+      }}
+    >
+      {label.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 export function StageTag({ stage }: { stage: DealStage }) {
   const tone = DEAL_STAGE_TONE[stage];
   return (

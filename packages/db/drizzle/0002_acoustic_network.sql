@@ -1,0 +1,1 @@
+ALTER TABLE "object_def" ADD COLUMN "layout" jsonb DEFAULT '{}'::jsonb NOT NULL;

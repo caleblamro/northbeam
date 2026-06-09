@@ -9,7 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { FieldConfig, FieldType } from './field-types.js';
+import type { FieldConfig, FieldType, ObjectLayout } from './field-types.js';
 import type { Role } from './roles.js';
 
 type DefSource = 'system' | 'custom' | 'salesforce' | 'ai';
@@ -139,6 +139,9 @@ export const objectDef = pgTable(
     icon: text('icon').notNull().default('cube'),
     color: text('color').notNull().default('#635bff'),
     description: text('description'),
+    // Drives the record page, sectioned create/edit form, and default list columns.
+    // Populated by the standard-object seed and the Salesforce importer.
+    layout: jsonb('layout').$type<ObjectLayout>().notNull().default({}),
     // System objects are the standard four — present in every workspace, not deletable.
     isSystem: boolean('is_system').notNull().default(false),
     source: text('source').$type<DefSource>().notNull().default('custom'),

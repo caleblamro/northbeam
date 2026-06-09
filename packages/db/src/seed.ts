@@ -5,7 +5,7 @@
 
 import { and, eq } from 'drizzle-orm';
 import type { Database } from './client.js';
-import type { FieldConfig, FieldType } from './field-types.js';
+import type { FieldConfig, FieldType, ObjectLayout } from './field-types.js';
 import { fieldDef, objectDef } from './schema.js';
 
 type SeedField = {
@@ -23,6 +23,7 @@ type SeedObject = {
   color: string;
   description: string;
   fields: SeedField[];
+  layout: ObjectLayout;
 };
 
 const STAGE_OPTIONS = [
@@ -81,6 +82,25 @@ export const STANDARD_OBJECTS: SeedObject[] = [
         },
       },
     ],
+    layout: {
+      compactKeys: ['industry', 'plan', 'phone'],
+      statKeys: ['annual_revenue', 'employees'],
+      listColumns: ['industry', 'plan', 'employees', 'annual_revenue', 'phone'],
+      sections: [
+        {
+          id: 'about',
+          label: 'Account information',
+          cols: 2,
+          fields: ['name', 'website', 'industry', 'plan'],
+        },
+        {
+          id: 'firmographics',
+          label: 'Firmographics',
+          cols: 2,
+          fields: ['employees', 'annual_revenue', 'phone'],
+        },
+      ],
+    },
   },
   {
     key: 'contact',
@@ -103,6 +123,19 @@ export const STANDARD_OBJECTS: SeedObject[] = [
       },
       { key: 'stage', label: 'Stage', type: 'picklist', config: { options: STAGE_OPTIONS } },
     ],
+    layout: {
+      compactKeys: ['title', 'email', 'phone'],
+      listColumns: ['email', 'account', 'title', 'stage'],
+      sections: [
+        {
+          id: 'identity',
+          label: 'Contact information',
+          cols: 2,
+          fields: ['first_name', 'last_name', 'email', 'phone', 'title'],
+        },
+        { id: 'relationship', label: 'Relationship', cols: 2, fields: ['account', 'stage'] },
+      ],
+    },
   },
   {
     key: 'deal',
@@ -124,6 +157,25 @@ export const STANDARD_OBJECTS: SeedObject[] = [
       { key: 'close_date', label: 'Close date', type: 'date' },
       { key: 'probability', label: 'Probability', type: 'percent' },
     ],
+    layout: {
+      compactKeys: ['account', 'stage', 'close_date'],
+      statKeys: ['amount', 'probability'],
+      listColumns: ['account', 'amount', 'stage', 'close_date', 'probability'],
+      sections: [
+        {
+          id: 'overview',
+          label: 'Deal information',
+          cols: 2,
+          fields: ['name', 'account', 'stage'],
+        },
+        {
+          id: 'forecast',
+          label: 'Forecast',
+          cols: 2,
+          fields: ['amount', 'probability', 'close_date'],
+        },
+      ],
+    },
   },
   {
     key: 'activity',
@@ -157,6 +209,19 @@ export const STANDARD_OBJECTS: SeedObject[] = [
       { key: 'notes', label: 'Notes', type: 'textarea' },
       { key: 'due_date', label: 'Due date', type: 'datetime' },
     ],
+    layout: {
+      compactKeys: ['type', 'contact', 'due_date'],
+      listColumns: ['type', 'contact', 'due_date'],
+      sections: [
+        {
+          id: 'detail',
+          label: 'Activity',
+          cols: 2,
+          fields: ['subject', 'type', 'contact', 'due_date'],
+        },
+        { id: 'body', label: 'Notes', cols: 1, fields: ['notes'] },
+      ],
+    },
   },
 ];
 
@@ -181,11 +246,15 @@ export async function seedStandardObjects(db: Database, organizationId: string):
           icon: obj.icon,
           color: obj.color,
           description: obj.description,
+          layout: obj.layout,
           isSystem: true,
           source: 'system',
         })
         .returning({ id: objectDef.id });
       objectId = inserted?.id;
+    } else {
+      // Backfill layout for orgs seeded before the layout column existed.
+      await db.update(objectDef).set({ layout: obj.layout }).where(eq(objectDef.id, objectId));
     }
     if (!objectId) continue;
 

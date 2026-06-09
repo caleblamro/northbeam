@@ -15,6 +15,13 @@
       "when": 1780876098677,
       "tag": "0001_brown_night_nurse",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780960410593,
+      "tag": "0002_acoustic_network",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import {
   getObjectByKey,
   getRecord,
   listRecords,
+  listRelated,
   resolveRefLabels,
   sanitizeData,
   updateRecord,
@@ -24,6 +25,49 @@ async function requireObject(ctx: Context, key: string) {
   const result = await getObjectByKey(ctx.db, ctx.auth.organizationId, key);
   if (!result) throw new TRPCError({ code: 'NOT_FOUND', message: `object '${key}' not found` });
   return result;
+}
+
+// Wire-friendly projections shared by list/get/related — the web app's
+// FieldDefLite / object shape. Keeps Drizzle internals off the client.
+type ObjectRowLike = {
+  id: string;
+  key: string;
+  label: string;
+  labelPlural: string;
+  icon: string;
+  color: string;
+  layout: unknown;
+};
+function serializeObject(o: ObjectRowLike) {
+  return {
+    id: o.id,
+    key: o.key,
+    label: o.label,
+    labelPlural: o.labelPlural,
+    icon: o.icon,
+    color: o.color,
+    layout: o.layout,
+  };
+}
+type FieldRowLike = {
+  id: string;
+  key: string;
+  label: string;
+  type: string;
+  config: unknown;
+  required: boolean;
+  orderIndex: number;
+};
+function serializeField(f: FieldRowLike) {
+  return {
+    id: f.id,
+    key: f.key,
+    label: f.label,
+    type: f.type,
+    config: f.config,
+    required: f.required,
+    orderIndex: f.orderIndex,
+  };
 }
 
 export const recordRouter = router({
@@ -49,23 +93,8 @@ export const recordRouter = router({
       });
       const refLabels = await resolveRefLabels(ctx.db, ctx.auth.organizationId, fields, rows);
       return {
-        object: {
-          id: object.id,
-          key: object.key,
-          label: object.label,
-          labelPlural: object.labelPlural,
-          icon: object.icon,
-          color: object.color,
-        },
-        fields: fields.map((f) => ({
-          id: f.id,
-          key: f.key,
-          label: f.label,
-          type: f.type,
-          config: f.config,
-          required: f.required,
-          orderIndex: f.orderIndex,
-        })),
+        object: serializeObject(object),
+        fields: fields.map(serializeField),
         rows: rows.map((r) => ({
           id: r.id,
           data: r.data,
@@ -85,7 +114,36 @@ export const recordRouter = router({
       const row = await getRecord(ctx.db, ctx.auth.organizationId, input.id);
       if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
       const refLabels = await resolveRefLabels(ctx.db, ctx.auth.organizationId, fields, [row]);
-      return { object, fields, row: { ...row, name: displayName(fields, row.data) }, refLabels };
+      return {
+        object: serializeObject(object),
+        fields: fields.map(serializeField),
+        row: {
+          id: row.id,
+          data: row.data,
+          ownerId: row.ownerId,
+          name: displayName(fields, row.data),
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        },
+        refLabels,
+      };
+    }),
+
+  /** Records on other objects that reference this one — the Related panel. */
+  related: protectedProcedure
+    .input(z.object({ objectKey: z.string(), id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const groups = await listRelated(ctx.db, ctx.auth.organizationId, input.objectKey, input.id);
+      return groups.map((g) => ({
+        object: serializeObject(g.object),
+        via: { key: g.via.key, label: g.via.label },
+        fields: g.fields.map(serializeField),
+        rows: g.rows.map((r) => ({
+          id: r.id,
+          data: r.data,
+          name: displayName(g.fields, r.data),
+        })),
+      }));
     }),
 
   create: protectedProcedure

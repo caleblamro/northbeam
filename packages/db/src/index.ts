@@ -14,6 +14,8 @@ export {
   type FieldConfig,
   type PicklistOption,
   type RollupFn,
+  type ObjectLayout,
+  type LayoutSection,
 } from './field-types.js';
 export { STANDARD_OBJECTS, seedStandardObjects } from './seed.js';
 export {
@@ -25,10 +27,12 @@ export {
   updateRecord,
   deleteRecord,
   resolveRefLabels,
+  listRelated,
   displayName,
   sanitizeData,
   type ObjectRow,
   type FieldRow,
   type RecordRow,
   type ObjectWithFields,
+  type RelatedGroup,
 } from './queries/crm.js';

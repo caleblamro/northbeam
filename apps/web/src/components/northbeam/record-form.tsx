@@ -1,10 +1,12 @@
 'use client';
 
-// Generic create/edit drawer for a record of ANY object — the form is built
-// from the object's field defs via the masked FieldInput renderer. Reference
-// fields use an async combobox that searches the target object's records.
+// Generic create/edit drawer for a record of ANY object — the form is built from
+// the object's field defs, grouped into the object's `layout` sections (multi-
+// column grid). Reference fields use an async combobox that searches the target
+// object's records. Masked inputs come from the shared FieldInput renderer.
 
 import { trpc } from '@/lib/api';
+import type { LayoutSection } from '@northbeam/db/field-types';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../ui/button';
 import { Field } from '../ui/input';
@@ -13,6 +15,7 @@ import { RecordDrawer } from './app-bits';
 import { type FieldDefLite, FieldInput } from './field-render';
 
 const READONLY = new Set(['formula', 'rollup', 'ai', 'autonumber']);
+const FULL_WIDTH = new Set(['textarea', 'multipicklist']);
 
 export function RecordFormDrawer({
   open,
@@ -20,6 +23,7 @@ export function RecordFormDrawer({
   objectKey,
   objectLabel,
   fields,
+  sections,
   record,
   refLabels,
 }: {
@@ -28,11 +32,36 @@ export function RecordFormDrawer({
   objectKey: string;
   objectLabel: string;
   fields: FieldDefLite[];
+  /** Object layout sections; when absent, all fields fall into one section. */
+  sections?: LayoutSection[];
   record?: { id: string; data: Record<string, unknown> } | null;
   refLabels?: Record<string, string>;
 }) {
   const utils = trpc.useUtils();
   const editable = useMemo(() => fields.filter((f) => !READONLY.has(f.type)), [fields]);
+  const byKey = useMemo(() => new Map(editable.map((f) => [f.key, f])), [editable]);
+
+  // Build the sections actually shown: layout sections (editable fields only) +
+  // any leftover editable fields not referenced by the layout.
+  const groups = useMemo<
+    { id: string; label: string; cols: number; fields: FieldDefLite[] }[]
+  >(() => {
+    if (!sections?.length) {
+      return [{ id: 'all', label: '', cols: 2, fields: editable }];
+    }
+    const used = new Set<string>();
+    const built = sections
+      .map((s) => {
+        const fs = s.fields.map((k) => byKey.get(k)).filter(Boolean) as FieldDefLite[];
+        for (const f of fs) used.add(f.key);
+        return { id: s.id, label: s.label, cols: s.cols ?? 2, fields: fs };
+      })
+      .filter((s) => s.fields.length);
+    const leftover = editable.filter((f) => !used.has(f.key));
+    if (leftover.length) built.push({ id: '_more', label: 'More', cols: 2, fields: leftover });
+    return built;
+  }, [sections, editable, byKey]);
+
   const [data, setData] = useState<Record<string, unknown>>({});
   const [refSel, setRefSel] = useState<Record<string, Option | null>>({});
 
@@ -58,6 +87,7 @@ export function RecordFormDrawer({
     if (record) await update.mutateAsync({ objectKey, id: record.id, data });
     else await create.mutateAsync({ objectKey, data });
     await utils.record.list.invalidate();
+    if (record) await utils.record.get.invalidate({ objectKey, id: record.id });
     onClose();
   };
 
@@ -78,29 +108,47 @@ export function RecordFormDrawer({
         </>
       }
     >
-      {editable.map((f) => (
-        <Field key={f.key} label={f.label} required={f.required}>
-          {f.type === 'reference' ? (
-            <Combobox
-              value={refSel[f.key] ?? null}
-              onChange={(o) => {
-                setRefSel((s) => ({ ...s, [f.key]: o }));
-                setData((d) => ({ ...d, [f.key]: o?.value ?? null }));
-              }}
-              loadOptions={(query) =>
-                utils.record.searchRefs.fetch({ objectKey: f.config?.targetObject ?? '', q: query })
-              }
-              placeholder={`Search ${f.config?.targetObject ?? 'records'}…`}
-              emptyText="No matches"
-            />
-          ) : (
-            <FieldInput
-              field={f}
-              value={data[f.key]}
-              onChange={(v) => setData((d) => ({ ...d, [f.key]: v }))}
-            />
-          )}
-        </Field>
+      {groups.map((g) => (
+        <div key={g.id} className="form-section">
+          {g.label && <div className="form-section__label">{g.label}</div>}
+          <div
+            className="form-grid"
+            style={{ gridTemplateColumns: `repeat(${g.cols}, minmax(0,1fr))` }}
+          >
+            {g.fields.map((f) => (
+              <Field
+                key={f.key}
+                label={f.label}
+                required={f.required}
+                style={g.cols > 1 && FULL_WIDTH.has(f.type) ? { gridColumn: '1 / -1' } : undefined}
+              >
+                {f.type === 'reference' ? (
+                  <Combobox
+                    value={refSel[f.key] ?? null}
+                    onChange={(o) => {
+                      setRefSel((s) => ({ ...s, [f.key]: o }));
+                      setData((d) => ({ ...d, [f.key]: o?.value ?? null }));
+                    }}
+                    loadOptions={(query) =>
+                      utils.record.searchRefs.fetch({
+                        objectKey: f.config?.targetObject ?? '',
+                        q: query,
+                      })
+                    }
+                    placeholder={`Search ${f.config?.targetObject ?? 'records'}…`}
+                    emptyText="No matches"
+                  />
+                ) : (
+                  <FieldInput
+                    field={f}
+                    value={data[f.key]}
+                    onChange={(v) => setData((d) => ({ ...d, [f.key]: v }))}
+                  />
+                )}
+              </Field>
+            ))}
+          </div>
+        </div>
       ))}
     </RecordDrawer>
   );

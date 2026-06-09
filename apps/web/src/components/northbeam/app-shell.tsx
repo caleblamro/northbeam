@@ -41,6 +41,19 @@ export function PageActions({ children }: { children: ReactNode }) {
   return null;
 }
 
+// Lets a page (e.g. a record detail page that brings its own highlight header)
+// suppress the layout-owned page-head and render full-bleed.
+const HideHeadContext = createContext<(v: boolean) => void>(() => {});
+
+export function HidePageHead() {
+  const set = useContext(HideHeadContext);
+  useLayoutEffect(() => {
+    set(true);
+    return () => set(false);
+  }, [set]);
+  return null;
+}
+
 function FullScreenSpinner() {
   return (
     <div
@@ -64,6 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const boot = trpc.me.bootstrap.useQuery();
   const { collapsed, toggle: toggleCollapsed } = useSidebarCollapsed();
   const [actions, setActions] = useState<ReactNode>(null);
+  const [hideHead, setHideHead] = useState(false);
   const meta = pageMetaFor(pathname);
 
   useEffect(() => {
@@ -118,28 +132,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           />
           <div className="app-content">
             <div className="app-wrap app-wrap--wide">
-              <div className="page-head">
-                {meta.icon && (
-                  <div className="page-head__icon">
-                    <Icon name={meta.icon} size={24} />
+              {!hideHead && (
+                <div className="page-head">
+                  {meta.icon && (
+                    <div className="page-head__icon">
+                      <Icon name={meta.icon} size={24} />
+                    </div>
+                  )}
+                  <div className="page-head__text" style={{ minWidth: 0 }}>
+                    <h1>{meta.title}</h1>
+                    {meta.subtitle && <p>{meta.subtitle}</p>}
                   </div>
-                )}
-                <div className="page-head__text" style={{ minWidth: 0 }}>
-                  <h1>{meta.title}</h1>
-                  {meta.subtitle && <p>{meta.subtitle}</p>}
+                  {actions && <div className="page-head__actions">{actions}</div>}
                 </div>
-                {actions && <div className="page-head__actions">{actions}</div>}
-              </div>
-              <PageActionsContext.Provider value={setActions as (n: ReactNode) => void}>
-                <motion.div
-                  key={pathname}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                >
-                  {children}
-                </motion.div>
-              </PageActionsContext.Provider>
+              )}
+              <HideHeadContext.Provider value={setHideHead}>
+                <PageActionsContext.Provider value={setActions as (n: ReactNode) => void}>
+                  <motion.div
+                    key={pathname}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    {children}
+                  </motion.div>
+                </PageActionsContext.Provider>
+              </HideHeadContext.Provider>
             </div>
           </div>
         </div>

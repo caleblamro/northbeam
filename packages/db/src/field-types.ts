@@ -132,3 +132,30 @@ export function mapSalesforceType(sfType: string): { type: FieldType; confident:
   const t = SF_TYPE_MAP[sfType.toLowerCase()];
   return t ? { type: t, confident: true } : { type: 'text', confident: false };
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Object layout — drives the record detail page, the sectioned create/edit form,
+   and the default list view. Stored as object_def.layout (JSONB). All field
+   references are field_def.key values. The Salesforce importer populates this the
+   same way the standard-object seed does.
+   ────────────────────────────────────────────────────────────────────────── */
+
+export type LayoutSection = {
+  id: string;
+  label: string;
+  /** Grid columns for this section's fields (1 or 2). Defaults to 2. */
+  cols?: 1 | 2;
+  /** Field keys, in display order. */
+  fields: string[];
+};
+
+export type ObjectLayout = {
+  /** Detail-grid + create/edit sections. */
+  sections?: LayoutSection[];
+  /** Field keys surfaced in the record highlight header (under the name). */
+  compactKeys?: string[];
+  /** Field keys shown as big-number tiles in the record stat strip. */
+  statKeys?: string[];
+  /** Default list-view columns (besides the computed Name). */
+  listColumns?: string[];
+};
