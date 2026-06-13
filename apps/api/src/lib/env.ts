@@ -27,6 +27,16 @@ const Schema = z.object({
   // GitHub social — optional; only enabled when both are present.
   GITHUB_APP_CLIENT_ID: z.string().optional(),
   GITHUB_APP_CLIENT_SECRET: z.string().optional(),
+
+  // Salesforce migration — OAuth web-server flow + token encryption. All optional;
+  // the in-app "Connect Salesforce" button is enabled only when the Connected App
+  // creds + SF_TOKEN_KEY are present. (Dev can seed a connection from the sf CLI
+  // token instead — see apps/api/scripts/sf-dev-connect.ts.)
+  SF_CLIENT_ID: z.string().optional(),
+  SF_CLIENT_SECRET: z.string().optional(),
+  SF_REDIRECT_URI: z.string().url().default(`${DEV_API_URL}/api/salesforce/oauth/callback`),
+  SF_LOGIN_URL: z.string().url().default('https://login.salesforce.com'),
+  SF_TOKEN_KEY: z.string().optional(),
 });
 
 export type ApiEnv = z.infer<typeof Schema>;

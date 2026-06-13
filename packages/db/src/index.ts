@@ -57,3 +57,17 @@ export {
   fieldColumnName,
 } from './dynamic/identifiers.js';
 export { pgTypeFor, toDb, fromDb } from './dynamic/pgtypes.js';
+export {
+  bulkInsertRecords,
+  resolveReferencesBySfid,
+  type ImportRow,
+} from './dynamic/bulk.js';
+// Salesforce connection persistence (ciphertext tokens only).
+export {
+  getConnection,
+  upsertConnection,
+  setConnectionStatus,
+  deleteConnection,
+  type SalesforceConnectionRow,
+  type ConnectionStatus,
+} from './queries/salesforce.js';

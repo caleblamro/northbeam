@@ -4,7 +4,8 @@
 // object's layout.listColumns) + row→record-page navigation + create/edit drawer
 // + delete. One component backs Contacts/Accounts/Deals/Activities on real data.
 
-import { PageActions } from '@/components/northbeam/app-shell';
+import { ObjChip } from '@/components/northbeam/app-bits';
+import { HidePageHead, PageActions } from '@/components/northbeam/app-shell';
 import { type FieldDefLite, FieldValue } from '@/components/northbeam/field-render';
 import { Icon } from '@/components/northbeam/icons';
 import { EmptyState } from '@/components/northbeam/page-head';
@@ -22,11 +23,15 @@ export function RecordListView({
   objectKey,
   newLabel,
   showImport = true,
+  standalone = false,
 }: {
   objectKey: string;
   /** e.g. "New contact"; defaults to "New {object}". */
   newLabel?: string;
   showImport?: boolean;
+  /** For dynamic (imported/custom) objects without a static page: render our own
+   *  header instead of using the layout-owned page-head + PageActions. */
+  standalone?: boolean;
 }) {
   const router = useRouter();
   const [q, setQ] = useState('');
@@ -61,16 +66,43 @@ export function RecordListView({
     </Button>
   );
 
+  if (list.isError) {
+    return (
+      <>
+        {standalone && <HidePageHead />}
+        <EmptyState
+          icon="warning-circle"
+          title="Unknown object"
+          body={`No object '${objectKey}' exists in this workspace.`}
+        />
+      </>
+    );
+  }
+
   return (
     <>
-      <PageActions>
-        {showImport && (
-          <Button variant="secondary" icon="upload-simple">
-            Import
-          </Button>
-        )}
-        {createBtn}
-      </PageActions>
+      {standalone ? (
+        <>
+          <HidePageHead />
+          <div className="page-head">
+            <ObjChip label={objectLabel || objectKey} color={object?.color} size={46} />
+            <div className="page-head__text" style={{ minWidth: 0 }}>
+              <h1>{objectPlural || objectKey}</h1>
+              {!list.isLoading && <p>{rows.length} records</p>}
+            </div>
+            <div className="page-head__actions">{createBtn}</div>
+          </div>
+        </>
+      ) : (
+        <PageActions>
+          {showImport && (
+            <Button variant="secondary" icon="upload-simple">
+              Import
+            </Button>
+          )}
+          {createBtn}
+        </PageActions>
+      )}
 
       <div className="toolbar">
         <div className="toolbar-search" style={{ width: 280 }}>

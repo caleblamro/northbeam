@@ -91,6 +91,15 @@ export type FieldConfig = {
   // picklist / multipicklist
   options?: PicklistOption[];
   restrictToOptions?: boolean;
+  /** controlling field key for dependent picklists (SF controllerName). */
+  controllingField?: string;
+  // security / provenance
+  /** field-level security: hidden from non-admin roles. */
+  confidential?: boolean;
+  /** value was an encrypted string in the source system. */
+  encrypted?: boolean;
+  /** compound-field grouping (e.g. all billing_address subfields share a key). */
+  compoundKey?: string;
   // reference (lookup)
   targetObject?: string; // object_def.key it points at
   relationshipName?: string; // reverse name, e.g. account → "contacts"
@@ -126,7 +135,17 @@ export const SF_TYPE_MAP: Record<string, FieldType> = {
   formula: 'formula',
   address: 'textarea',
   combobox: 'picklist',
+  encryptedstring: 'text',
+  time: 'text',
+  anytype: 'text',
+  base64: 'text',
+  location: 'text',
 };
+
+// NOTE for mapper authors: Salesforce `describe` NEVER returns type 'formula' —
+// formula fields report their RETURN type (string/double/date/…) with
+// `calculated: true`. Always branch on `calculated` before consulting this map,
+// or formulas silently import as plain editable fields.
 
 export function mapSalesforceType(sfType: string): { type: FieldType; confident: boolean } {
   const t = SF_TYPE_MAP[sfType.toLowerCase()];

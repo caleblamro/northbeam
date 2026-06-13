@@ -7,6 +7,7 @@ import { handleAuthRequest } from './auth/index.js';
 import { env } from './lib/env.js';
 import { onError } from './middleware/error.js';
 import type { Variables } from './middleware/session.js';
+import { mountSalesforceRoutes } from './salesforce/routes.js';
 import { appRouter, createContext } from './trpc/index.js';
 
 const e = env();
@@ -50,6 +51,9 @@ app.onError(onError);
 // Better Auth — magic link, optional GitHub OAuth, sessions, org plugin.
 // Handles everything under /api/auth/* relative to BETTER_AUTH_URL.
 app.on(['GET', 'POST'], '/api/auth/*', (c) => handleAuthRequest(c.req.raw));
+
+// Salesforce OAuth web-server flow (/api/salesforce/oauth/*).
+mountSalesforceRoutes(app);
 
 // Health probes
 app.get('/health', (c) => c.json({ ok: true, service: 'northbeam-api' }));

@@ -6,6 +6,7 @@ import { meRouter } from './routers/me.js';
 import { objectRouter } from './routers/object.js';
 import { orgRouter } from './routers/org.js';
 import { recordRouter } from './routers/record.js';
+import { salesforceRouter } from './routers/salesforce.js';
 import { router } from './trpc.js';
 
 export const appRouter = router({
@@ -14,6 +15,7 @@ export const appRouter = router({
   object: objectRouter,
   org: orgRouter,
   record: recordRouter,
+  salesforce: salesforceRouter,
 });
 
 export type AppRouter = typeof appRouter;

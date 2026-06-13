@@ -195,6 +195,30 @@ export const fieldDef = pgTable(
 // created/altered at runtime by the DDL engine (src/dynamic/ddl.ts) and queried by
 // the dynamic record layer (src/dynamic/records.ts) — not declared as Drizzle tables.
 
+// Record types — per-object segmentation (SF RecordType). Each object table has a
+// record_type_id system column pointing at one of these (soft reference).
+export const recordType = pgTable(
+  'record_type',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    objectId: uuid('object_id')
+      .notNull()
+      .references(() => objectDef.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(), // DeveloperName, e.g. 'lease_agreement'
+    label: text('label').notNull(),
+    isDefault: boolean('is_default').notNull().default(false),
+    active: boolean('active').notNull().default(true),
+    salesforceId: text('salesforce_id'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    objKey: uniqueIndex('record_type_obj_key_uq').on(t.objectId, t.key),
+  }),
+);
+
 /* ────────────────────────────────────────────────────────────────────────────
    SALESFORCE MIGRATION / MAPPING
    ────────────────────────────────────────────────────────────────────────── */
@@ -237,6 +261,9 @@ export const migrationRun = pgTable('migration_run', {
       records?: number;
       needsReview?: number;
       imported?: number;
+      refsResolved?: number;
+      currentObject?: string;
+      error?: string;
     }>()
     .notNull()
     .default({}),
@@ -259,6 +286,9 @@ export const objectMapping = pgTable('object_mapping', {
   targetObjectId: uuid('target_object_id').references(() => objectDef.id, { onDelete: 'set null' }),
   action: text('action').$type<'map' | 'create' | 'skip'>().notNull().default('map'),
   recordCount: integer('record_count').notNull().default(0),
+  // Mapper proposal for this object (target key/label/layout/record types/flags) —
+  // field_defs/object_defs don't exist until execute, so the plan lives here.
+  meta: jsonb('meta').$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -281,5 +311,7 @@ export const fieldMapping = pgTable('field_mapping', {
     .default({}),
   confidence: integer('confidence').notNull().default(0), // 0–100 from the auto-mapper
   status: text('status').$type<'mapped' | 'review' | 'skip'>().notNull().default('review'),
+  // Mapper proposal for this field (key/columnName/type/pgType/config/usage/reason).
+  meta: jsonb('meta').$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });

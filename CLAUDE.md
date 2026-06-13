@@ -15,7 +15,10 @@ like the `brink` monorepo.
 ## Conventions (short list)
 
 - **Types at every boundary.** Zod for external input, Drizzle types internally. Never `any` without a comment.
-- **No raw SQL.** Always Drizzle.
+- **No raw SQL — with one scoped exception.** Fixed-shape tables always go through Drizzle. The dynamic
+  table-per-object record layer (`packages/db/src/dynamic/*`) is the ONLY place raw SQL is allowed: it
+  builds DDL/DML for runtime-defined tables, with all identifiers passing through `identifiers.ts`
+  (sanitize + quote) and all values parameterized. Don't write raw SQL anywhere else.
 - **No fetching from React Server Components beyond `packages/db`.** tRPC procedures only.
 - Design tokens live in `apps/web/src/app/globals.css` (`@theme`), NOT in config. Hex values needed elsewhere
   are inlined with a comment pointing back to the token.

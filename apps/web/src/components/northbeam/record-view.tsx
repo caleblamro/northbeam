@@ -55,7 +55,9 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
       <HidePageHead />
 
       <div className="rec-crumb">
-        <Link href={`/${object.labelPlural.toLowerCase()}`}>{object.labelPlural}</Link>
+        {/* object.key, not labelPlural — works for imported objects (/property)
+            where no static plural route exists. */}
+        <Link href={`/${object.key}`}>{object.labelPlural}</Link>
         <span className="sep">›</span>
         <span className="here">{row.name}</span>
       </div>
