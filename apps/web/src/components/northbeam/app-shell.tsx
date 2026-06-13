@@ -1,9 +1,10 @@
 'use client';
 
-// The authed app shell: fixed sidebar + one topbar + scrolling content, with a
-// global ⌘K palette and a mobile drawer < 1024px. Auth is resolved client-side
-// via trpc.me.bootstrap (the session cookie lives on the API origin, so RSC
-// can't read it) — no session → /sign-in, session but no org → /create-org.
+// The authed app shell: Salesforce Lightning-style single-row top nav (App
+// Launcher + org switcher + pinned tabs + global search + actions). Auth is
+// resolved client-side via trpc.me.bootstrap (the session cookie lives on the
+// API origin, so RSC can't read it) — no session → /sign-in, session but no
+// org → /create-org.
 
 import { trpc } from '@/lib/api';
 import type { CmdItem } from '@/lib/cmd-data';
@@ -19,11 +20,9 @@ import {
   useRef,
   useState,
 } from 'react';
-import { CommandPalette } from '../ui/command';
-import { AppSidebar, useSidebarCollapsed } from './app-sidebar';
+import { CommandPalette } from './command-legacy';
 import { AppTopbar } from './app-topbar';
 import { Icon } from './icons';
-import { MobileDrawer } from './mobile-drawer';
 import { Spinner } from './primitives';
 
 // Lets a page inject action buttons into the layout-owned page header without
@@ -73,9 +72,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [palette, setPalette] = useState(false);
-  const [menu, setMenu] = useState(false);
   const boot = trpc.me.bootstrap.useQuery();
-  const { collapsed, toggle: toggleCollapsed } = useSidebarCollapsed();
   const [actions, setActions] = useState<ReactNode>(null);
   const [hideHead, setHideHead] = useState(false);
   const meta = pageMetaFor(pathname);
@@ -108,57 +105,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <MotionConfig reducedMotion="user">
       <div className="app">
-        <div className="app-side" data-collapsed={collapsed ? 'true' : undefined}>
-          <AppSidebar
+        <div className="app-chrome">
+          <AppTopbar
             orgName={activeOrg.name}
             userName={session.name}
             userEmail={session.email}
-            collapsed={collapsed}
-            onToggleCollapse={toggleCollapsed}
+            onOpenSearch={() => setPalette(true)}
           />
         </div>
-        <MobileDrawer
-          open={menu}
-          onClose={() => setMenu(false)}
-          orgName={activeOrg.name}
-          userName={session.name}
-          userEmail={session.email}
-        />
-        <div className="app-main">
-          <AppTopbar
-            crumbs={[{ label: meta.title }]}
-            onOpenSearch={() => setPalette(true)}
-            onOpenMenu={() => setMenu(true)}
-          />
-          <div className="app-content">
-            <div className="app-wrap app-wrap--wide">
-              {!hideHead && (
-                <div className="page-head">
-                  {meta.icon && (
-                    <div className="page-head__icon">
-                      <Icon name={meta.icon} size={24} />
-                    </div>
-                  )}
-                  <div className="page-head__text" style={{ minWidth: 0 }}>
-                    <h1>{meta.title}</h1>
-                    {meta.subtitle && <p>{meta.subtitle}</p>}
+        <div className="app-content">
+          <div className="app-wrap app-wrap--wide">
+            {!hideHead && (
+              <div className="page-head">
+                {meta.icon && (
+                  <div className="page-head__icon">
+                    <Icon name={meta.icon} size={20} />
                   </div>
-                  {actions && <div className="page-head__actions">{actions}</div>}
+                )}
+                <div className="page-head__text" style={{ minWidth: 0 }}>
+                  <h1>{meta.title}</h1>
+                  {meta.subtitle && <p>{meta.subtitle}</p>}
                 </div>
-              )}
-              <HideHeadContext.Provider value={setHideHead}>
-                <PageActionsContext.Provider value={setActions as (n: ReactNode) => void}>
-                  <motion.div
-                    key={pathname}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                  >
-                    {children}
-                  </motion.div>
-                </PageActionsContext.Provider>
-              </HideHeadContext.Provider>
-            </div>
+                {actions && <div className="page-head__actions">{actions}</div>}
+              </div>
+            )}
+            <HideHeadContext.Provider value={setHideHead}>
+              <PageActionsContext.Provider value={setActions as (n: ReactNode) => void}>
+                <motion.div
+                  key={pathname}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                >
+                  {children}
+                </motion.div>
+              </PageActionsContext.Provider>
+            </HideHeadContext.Provider>
           </div>
         </div>
         <CommandPalette open={palette} onClose={() => setPalette(false)} onSelect={onSelect} />

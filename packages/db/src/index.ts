@@ -33,6 +33,8 @@ export {
 export {
   listRecords,
   getRecord,
+  countRecords,
+  sumField,
   createRecord,
   updateRecord,
   deleteRecord,

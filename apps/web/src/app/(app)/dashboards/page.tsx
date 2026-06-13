@@ -4,7 +4,7 @@ import { PageActions } from '@/components/northbeam/app-shell';
 
 import { Icon, type IconName } from '@/components/northbeam/icons';
 import { Avatar, Badge } from '@/components/northbeam/primitives';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/northbeam/button-legacy';
 
 type Dash = {
   id: string;

@@ -7,8 +7,8 @@
 
 import type { FieldConfig, FieldType } from '@northbeam/db/field-types';
 import type { ReactNode } from 'react';
-import { CurrencyInput, EmailInput, MaskedInput, PhoneInput, TextInput } from '../ui/input';
-import { Combobox, type Option, Select } from '../ui/select';
+import { CurrencyInput, EmailInput, MaskedInput, PhoneInput, TextInput } from './input-legacy';
+import { Combobox, type Option, Select } from './select-legacy';
 import { Icon } from './icons';
 
 export type FieldDefLite = {

@@ -16,7 +16,7 @@ import {
   useTheme,
 } from '@/lib/theme';
 import { useRef, useState } from 'react';
-import { IconButton } from '../ui/button';
+import { IconButton } from './button-legacy';
 import { Icon } from './icons';
 import { Popover } from './primitives';
 

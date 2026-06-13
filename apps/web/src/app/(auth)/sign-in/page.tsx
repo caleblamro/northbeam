@@ -1,7 +1,7 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import { EmailInput, Field } from '@/components/ui/input';
+import { Button } from '@/components/northbeam/button-legacy';
+import { EmailInput, Field } from '@/components/northbeam/input-legacy';
 import { trpc } from '@/lib/api';
 import { useState } from 'react';
 

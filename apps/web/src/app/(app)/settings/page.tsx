@@ -4,8 +4,8 @@ import { type Column, DataTable } from '@/components/northbeam/data-table';
 import { Icon, type IconName } from '@/components/northbeam/icons';
 import { EmptyState } from '@/components/northbeam/page-head';
 import { Avatar, Badge } from '@/components/northbeam/primitives';
-import { Button } from '@/components/ui/button';
-import { Field, TextInput } from '@/components/ui/input';
+import { Button } from '@/components/northbeam/button-legacy';
+import { Field, TextInput } from '@/components/northbeam/input-legacy';
 import { trpc } from '@/lib/api';
 import { useState } from 'react';
 

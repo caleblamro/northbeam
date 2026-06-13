@@ -4,7 +4,7 @@ import { PageActions } from '@/components/northbeam/app-shell';
 
 import { Icon } from '@/components/northbeam/icons';
 import { Badge } from '@/components/northbeam/primitives';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/northbeam/button-legacy';
 import { fmtMoney } from '@/lib/mock-crm';
 import { useState } from 'react';
 

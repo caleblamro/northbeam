@@ -20,8 +20,8 @@ import {
   TypeSection,
 } from '@/components/northbeam/sections';
 import { ThemeToggle, TweaksButton } from '@/components/northbeam/theme-switcher';
-import { Button, type ButtonVariant } from '@/components/ui/button';
-import { CommandPalette } from '@/components/ui/command';
+import { Button, type ButtonVariant } from '@/components/northbeam/button-legacy';
+import { CommandPalette } from '@/components/northbeam/command-legacy';
 import { useTheme } from '@/lib/theme';
 import { useEffect, useState } from 'react';
 

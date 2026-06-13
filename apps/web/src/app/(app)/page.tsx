@@ -1,29 +1,37 @@
 'use client';
 
-import { HealthDot, MetricStrip, StageTag } from '@/components/northbeam/app-bits';
+import { MetricStrip } from '@/components/northbeam/app-bits';
 import { PageActions } from '@/components/northbeam/app-shell';
 import { Icon } from '@/components/northbeam/icons';
-import { Button, MenuButton } from '@/components/ui/button';
-import { ACCOUNTS, ACTIVITIES, DEALS, STAGE_ORDER, accountById, fmtMoney } from '@/lib/mock-crm';
-import { DEAL_STAGE_TONE } from '@/lib/tones';
+import { Spinner } from '@/components/northbeam/primitives';
+import { Button, MenuButton } from '@/components/northbeam/button-legacy';
+import { trpc } from '@/lib/api';
+import { fmtMoney } from '@/lib/mock-crm';
 
-const ACT_ICON = {
+// Activity subtype → icon name. The activity object has a `type` picklist
+// (call/email/note/meeting/task) seeded into every workspace.
+const ACT_ICON: Record<string, string> = {
   call: 'phone',
   email: 'envelope-simple',
   note: 'note-pencil',
-  stage: 'arrows-clockwise',
-  migration: 'upload-simple',
-} as const;
+  meeting: 'calendar-blank',
+  task: 'check-circle',
+};
+
+function timeAgo(date: Date): string {
+  const ms = Date.now() - new Date(date).getTime();
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  return new Date(date).toLocaleDateString();
+}
 
 export default function HomePage() {
-  const open = DEALS.filter((d) => d.stage !== 'won' && d.stage !== 'lost');
-  const pipelineValue = open.reduce((s, d) => s + d.amount, 0);
-  const byStage = STAGE_ORDER.filter((s) => s !== 'won' && s !== 'lost').map((stage) => {
-    const ds = open.filter((d) => d.stage === stage);
-    return { stage, count: ds.length, sum: ds.reduce((s, d) => s + d.amount, 0) };
-  });
-  const maxSum = Math.max(...byStage.map((b) => b.sum), 1);
-  const topDeals = [...open].sort((a, b) => b.amount - a.amount).slice(0, 5);
+  const summary = trpc.home.summary.useQuery();
 
   return (
     <>
@@ -48,134 +56,111 @@ export default function HomePage() {
       <MetricStrip
         items={[
           {
-            label: 'Open deals',
-            value: open.length,
-            delta: { text: '+6 this week', tone: 'success' },
-          },
-          {
-            label: 'Pipeline value',
-            value: fmtMoney(pipelineValue),
-            delta: { text: '+12%', tone: 'success' },
+            label: 'Accounts',
+            value: summary.data ? summary.data.counts.accounts.toLocaleString() : '—',
           },
           {
             label: 'Contacts',
-            value: '2,418',
-            delta: { text: `${ACCOUNTS.length} accounts`, tone: 'brand' },
+            value: summary.data ? summary.data.counts.contacts.toLocaleString() : '—',
           },
           {
-            label: 'Closing this month',
-            value: '$320K',
-            delta: { text: '9 deals', tone: 'warning' },
+            label: 'Open pipeline',
+            value: summary.data ? fmtMoney(summary.data.pipelineValue) : '—',
+            delta: summary.data
+              ? { text: `${summary.data.counts.deals} deals`, tone: 'brand' }
+              : undefined,
+          },
+          {
+            label: 'Deals',
+            value: summary.data ? summary.data.counts.deals.toLocaleString() : '—',
           },
         ]}
       />
 
       <div className="rep-grid" style={{ marginTop: 22 }}>
-        {/* Recent activity */}
         <div className="panel">
           <div className="panel__h">
             <Icon name="lightning" size={17} />
             <h3>Recent activity</h3>
             <span className="right">
-              <Button variant="link" iconRight="arrow-right">
+              <Button variant="link" iconRight="arrow-right" onClick={() => undefined}>
                 View all
               </Button>
             </span>
           </div>
           <div className="panel__body">
-            <div className="tl">
-              {ACTIVITIES.map((a) => (
-                <div className="tl-item" key={a.id}>
-                  <span className="tl-item__dot">
-                    <Icon name={ACT_ICON[a.kind]} />
-                  </span>
-                  <div className="tl-item__head">
-                    <b>{a.actor}</b>
-                    <span style={{ color: 'var(--ink-secondary)' }}>{a.summary}</span>
-                    <span className="tl-item__time">{a.time}</span>
+            {summary.isLoading && (
+              <div style={{ display: 'grid', placeItems: 'center', padding: 24 }}>
+                <Spinner />
+              </div>
+            )}
+            {summary.data && summary.data.recentActivities.length === 0 && (
+              <div style={{ color: 'var(--ink-muted)', padding: 12 }}>
+                No activities yet. Log a call, send an email, or run a Salesforce migration.
+              </div>
+            )}
+            {summary.data && summary.data.recentActivities.length > 0 && (
+              <div className="tl">
+                {summary.data.recentActivities.map((a) => (
+                  <div className="tl-item" key={a.id}>
+                    <span className="tl-item__dot">
+                      <Icon name={(a.subtype && ACT_ICON[a.subtype]) || 'lightning'} />
+                    </span>
+                    <div className="tl-item__head">
+                      <b>{a.name}</b>
+                      <span className="tl-item__time">{timeAgo(a.createdAt)}</span>
+                    </div>
                   </div>
-                  {a.detail && <p>{a.detail}</p>}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div className="panel">
             <div className="panel__h">
               <Icon name="funnel" size={17} />
-              <h3>Pipeline by stage</h3>
+              <h3>Pipeline value</h3>
             </div>
-            <div
-              className="panel__body"
-              style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
-            >
-              {byStage.map((b) => (
-                <div key={b.stage}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
-                    <StageTag stage={b.stage} />
-                    <span
-                      style={{
-                        marginLeft: 'auto',
-                        fontWeight: 600,
-                        fontVariantNumeric: 'tabular-nums',
-                      }}
-                    >
-                      {fmtMoney(b.sum)}
-                    </span>
-                    <span style={{ color: 'var(--ink-muted)', fontSize: 'var(--text-sm)' }}>
-                      {b.count} deals
-                    </span>
-                  </div>
+            <div className="panel__body">
+              {summary.isLoading && <Spinner />}
+              {summary.data && (
+                <>
                   <div
                     style={{
-                      height: 6,
-                      borderRadius: 99,
-                      background: 'var(--surface-active)',
-                      overflow: 'hidden',
+                      fontSize: 'var(--text-2xl)',
+                      fontWeight: 600,
+                      letterSpacing: '-0.02em',
+                      fontVariantNumeric: 'tabular-nums',
                     }}
                   >
-                    <div
-                      style={{
-                        width: `${(b.sum / maxSum) * 100}%`,
-                        height: '100%',
-                        borderRadius: 99,
-                        background: DEAL_STAGE_TONE[b.stage].fg,
-                      }}
-                    />
+                    {fmtMoney(summary.data.pipelineValue)}
                   </div>
-                </div>
-              ))}
+                  <div style={{ color: 'var(--ink-muted)', marginTop: 4 }}>
+                    Across {summary.data.counts.deals} open deals.
+                  </div>
+                </>
+              )}
             </div>
           </div>
-
           <div className="panel">
             <div className="panel__h">
-              <Icon name="currency-circle-dollar" size={17} />
-              <h3>Top open deals</h3>
+              <Icon name="users-three" size={17} />
+              <h3>Workspace at a glance</h3>
             </div>
-            <div className="panel__body" style={{ paddingTop: 4, paddingBottom: 4 }}>
-              {topDeals.map((d) => (
-                <div className="rep-list-item" key={d.id}>
-                  <span className="rep-list-item__ic">
-                    <HealthDot health={accountById(d.accountId)?.health ?? 'good'} />
-                  </span>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div
-                      className="rep-name"
-                      style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                    >
-                      {d.name}
-                    </div>
-                    <div className="rep-meta">{accountById(d.accountId)?.name}</div>
-                  </div>
-                  <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                    {fmtMoney(d.amount)}
-                  </span>
+            <div className="panel__body">
+              {summary.isLoading && <Spinner />}
+              {summary.data && (
+                <div className="kv">
+                  <dt>Accounts</dt>
+                  <dd>{summary.data.counts.accounts.toLocaleString()}</dd>
+                  <dt>Contacts</dt>
+                  <dd>{summary.data.counts.contacts.toLocaleString()}</dd>
+                  <dt>Deals</dt>
+                  <dd>{summary.data.counts.deals.toLocaleString()}</dd>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>

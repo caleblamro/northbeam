@@ -1,10 +1,16 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import { Field, TextInput } from '@/components/ui/input';
+// B1 — Create-org page guards: redirect to /sign-in if there's no session
+// (so an unauthenticated user doesn't land here, submit, and see an opaque
+// "sign in required" error). Mutation errors with code UNAUTHORIZED also
+// bounce to /sign-in. Users who already have an active org are sent to /.
+
+import { Spinner } from '@/components/northbeam/primitives';
+import { Button } from '@/components/northbeam/button-legacy';
+import { Field, TextInput } from '@/components/northbeam/input-legacy';
 import { trpc } from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 function slugify(s: string): string {
   return s
@@ -15,18 +21,35 @@ function slugify(s: string): string {
     .slice(0, 48);
 }
 
+function isUnauthorized(err: { data?: { code?: string } | null; message?: string }): boolean {
+  return err.data?.code === 'UNAUTHORIZED' || /sign in required/i.test(err.message ?? '');
+}
+
 export default function CreateOrgPage() {
   const router = useRouter();
   const utils = trpc.useUtils();
+  const boot = trpc.me.bootstrap.useQuery();
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
+
   const create = trpc.org.create.useMutation({
     onSuccess: async () => {
       await utils.me.bootstrap.invalidate();
       router.replace('/');
     },
+    onError: (err) => {
+      if (isUnauthorized(err)) router.replace('/sign-in');
+    },
   });
+
+  // Auth guard. Wait for bootstrap, then route: no session → /sign-in;
+  // session + activeOrg → / (they don't need to be here).
+  useEffect(() => {
+    if (!boot.data) return;
+    if (!boot.data.session) router.replace('/sign-in');
+    else if (boot.data.activeOrg) router.replace('/');
+  }, [boot.data, router]);
 
   const onName = (v: string) => {
     setName(v);
@@ -37,6 +60,14 @@ export default function CreateOrgPage() {
     e.preventDefault();
     create.mutate({ name: name.trim(), slug: slug.trim() });
   };
+
+  if (boot.isLoading || !boot.data || !boot.data.session || boot.data.activeOrg) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center' }}>
+        <Spinner style={{ color: 'var(--brand)' }} />
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit}>
@@ -79,7 +110,7 @@ export default function CreateOrgPage() {
           Create workspace
         </Button>
       </div>
-      {create.isError && (
+      {create.isError && !isUnauthorized(create.error) && (
         <p style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)', marginTop: 12 }}>
           {create.error.message}
         </p>

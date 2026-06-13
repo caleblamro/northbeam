@@ -9,11 +9,53 @@
 @import "./components-doc.css";
 @import "./components-app.css";
 
-/* Expose the font vars to Tailwind so `font-sans` / `font-mono` utilities work.
-   next/font sets --font-sans / --font-mono on <html> (see app/layout.tsx). */
+/* Expose tokens to Tailwind v4 so utility classes resolve correctly.
+   next/font sets --font-sans / --font-mono on <html> (see app/layout.tsx).
+   The semantic tokens below are shadcn-style names mapped onto Northbeam's
+   existing CSS vars in tokens.css — so shadcn-ported components like
+   <MaskInput>, <PhoneInput>, <Popover>, <Dialog>, etc. inherit our look
+   instead of rendering with shadcn defaults. */
 @theme {
   --font-sans: var(--font-sans), "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: var(--font-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Surfaces */
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--surface-raised);
+  --color-popover-foreground: var(--ink);
+
+  /* Roles */
+  --color-primary: var(--brand);
+  --color-primary-foreground: var(--brand-contrast);
+  --color-secondary: var(--surface-active);
+  --color-secondary-foreground: var(--ink-secondary);
+  --color-muted: var(--surface-sunken);
+  --color-muted-foreground: var(--ink-muted);
+  --color-accent: var(--surface-hover);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--ink-onfill);
+
+  /* Borders + form controls */
+  --color-border: var(--border);
+  --color-input: var(--border-field);
+  --color-ring: var(--brand);
+
+  /* Charts (placeholder palette — Northbeam-tuned later) */
+  --color-chart-1: var(--brand);
+  --color-chart-2: var(--info);
+  --color-chart-3: var(--success);
+  --color-chart-4: var(--warning);
+  --color-chart-5: var(--danger);
+
+  /* Radii (let `rounded-md`, `rounded-lg` etc. follow Northbeam's scale) */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
 }
 
 /* ─── Brand accent variants (Tweak → pick one for production) ────────────────

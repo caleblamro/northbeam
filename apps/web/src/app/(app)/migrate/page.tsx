@@ -8,7 +8,7 @@ import { ObjChip } from '@/components/northbeam/app-bits';
 import { Icon } from '@/components/northbeam/icons';
 import { EmptyState } from '@/components/northbeam/page-head';
 import { Spinner } from '@/components/northbeam/primitives';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/northbeam/button-legacy';
 import { trpc } from '@/lib/api';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';

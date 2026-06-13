@@ -5,10 +5,10 @@
 
 import { DEAL_STAGE_OPTIONS } from '@/lib/tones';
 import { useState } from 'react';
-import { Button, IconButton, MenuButton, type MenuItem, SplitButton } from '../ui/button';
-import { CommandPalette } from '../ui/command';
-import { CurrencyInput, EmailInput, Field, MaskedInput, PhoneInput, TextInput } from '../ui/input';
-import { Combobox, NativeSelect, type Option, Select } from '../ui/select';
+import { Button, IconButton, MenuButton, type MenuItem, SplitButton } from './button-legacy';
+import { CommandPalette } from './command-legacy';
+import { CurrencyInput, EmailInput, Field, MaskedInput, PhoneInput, TextInput } from './input-legacy';
+import { Combobox, NativeSelect, type Option, Select } from './select-legacy';
 import { Frame, Section, SegToggle, Swatch } from './doc';
 import { Badge, Kbd } from './primitives';
 import { Sidebar } from './sidebar';

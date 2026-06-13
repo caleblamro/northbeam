@@ -1,271 +1,67 @@
-// Buttons. Direct port of design_handoff_northbeam/lib-buttons.jsx — Button,
-// IconButton, Menu, SplitButton, MenuButton — onto the ported .btn/.icon-btn/
-// .split/.menu CSS classes. Treatment (flat/elevated/soft) is set by a
-// `treat-*` ancestor class (see globals → components.css).
+import { cva, type VariantProps } from "class-variance-authority";
+import { Slot } from "radix-ui";
+import type * as React from "react";
 
-'use client';
+import { cn } from "@/lib/cn";
 
-import { cn } from '@/lib/cn';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { Icon, type IconName } from '../northbeam/icons';
-import { Popover, Spinner, useRovingIndex } from '../northbeam/primitives';
+const buttonVariants = cva(
+  "group/button inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-lg border border-transparent bg-clip-padding font-medium text-sm outline-none transition-all focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
+        outline:
+          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+        ghost:
+          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+        destructive:
+          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 dark:hover:bg-destructive/30",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default:
+          "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        xs: "h-6 gap-1 in-data-[slot=button-group]:rounded-lg rounded-[min(var(--radius-md),10px)] px-2 text-xs has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-7 gap-1 in-data-[slot=button-group]:rounded-lg rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        icon: "size-8",
+        "icon-xs":
+          "size-6 in-data-[slot=button-group]:rounded-lg rounded-[min(var(--radius-md),10px)] [&_svg:not([class*='size-'])]:size-3",
+        "icon-sm":
+          "size-7 in-data-[slot=button-group]:rounded-lg rounded-[min(var(--radius-md),12px)]",
+        "icon-lg": "size-9",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  },
+);
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'link' | 'danger' | 'danger-ghost';
-export type ButtonSize = 'sm' | 'md' | 'lg';
-
-type ButtonProps = {
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-  loading?: boolean;
-  icon?: IconName;
-  iconRight?: IconName;
-  block?: boolean;
-  children?: ReactNode;
-} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'>;
-
-export function Button({
-  variant = 'primary',
-  size = 'md',
-  loading,
-  disabled,
-  icon,
-  iconRight,
-  block,
-  children,
+function Button({
   className,
-  ...rest
-}: ButtonProps) {
+  variant = "default",
+  size = "default",
+  asChild = false,
+  ...props
+}: React.ComponentProps<"button"> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean;
+  }) {
+  const Comp = asChild ? Slot.Root : "button";
+
   return (
-    <button
-      type="button"
-      className={cn(
-        'btn',
-        `btn--${variant}`,
-        size !== 'md' && `btn--${size}`,
-        block && 'btn--block',
-        className,
-      )}
-      data-loading={loading ? 'true' : undefined}
-      disabled={disabled}
-      {...rest}
-    >
-      {loading && (
-        <span className="btn__spinner">
-          <Spinner />
-        </span>
-      )}
-      {icon && <Icon name={icon} />}
-      {children != null && <span className="btn__label">{children}</span>}
-      {iconRight && <Icon name={iconRight} />}
-    </button>
+    <Comp
+      data-slot="button"
+      data-variant={variant}
+      data-size={size}
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
   );
 }
 
-type IconButtonProps = {
-  icon: IconName;
-  size?: ButtonSize;
-  variant?: '' | 'bordered' | 'solid';
-  active?: boolean;
-  label: string;
-  fill?: boolean;
-} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'>;
-
-export function IconButton({
-  icon,
-  size = 'md',
-  variant = '',
-  active,
-  label,
-  fill,
-  className,
-  ...rest
-}: IconButtonProps) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        'icon-btn',
-        size !== 'md' && `icon-btn--${size}`,
-        variant && `icon-btn--${variant}`,
-        className,
-      )}
-      data-active={active ? 'true' : undefined}
-      aria-label={label}
-      title={label}
-      {...rest}
-    >
-      <Icon name={icon} fill={fill} size={20} />
-    </button>
-  );
-}
-
-export type MenuItem = {
-  icon?: IconName;
-  label?: string;
-  shortcut?: string;
-  danger?: boolean;
-  checked?: boolean;
-  onSelect?: () => void;
-  separator?: boolean;
-  heading?: string;
-};
-
-export function Menu({ items, onClose }: { items: MenuItem[]; onClose?: () => void }) {
-  const real = items.filter((it) => !it.separator && !it.heading);
-  const [idx, setIdx, onKey] = useRovingIndex(real.length, true);
-  const select = (it: MenuItem) => {
-    it.onSelect?.();
-    onClose?.();
-  };
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
-        onKey(e, (i) => {
-          const it = real[i];
-          if (it) select(it);
-        });
-      }
-    };
-    document.addEventListener('keydown', h);
-    return () => document.removeEventListener('keydown', h);
-  }, [onKey, real, select]);
-
-  let ri = -1;
-  return (
-    <>
-      {items.map((it, i) => {
-        if (it.separator) return <div className="menu__sep" key={`s${i}`} />;
-        if (it.heading)
-          return (
-            <div className="menu__label" key={`h${i}`}>
-              {it.heading}
-            </div>
-          );
-        ri++;
-        const here = ri;
-        return (
-          <button
-            key={i}
-            type="button"
-            role="menuitem"
-            className={cn('menu__item', it.danger && 'menu__item--danger')}
-            data-active={idx === here ? 'true' : undefined}
-            onMouseEnter={() => setIdx(here)}
-            onClick={() => select(it)}
-          >
-            {it.icon && <Icon name={it.icon} />}
-            <span>{it.label}</span>
-            {it.shortcut && <span className="menu__item-sub">{it.shortcut}</span>}
-            {it.checked && <Icon name="check" className="menu__item-check" />}
-          </button>
-        );
-      })}
-    </>
-  );
-}
-
-export function SplitButton({
-  children,
-  onClick,
-  items,
-  variant = 'primary',
-  size = 'md',
-  icon,
-  align = 'right',
-}: {
-  children: ReactNode;
-  onClick?: () => void;
-  items: MenuItem[];
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-  icon?: IconName;
-  align?: 'left' | 'right';
-}) {
-  const [open, setOpen] = useState(false);
-  const caretRef = useRef<HTMLButtonElement>(null);
-  return (
-    <div
-      className={cn('split', `split--${variant}`, size !== 'md' && `split--${size}`)}
-      style={{ position: 'relative', display: 'inline-flex' }}
-    >
-      <Button variant={variant} size={size} icon={icon} onClick={onClick}>
-        {children}
-      </Button>
-      <button
-        type="button"
-        ref={caretRef}
-        className={cn('btn', `btn--${variant}`, size !== 'md' && `btn--${size}`, 'split__caret')}
-        aria-label="More actions"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <Icon name="caret-down" />
-      </button>
-      <Popover
-        anchorRef={caretRef}
-        open={open}
-        onClose={() => setOpen(false)}
-        align={align}
-        width={210}
-      >
-        <Menu items={items} onClose={() => setOpen(false)} />
-      </Popover>
-    </div>
-  );
-}
-
-export function MenuButton({
-  children,
-  items,
-  variant = 'secondary',
-  size = 'md',
-  icon,
-  caret = true,
-  align = 'left',
-  iconBtn,
-  iconBtnVariant,
-}: {
-  children?: ReactNode;
-  items: MenuItem[];
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-  icon?: IconName;
-  caret?: boolean;
-  align?: 'left' | 'right';
-  iconBtn?: IconName;
-  iconBtnVariant?: '' | 'bordered' | 'solid';
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  return (
-    <div ref={ref} style={{ display: 'inline-flex' }}>
-      {iconBtn ? (
-        <IconButton
-          icon={iconBtn}
-          variant={iconBtnVariant}
-          active={open}
-          label="Actions"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-        />
-      ) : (
-        <Button
-          variant={variant}
-          size={size}
-          icon={icon}
-          iconRight={caret ? 'caret-down' : undefined}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-        >
-          {children}
-        </Button>
-      )}
-      <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} align={align} width={210}>
-        <Menu items={items} onClose={() => setOpen(false)} />
-      </Popover>
-    </div>
-  );
-}
+export { Button, buttonVariants };

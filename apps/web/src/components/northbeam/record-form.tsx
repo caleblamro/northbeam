@@ -8,9 +8,9 @@
 import { trpc } from '@/lib/api';
 import type { LayoutSection } from '@northbeam/db/field-types';
 import { useEffect, useMemo, useState } from 'react';
-import { Button } from '../ui/button';
-import { Field } from '../ui/input';
-import { Combobox, type Option } from '../ui/select';
+import { Button } from './button-legacy';
+import { Field } from './input-legacy';
+import { Combobox, type Option } from './select-legacy';
 import { RecordDrawer } from './app-bits';
 import { type FieldDefLite, FieldInput } from './field-render';
 

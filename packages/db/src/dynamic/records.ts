@@ -106,6 +106,42 @@ export async function getRecord(
   return row ? rowToRecord(opts.fields, row) : null;
 }
 
+/** count(*) on the object's table — used by home/dashboard summary panels. */
+export async function countRecords(
+  db: Database,
+  opts: { orgId: string; object: ObjectRow },
+): Promise<number> {
+  const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
+  const res = await db.execute(sql`select count(*)::int as n from ${tbl}`);
+  const row = asRows(res)[0];
+  return Number((row?.n as number | undefined) ?? 0);
+}
+
+/** Sum a numeric/currency field on the object's table. Returns 0 if no rows. */
+export async function sumField(
+  db: Database,
+  opts: {
+    orgId: string;
+    object: ObjectRow;
+    field: FieldRow;
+    whereField?: FieldRow;
+    whereIn?: string[];
+  },
+): Promise<number> {
+  const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
+  const valCol = col(opts.field.columnName);
+  let where = sql``;
+  if (opts.whereField && opts.whereIn && opts.whereIn.length > 0) {
+    const wCol = col(opts.whereField.columnName);
+    where = sql`where ${wCol} = any(${opts.whereIn}::text[])`;
+  }
+  const res = await db.execute(
+    sql`select coalesce(sum(${valCol}), 0)::numeric as s from ${tbl} ${where}`,
+  );
+  const row = asRows(res)[0];
+  return Number((row?.s as string | number | undefined) ?? 0);
+}
+
 export async function createRecord(
   db: Database,
   opts: {

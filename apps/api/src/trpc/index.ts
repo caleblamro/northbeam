@@ -2,6 +2,7 @@
 // drive end-to-end-typed client + TanStack Query hooks.
 
 import { authRouter } from './routers/auth.js';
+import { homeRouter } from './routers/home.js';
 import { meRouter } from './routers/me.js';
 import { objectRouter } from './routers/object.js';
 import { orgRouter } from './routers/org.js';
@@ -11,6 +12,7 @@ import { router } from './trpc.js';
 
 export const appRouter = router({
   auth: authRouter,
+  home: homeRouter,
   me: meRouter,
   object: objectRouter,
   org: orgRouter,

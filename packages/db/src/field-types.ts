@@ -78,16 +78,33 @@ export type PicklistOption = { value: string; label: string; color?: string };
 export type RollupFn = 'sum' | 'count' | 'avg' | 'min' | 'max';
 
 /** Type-specific configuration, stored as field_def.config (JSONB). All optional;
- *  which keys are meaningful depends on the field type. */
+ *  which keys are meaningful depends on the field type.
+ *
+ *  Display semantics (Directus-style):
+ *    - `description`: rendered ABOVE the input as muted explanatory text. The
+ *      "what is this and why does it matter" the user reads when filling it in.
+ *    - `placeholder`: rendered INSIDE the input as ghost text. Example value or
+ *      brief prompt — disappears as soon as the user types.
+ *    - `helpText`: rendered BELOW the input as small muted text. "Use this if
+ *      X" / "Optional but recommended" — non-blocking guidance.
+ */
 export type FieldConfig = {
+  description?: string;
+  placeholder?: string;
   helpText?: string;
   defaultValue?: unknown;
   // text
   maxLength?: number;
+  /** A user-facing input-mask pattern (e.g. "(999) 999-9999", "AA-9999").
+   *  Distinct from the type-level masks (date, datetime) — this lets any text
+   *  field carry its own format. See lib/mask.applyMask in apps/web. */
+  mask?: string;
   // number / currency / percent
   precision?: number;
   scale?: number; // currency/percent stored as integer minor units when scale set
-  currencyCode?: string; // e.g. 'USD'
+  /** ISO 4217 code for the field's currency (e.g. 'USD', 'EUR'). Workspace-
+   *  level default lives on organization.metadata.defaultCurrency. */
+  currencyCode?: string;
   // picklist / multipicklist
   options?: PicklistOption[];
   restrictToOptions?: boolean;

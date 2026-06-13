@@ -1,168 +1,194 @@
-// Command palette (⌘K). Direct port of design_handoff_northbeam/lib-command.jsx
-// onto the ported .cmdk CSS. Item data lives in @/lib/cmd-data.
+"use client";
 
-'use client';
+import { Command as CommandPrimitive } from "cmdk";
+import { CheckIcon, SearchIcon } from "lucide-react";
+import type * as React from "react";
+import { cn } from "@/lib/cn";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  InputGroup,
+  InputGroupAddon,
+} from "@/components/ui/input-group";
 
-import { CMD_GROUP_ORDER, CMD_ITEMS, type CmdItem } from '@/lib/cmd-data';
-import { useEffect, useMemo, useState } from 'react';
-import { Icon } from '../northbeam/icons';
-import { Avatar, useDismiss } from '../northbeam/primitives';
-
-export function CommandPalette({
-  open,
-  onClose,
-  contained,
-  onSelect,
-}: {
-  open: boolean;
-  onClose?: () => void;
-  contained?: boolean;
-  onSelect?: (item: CmdItem) => void;
-}) {
-  const [q, setQ] = useState('');
-  const [idx, setIdx] = useState(0);
-
-  useEffect(() => {
-    if (open) {
-      setQ('');
-      setIdx(0);
-    }
-  }, [open]);
-
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return CMD_ITEMS;
-    return CMD_ITEMS.filter((it) => `${it.label} ${it.sub ?? ''}`.toLowerCase().includes(s));
-  }, [q]);
-
-  const grouped = useMemo(() => {
-    const m: Record<string, CmdItem[]> = {};
-    for (const it of filtered) {
-      const list = m[it.group] ?? [];
-      list.push(it);
-      m[it.group] = list;
-    }
-    const blocks = CMD_GROUP_ORDER.filter((g) => m[g]).map((g) => ({
-      group: g,
-      items: m[g] as CmdItem[],
-    }));
-    const flat: CmdItem[] = [];
-    for (const b of blocks) for (const it of b.items) flat.push(it);
-    return { blocks, flat };
-  }, [filtered]);
-
-  const choose = (it: CmdItem) => {
-    onSelect?.(it);
-    onClose?.();
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setIdx((i) => Math.min(i + 1, grouped.flat.length - 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setIdx((i) => Math.max(i - 1, 0));
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        const it = grouped.flat[idx];
-        if (it) choose(it);
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose?.();
-      }
-    };
-    document.addEventListener('keydown', h);
-    return () => document.removeEventListener('keydown', h);
-  }, [open, grouped.flat, idx, onClose]);
-
-  const ref = useDismiss<HTMLDivElement>(open, () => onClose?.());
-  if (!open) return null;
-
-  let running = -1;
+function Command({
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive>) {
   return (
-    <div
-      className="cmdk-overlay"
-      style={contained ? { position: 'absolute' } : { position: 'fixed' }}
-    >
-      <div className="cmdk" ref={ref}>
-        <div className="cmdk__input">
-          <Icon name="magnifying-glass" size={20} />
-          {/* Command palettes focus their query field on open — intentional. */}
-          <input
-            autoFocus
-            value={q}
-            placeholder="Search or jump to…"
-            onChange={(e) => {
-              setQ(e.target.value);
-              setIdx(0);
-            }}
-          />
-          <span className="kbd">Esc</span>
-        </div>
-        <div className="cmdk__scroll">
-          {grouped.flat.length === 0 ? (
-            <div className="cmdk__empty">
-              <Icon name="magnifying-glass" size={30} />
-              No results for “{q}”
-            </div>
-          ) : (
-            grouped.blocks.map((b) => (
-              <div key={b.group}>
-                <div className="cmdk__group-label">{b.group}</div>
-                {b.items.map((it) => {
-                  running++;
-                  const here = running;
-                  return (
-                    <div
-                      key={it.id}
-                      className="cmdk__item"
-                      data-active={idx === here ? 'true' : undefined}
-                      onMouseEnter={() => setIdx(here)}
-                      onClick={() => choose(it)}
-                    >
-                      {it.avatar ? (
-                        <Avatar name={it.label} className="cmdk__avatar" />
-                      ) : (
-                        <span className="cmdk__icon">
-                          {it.icon && <Icon name={it.icon} size={17} />}
-                        </span>
-                      )}
-                      <div className="cmdk__item-body">
-                        {it.label}
-                        {it.sub && <small>{it.sub}</small>}
-                      </div>
-                      <div className="cmdk__item-meta">
-                        {it.meta && <span className="badge">{it.meta}</span>}
-                        {it.kbd && <span style={{ fontSize: 'var(--text-sm)' }}>{it.kbd}</span>}
-                        {idx === here && <Icon name="arrow-elbow-down-left" size={15} />}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))
+    <CommandPrimitive
+      data-slot="command"
+      className={cn(
+        "flex size-full flex-col overflow-hidden rounded-xl! bg-popover p-1 text-popover-foreground",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function CommandDialog({
+  title = "Command Palette",
+  description = "Search for a command to run...",
+  children,
+  className,
+  showCloseButton = false,
+  ...props
+}: React.ComponentProps<typeof Dialog> & {
+  title?: string;
+  description?: string;
+  className?: string;
+  showCloseButton?: boolean;
+}) {
+  return (
+    <Dialog {...props}>
+      <DialogHeader className="sr-only">
+        <DialogTitle>{title}</DialogTitle>
+        <DialogDescription>{description}</DialogDescription>
+      </DialogHeader>
+      <DialogContent
+        className={cn(
+          "top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0",
+          className,
+        )}
+        showCloseButton={showCloseButton}
+      >
+        {children}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CommandInput({
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+  return (
+    <div data-slot="command-input-wrapper" className="p-1 pb-0">
+      <InputGroup className="h-8! rounded-lg! border-input/30 bg-input/30 shadow-none! *:data-[slot=input-group-addon]:pl-2!">
+        <CommandPrimitive.Input
+          data-slot="command-input"
+          className={cn(
+            "w-full text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
+            className,
           )}
-        </div>
-        <div className="cmdk__footer">
-          <span className="cmdk__footer-hint">
-            <span className="kbd">↑</span>
-            <span className="kbd">↓</span> navigate
-          </span>
-          <span className="cmdk__footer-hint">
-            <span className="kbd">↵</span> select
-          </span>
-          <span className="cmdk__footer-hint">
-            <span className="kbd">esc</span> close
-          </span>
-          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="command" size={14} />
-            Command palette
-          </span>
-        </div>
-      </div>
+          {...props}
+        />
+        <InputGroupAddon>
+          <SearchIcon className="size-4 shrink-0 opacity-50" />
+        </InputGroupAddon>
+      </InputGroup>
     </div>
   );
 }
+
+function CommandList({
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.List>) {
+  return (
+    <CommandPrimitive.List
+      data-slot="command-list"
+      className={cn(
+        "no-scrollbar max-h-72 scroll-py-1 overflow-y-auto overflow-x-hidden outline-none",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function CommandEmpty({
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Empty>) {
+  return (
+    <CommandPrimitive.Empty
+      data-slot="command-empty"
+      className={cn("py-6 text-center text-sm", className)}
+      {...props}
+    />
+  );
+}
+
+function CommandGroup({
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Group>) {
+  return (
+    <CommandPrimitive.Group
+      data-slot="command-group"
+      className={cn(
+        "overflow-hidden p-1 text-foreground **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-muted-foreground **:[[cmdk-group-heading]]:text-xs",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function CommandSeparator({
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Separator>) {
+  return (
+    <CommandPrimitive.Separator
+      data-slot="command-separator"
+      className={cn("-mx-1 h-px bg-border", className)}
+      {...props}
+    />
+  );
+}
+
+function CommandItem({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Item>) {
+  return (
+    <CommandPrimitive.Item
+      data-slot="command-item"
+      className={cn(
+        "group/command-item relative flex cursor-default select-none items-center gap-2 in-data-[slot=dialog-content]:rounded-lg! rounded-sm px-2 py-1.5 text-sm outline-hidden data-[disabled=true]:pointer-events-none data-selected:bg-muted data-selected:text-foreground data-[disabled=true]:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 data-selected:*:[svg]:text-foreground",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <CheckIcon className="ml-auto opacity-0 group-has-data-[slot=command-shortcut]/command-item:hidden group-data-[checked=true]/command-item:opacity-100" />
+    </CommandPrimitive.Item>
+  );
+}
+
+function CommandShortcut({
+  className,
+  ...props
+}: React.ComponentProps<"span">) {
+  return (
+    <span
+      data-slot="command-shortcut"
+      className={cn(
+        "ml-auto text-muted-foreground text-xs tracking-widest group-data-selected/command-item:text-foreground",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+};

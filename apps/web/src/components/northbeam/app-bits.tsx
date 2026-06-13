@@ -5,7 +5,7 @@ import { DEAL_STAGE_TONE, type DealStage } from '@/lib/tones';
 import { AnimatePresence, motion } from 'framer-motion';
 import { type ReactNode, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { IconButton } from '../ui/button';
+import { IconButton } from './button-legacy';
 import { Icon } from './icons';
 import { Badge } from './primitives';
 

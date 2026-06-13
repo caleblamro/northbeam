@@ -9,7 +9,7 @@ import { trpc } from '@/lib/api';
 import type { FieldConfig, ObjectLayout } from '@northbeam/db/field-types';
 import Link from 'next/link';
 import { useState } from 'react';
-import { Button } from '../ui/button';
+import { Button } from './button-legacy';
 import { ObjChip } from './app-bits';
 import { HidePageHead } from './app-shell';
 import { type FieldDefLite, FieldInput, FieldValue } from './field-render';

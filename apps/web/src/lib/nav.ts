@@ -1,5 +1,8 @@
-// Sidebar / command-palette navigation model. Icons are Phosphor names
-// resolved through components/northbeam/icons.tsx (Icon).
+// App-wide navigation model. Two consumers:
+//   - The App Launcher (9-dot waffle) shows LAUNCHER_TILES grouped by section.
+//   - The ⌘K command palette uses NAV_FLAT to jump anywhere.
+// PAGE_META drives the in-app page header (title + subtitle + icon).
+// Icons resolve through components/northbeam/icons.tsx (Phosphor → lucide map).
 
 import type { IconName } from '@/components/northbeam/icons';
 
@@ -7,7 +10,6 @@ export type NavItem = {
   label: string;
   href: string;
   icon: IconName;
-  count?: string;
   badge?: string;
   accent?: boolean;
   match?: (path: string) => boolean;
@@ -23,16 +25,18 @@ const starts =
   (p: string) =>
     prefixes.some((pre) => p === pre || p.startsWith(`${pre}/`));
 
-export const NAV_SECTIONS: NavSection[] = [
+// Grouped tiles for the App Launcher popover. Salesforce groups Sales/Service/
+// Setup; we group Workspace/Insights/Setup so the muscle memory carries over.
+export const LAUNCHER_TILES: NavSection[] = [
   {
     label: 'Workspace',
     items: [
       { label: 'Home', href: '/', icon: 'house', match: (p) => p === '/' },
-      { label: 'Contacts', href: '/contacts', icon: 'users-three', count: '2.4k' },
-      { label: 'Accounts', href: '/accounts', icon: 'buildings', count: '318' },
-      { label: 'Deals', href: '/deals', icon: 'currency-circle-dollar', count: '47' },
+      { label: 'Accounts', href: '/accounts', icon: 'buildings' },
+      { label: 'Contacts', href: '/contacts', icon: 'users-three' },
+      { label: 'Deals', href: '/deals', icon: 'currency-circle-dollar' },
       { label: 'Activities', href: '/activities', icon: 'lightning' },
-      { label: 'Tasks', href: '/tasks', icon: 'check-circle', badge: '5' },
+      { label: 'Tasks', href: '/tasks', icon: 'check-circle' },
     ],
   },
   {
@@ -57,7 +61,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-export const NAV_FLAT: Array<NavItem & { section: string }> = NAV_SECTIONS.flatMap((s) =>
+export const NAV_FLAT: Array<NavItem & { section: string }> = LAUNCHER_TILES.flatMap((s) =>
   s.items.map((it) => ({ ...it, section: s.label })),
 );
 
@@ -66,8 +70,8 @@ export function isNavActive(item: NavItem, pathname: string): boolean {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-// Page chrome (icon + title + subtitle) the (app) layout renders — so individual
-// pages don't re-declare a header. Keyed by route; icon comes from the nav.
+// Page chrome the (app) layout renders — so individual pages don't re-declare
+// a header. Keyed by route; icon falls back to the matching nav item.
 export type PageMeta = { title: string; subtitle?: string; icon?: IconName };
 
 export const PAGE_META: Record<string, PageMeta> = {
@@ -112,7 +116,6 @@ export function pageMetaFor(pathname: string): PageMeta {
         .sort((a, b) => b.length - a.length)[0];
       return (key ? PAGE_META[key] : undefined) ?? { title: 'Northbeam' };
     })();
-  // Icon comes from the matching nav item (single source of truth).
   const navItem =
     NAV_FLAT.find((n) => n.href === pathname) ?? NAV_FLAT.find((n) => isNavActive(n, pathname));
   return { ...meta, icon: meta.icon ?? navItem?.icon };

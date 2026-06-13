@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 import { Icon } from './icons';
 import { Avatar, Popover } from './primitives';
+import { ThemeToggle } from './theme-switcher';
 
 export function UserMenu({
   name,
@@ -51,7 +52,7 @@ export function UserMenu({
         )}
       </button>
 
-      <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} align="left" width={244}>
+      <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} align="right" width={244}>
         <div className="usermenu__head">
           <Avatar name={display} className="sb__avatar" style={{ width: 36, height: 36 }} />
           <div style={{ minWidth: 0 }}>
@@ -87,6 +88,27 @@ export function UserMenu({
           <span>Keyboard shortcuts</span>
           <span className="menu__item-sub">⌘K</span>
         </button>
+        <div className="menu__sep" />
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '8px 10px 6px',
+          }}
+        >
+          <span
+            style={{
+              flex: 1,
+              fontSize: 'var(--text-sm)',
+              color: 'var(--ink-secondary)',
+              fontWeight: 'var(--fw-medium)',
+            }}
+          >
+            Theme
+          </span>
+          <ThemeToggle />
+        </div>
         <div className="menu__sep" />
         <button
           type="button"
