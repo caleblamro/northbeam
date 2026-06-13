@@ -1,15 +1,18 @@
 'use client';
 
-import { SegTabs, Toolbar, ToolbarSearch, ToolbarSpacer } from '@/components/northbeam/app-bits';
 import { PageActions } from '@/components/northbeam/app-shell';
-import { Icon } from '@/components/northbeam/icons';
+import { EmptyState } from '@/components/northbeam/empty-state';
+import { FilterBar } from '@/components/northbeam/filter-bar';
+import { ListToolbar } from '@/components/northbeam/list-toolbar';
 import { Spinner } from '@/components/northbeam/primitives';
-import { Button } from '@/components/northbeam/button-legacy';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { SegTabs } from '@/components/northbeam/app-bits';
 import { trpc } from '@/lib/api';
+import { CheckCircle2, Plus } from 'lucide-react';
 import { useState } from 'react';
 
-// Tasks are activities with `type === 'task'`. The activity object is seeded
-// into every workspace; we filter the standard record.list result client-side.
 type FilterMode = 'open' | 'done' | 'all';
 
 export default function TasksPage() {
@@ -20,99 +23,58 @@ export default function TasksPage() {
   const allTasks = (list.data?.rows ?? []).filter(
     (r) => (r.data.type as string | undefined) === 'task',
   );
-
-  // No "done" field on the seeded activity object — until we add one, treat
-  // every task as open. The filter is wired so the UI works once a done flag
-  // ships; until then 'done' renders empty and 'open'/'all' match.
-  const isDone = (_t: (typeof allTasks)[number]) => false;
-
+  const isDone = () => false;
   const rows = allTasks.filter((t) => {
-    if (filter === 'open' && isDone(t)) return false;
-    if (filter === 'done' && !isDone(t)) return false;
+    if (filter === 'open' && isDone()) return false;
+    if (filter === 'done' && !isDone()) return false;
     return !q.trim() || t.name.toLowerCase().includes(q.trim().toLowerCase());
   });
 
   return (
     <>
       <PageActions>
-        <Button variant="primary" icon="plus">
+        <Button>
+          <Plus />
           New task
         </Button>
       </PageActions>
 
-      <Toolbar>
-        <ToolbarSearch value={q} onChange={setQ} placeholder="Search tasks…" />
-        <SegTabs
-          value={filter}
-          onChange={(v) => setFilter(v as FilterMode)}
-          options={[
-            { value: 'open', label: 'Open', count: allTasks.filter((t) => !isDone(t)).length },
-            { value: 'done', label: 'Done' },
-            { value: 'all', label: 'All', count: allTasks.length },
-          ]}
-        />
-        <ToolbarSpacer />
-      </Toolbar>
+      <FilterBar />
+      <ListToolbar
+        searchValue={q}
+        onSearchChange={setQ}
+        searchPlaceholder="Search tasks…"
+        actions={
+          <SegTabs
+            value={filter}
+            onChange={(v) => setFilter(v as FilterMode)}
+            options={[
+              { value: 'open', label: 'Open', count: allTasks.length },
+              { value: 'done', label: 'Done' },
+              { value: 'all', label: 'All', count: allTasks.length },
+            ]}
+          />
+        }
+      />
 
-      <div className="tbl-card">
+      <Card className="overflow-hidden">
         {list.isLoading && (
-          <div style={{ display: 'grid', placeItems: 'center', padding: 40 }}>
-            <Spinner />
+          <div className="grid place-items-center p-10">
+            <Spinner style={{ color: 'var(--brand)' }} />
           </div>
         )}
         {!list.isLoading &&
           rows.map((t) => {
             const due = t.data.due_date as string | undefined;
-            const done = isDone(t);
             return (
               <div
                 key={t.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 14,
-                  padding: '13px 16px',
-                  borderBottom: '1px solid var(--divider)',
-                }}
+                className="flex items-center gap-3.5 border-b px-4 py-3 last:border-b-0"
               >
-                <button
-                  type="button"
-                  aria-label={done ? 'Mark incomplete' : 'Mark complete'}
-                  style={{
-                    width: 20,
-                    height: 20,
-                    borderRadius: 6,
-                    border: `1.5px solid ${done ? 'var(--brand)' : 'var(--border-strong)'}`,
-                    background: done ? 'var(--brand)' : 'transparent',
-                    color: '#fff',
-                    display: 'grid',
-                    placeItems: 'center',
-                    cursor: 'pointer',
-                    flexShrink: 0,
-                  }}
-                >
-                  {done && <Icon name="check" size={13} />}
-                </button>
-                <span
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    color: done ? 'var(--ink-muted)' : 'var(--ink)',
-                    textDecoration: done ? 'line-through' : 'none',
-                    fontWeight: 500,
-                  }}
-                >
-                  {t.name}
-                </span>
+                <Checkbox aria-label="Mark complete" />
+                <span className="min-w-0 flex-1 font-medium text-foreground">{t.name}</span>
                 {due && (
-                  <span
-                    style={{
-                      color: 'var(--ink-muted)',
-                      fontSize: 'var(--text-sm)',
-                      width: 96,
-                      textAlign: 'right',
-                    }}
-                  >
+                  <span className="w-24 text-right text-muted-foreground text-sm">
                     {new Date(due).toLocaleDateString()}
                   </span>
                 )}
@@ -120,13 +82,17 @@ export default function TasksPage() {
             );
           })}
         {!list.isLoading && rows.length === 0 && (
-          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--ink-muted)' }}>
-            {allTasks.length === 0
-              ? 'No tasks yet — create one to track follow-ups across deals and contacts.'
-              : 'Nothing matches your filter.'}
-          </div>
+          <EmptyState
+            icon={CheckCircle2}
+            title={allTasks.length === 0 ? 'No tasks yet' : 'Nothing matches your filter'}
+            body={
+              allTasks.length === 0
+                ? 'Create a task to track follow-ups across deals and contacts.'
+                : 'Try a different search or filter.'
+            }
+          />
         )}
-      </div>
+      </Card>
     </>
   );
 }

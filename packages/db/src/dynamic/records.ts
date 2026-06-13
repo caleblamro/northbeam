@@ -133,7 +133,14 @@ export async function sumField(
   let where = sql``;
   if (opts.whereField && opts.whereIn && opts.whereIn.length > 0) {
     const wCol = col(opts.whereField.columnName);
-    where = sql`where ${wCol} = any(${opts.whereIn}::text[])`;
+    // Use IN (...) with explicit param-per-value joining — passing the JS
+    // array to Drizzle generates `($1, $2, $3)::text[]` which is not a valid
+    // Postgres array literal and fails at runtime.
+    const values = sql.join(
+      opts.whereIn.map((v) => sql`${v}`),
+      sql`, `,
+    );
+    where = sql`where ${wCol} in (${values})`;
   }
   const res = await db.execute(
     sql`select coalesce(sum(${valCol}), 0)::numeric as s from ${tbl} ${where}`,

@@ -357,8 +357,22 @@ function formatPhoneNumber(value: string, countries: Country[]): string {
   const countryCode = digits.slice(0, dialCodeLength);
   const rest = digits.slice(dialCodeLength);
 
-  let formatted = `+${countryCode}`;
+  // North American Numbering Plan (US/Canada/Caribbean) — +1 with 10-digit
+  // subscriber numbers use the conventional `(NPA) NXX-XXXX` grouping. Format
+  // progressively as the user types so the parentheses + hyphen feel native.
+  if (countryCode === "1") {
+    const a = rest.slice(0, 3);
+    const b = rest.slice(3, 6);
+    const c = rest.slice(6, 10);
+    let out = "+1";
+    if (rest.length > 0) out += ` (${a}`;
+    if (rest.length >= 3) out += ")";
+    if (b) out += ` ${b}`;
+    if (c) out += `-${c}`;
+    return out;
+  }
 
+  let formatted = `+${countryCode}`;
   if (rest) {
     formatted += " ";
     for (let i = 0; i < rest.length; i++) {

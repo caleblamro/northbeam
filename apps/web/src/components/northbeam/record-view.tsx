@@ -5,11 +5,12 @@
 // handoff; rendered with our own components + tokens. Every section/field comes
 // from the object's `layout` metadata, so this works for any object.
 
+import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/api';
 import type { FieldConfig, ObjectLayout } from '@northbeam/db/field-types';
+import { Loader2, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import { Button } from './button-legacy';
 import { ObjChip } from './app-bits';
 import { HidePageHead } from './app-shell';
 import { type FieldDefLite, FieldInput, FieldValue } from './field-render';
@@ -89,7 +90,8 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
             )}
           </div>
           <div className="rec-hl__actions">
-            <Button variant="secondary" icon="pencil-simple" onClick={() => setEditing(true)}>
+            <Button variant="outline" onClick={() => setEditing(true)}>
+              <Pencil />
               Edit
             </Button>
           </div>
@@ -303,12 +305,12 @@ function InlineField({
           <div className="rfield__edit-actions">
             <Button
               size="sm"
-              variant="primary"
-              loading={update.isPending}
+              disabled={update.isPending}
               onClick={() =>
                 update.mutate({ objectKey, id: recordId, data: { [field.key]: draft } })
               }
             >
+              {update.isPending && <Loader2 className="animate-spin" />}
               Save
             </Button>
             <Button

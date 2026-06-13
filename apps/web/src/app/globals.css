@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Tailwind v4 defaults the `dark:` variant to `@media (prefers-color-scheme: dark)`,
+   which fires whenever the user's OS is in dark mode — even when the app itself
+   is rendering light. Rebind `dark:` to our app-controlled `[data-theme="dark"]`
+   attribute so DiceUI components like `dark:bg-input/30` only paint when the
+   workspace is actually in dark mode. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* Northbeam design tokens + components — ported from design_handoff_northbeam/.
    Light is the default; dark is opt-in via [data-theme="dark"]. */
 @import "./tokens.css";
@@ -56,6 +63,20 @@
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
+}
+
+/* Tailwind v4 default border + divide + outline color. Without this, `border`
+   and `divide-x/y` utilities fall back to `currentColor` (= the text color)
+   instead of our muted border token — which made every Card render with a
+   navy/black outline. Set the universal default once so it Just Works. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border);
+  }
 }
 
 /* ─── Brand accent variants (Tweak → pick one for production) ────────────────

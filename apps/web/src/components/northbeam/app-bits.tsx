@@ -1,11 +1,12 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import type { Health } from '@/lib/mock-crm';
 import { DEAL_STAGE_TONE, type DealStage } from '@/lib/tones';
 import { AnimatePresence, motion } from 'framer-motion';
+import { X } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { IconButton } from './button-legacy';
 import { Icon } from './icons';
 import { Badge } from './primitives';
 
@@ -309,7 +310,14 @@ export function RecordDrawer({
                 <h2>{title}</h2>
                 {subtitle && <p>{subtitle}</p>}
               </div>
-              <IconButton icon="x" label="Close" onClick={onClose} />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Close"
+                onClick={onClose}
+              >
+                <X />
+              </Button>
             </div>
             <div className="drawer__body">{children}</div>
             {footer && <div className="drawer__foot">{footer}</div>}

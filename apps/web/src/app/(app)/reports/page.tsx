@@ -1,11 +1,22 @@
 'use client';
 
 import { PageActions } from '@/components/northbeam/app-shell';
-
-import { Icon } from '@/components/northbeam/icons';
-import { Badge } from '@/components/northbeam/primitives';
-import { Button } from '@/components/northbeam/button-legacy';
+import { SectionCard } from '@/components/northbeam/section-card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { fmtMoney } from '@/lib/mock-crm';
+import {
+  AlertTriangle,
+  ArrowRight,
+  BookOpen,
+  ChartLine,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  TrendingUp,
+  Zap,
+} from 'lucide-react';
 import { useState } from 'react';
 
 const SUGGESTIONS = [
@@ -16,176 +27,96 @@ const SUGGESTIONS = [
 ];
 
 const INSIGHTS = [
-  {
-    tone: 'danger' as const,
-    icon: 'warning-circle' as const,
-    title: 'Meridian Health is at risk',
-    body: 'No activity in 18 days on a $220K open deal. Health dropped to critical.',
-  },
-  {
-    tone: 'warning' as const,
-    icon: 'arrows-clockwise' as const,
-    title: '3 deals slipped their close date',
-    body: 'Northwind, Atlas, and Cobalt pushed past their forecasted close this week.',
-  },
-  {
-    tone: 'success' as const,
-    icon: 'chart-line-up' as const,
-    title: 'Win rate up 8 points',
-    body: 'Closed-won rate climbed to 41% over the last 30 days, led by Aisha and Jordan.',
-  },
+  { tone: 'danger' as const, icon: AlertTriangle, title: 'Meridian Health is at risk', body: 'No activity in 18 days on a $220K open deal.' },
+  { tone: 'warning' as const, icon: RefreshCw, title: '3 deals slipped close dates', body: 'Northwind, Atlas, and Cobalt pushed past their forecast.' },
+  { tone: 'success' as const, icon: TrendingUp, title: 'Win rate up 8 points', body: 'Closed-won climbed to 41% over the last 30 days.' },
 ];
 
-const FORECAST = [
-  { m: 'Mar', actual: 120, fc: 0 },
-  { m: 'Apr', actual: 165, fc: 0 },
-  { m: 'May', actual: 142, fc: 0 },
-  { m: 'Jun', actual: 188, fc: 0 },
-  { m: 'Jul', actual: 0, fc: 210 },
-  { m: 'Aug', actual: 0, fc: 245 },
-];
-
-const SAVED = [
-  {
-    name: 'Quarterly pipeline review',
-    meta: 'Updated 2h ago · Jordan Mills',
-    icon: 'funnel' as const,
-  },
-  {
-    name: 'Win/loss by owner',
-    meta: 'Updated yesterday · Aisha Khan',
-    icon: 'chart-line-up' as const,
-  },
-  {
-    name: 'Salesforce migration audit',
-    meta: 'Updated 3 days ago · System',
-    icon: 'upload-simple' as const,
-  },
-];
+const TONE_CLASS: Record<'danger' | 'warning' | 'success', string> = {
+  danger: 'bg-destructive/10 text-destructive',
+  warning: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  success: 'bg-green-500/15 text-green-600 dark:text-green-400',
+};
 
 export default function ReportsPage() {
   const [q, setQ] = useState('');
-  const max = Math.max(...FORECAST.map((f) => Math.max(f.actual, f.fc)));
 
   return (
     <>
       <PageActions>
-        <Button variant="secondary" icon="plus">
+        <Button variant="outline">
+          <Plus />
           New report
         </Button>
       </PageActions>
 
-      <div className="nlq">
-        <Icon name="command" size={22} />
-        <input
+      <InputGroup className="mb-2.5">
+        <InputGroupAddon>
+          <Sparkles className="text-primary" />
+        </InputGroupAddon>
+        <InputGroupInput
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Ask anything about your pipeline…"
         />
-        <Button variant="primary" icon="arrow-right">
-          Ask
-        </Button>
-      </div>
-      <div className="nlq-chips">
+        <InputGroupAddon align="inline-end">
+          <Button size="sm">
+            Ask
+            <ArrowRight />
+          </Button>
+        </InputGroupAddon>
+      </InputGroup>
+      <div className="mb-6 flex flex-wrap gap-1.5">
         {SUGGESTIONS.map((s) => (
-          <button type="button" key={s} className="nlq-chip" onClick={() => setQ(s)}>
+          <button
+            key={s}
+            type="button"
+            onClick={() => setQ(s)}
+            className="rounded-full border bg-card px-3 py-1 text-muted-foreground text-xs hover:border-primary/30 hover:text-primary"
+          >
             {s}
           </button>
         ))}
       </div>
 
-      <div className="subhead" style={{ marginTop: 4 }}>
-        Insights
-        <Badge variant="brand" dot>
-          Auto-detected
-        </Badge>
-      </div>
-      <div className="grid grid--3" style={{ marginBottom: 28 }}>
-        {INSIGHTS.map((i) => (
-          <div className="insight" key={i.title}>
-            <span className={`insight__ic insight__ic--${i.tone}`}>
-              <Icon name={i.icon} size={19} />
-            </span>
-            <div style={{ minWidth: 0 }}>
-              <h4>{i.title}</h4>
-              <p>{i.body}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="rep-grid">
-        <div className="panel">
-          <div className="panel__h">
-            <Icon name="chart-line-up" size={17} />
-            <h3>Revenue forecast</h3>
-            <span className="right">
-              <Badge variant="brand">AI projected</Badge>
-            </span>
-          </div>
-          <div className="panel__body">
-            <div className="fc">
-              {FORECAST.map((f) => {
-                const v = f.actual || f.fc;
-                return (
-                  <div className="fc-col" key={f.m}>
-                    <div
-                      className={`fc-bar ${f.fc ? 'fc-bar--fc' : ''}`}
-                      style={{ height: `${(v / max) * 100}%` }}
-                    />
-                    <small>{f.m}</small>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="fc-legend">
-              <span>
-                <i style={{ background: 'var(--brand)' }} />
-                Actual
-              </span>
-              <span>
-                <i style={{ background: 'var(--ai)' }} />
-                Forecast
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <div className="panel">
-            <div className="panel__h">
-              <Icon name="lightning" size={17} />
-              <h3>What changed this week</h3>
-            </div>
-            <div className="panel__body">
-              <p className="narr">
-                Pipeline grew <span className="up">+{fmtMoney(18_000_00)}</span> with 4 new deals
-                created. Two deals closed won (<b>Brightpath</b>, <b>Cobalt pilot</b>), while{' '}
-                <span className="down">3 slipped</span> past their close date. Net new pipeline is
-                up <span className="up">12%</span> month-over-month.
-              </p>
-            </div>
-          </div>
-          <div className="panel">
-            <div className="panel__h">
-              <Icon name="book-open" size={17} />
-              <h3>Saved reports</h3>
-            </div>
-            <div className="panel__body" style={{ paddingTop: 4, paddingBottom: 4 }}>
-              {SAVED.map((r) => (
-                <div className="rep-list-item" key={r.name}>
-                  <span className="rep-list-item__ic">
-                    <Icon name={r.icon} size={16} />
-                  </span>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="rep-name">{r.name}</div>
-                    <div className="rep-meta">{r.meta}</div>
-                  </div>
-                  <Icon name="caret-right" size={15} />
+      <div className="mb-6 grid gap-3 md:grid-cols-3">
+        {INSIGHTS.map((i) => {
+          const IconCmp = i.icon;
+          return (
+            <SectionCard key={i.title}>
+              <div className="flex gap-3">
+                <div className={`grid size-9 shrink-0 place-items-center rounded-md ${TONE_CLASS[i.tone]}`}>
+                  <IconCmp className="size-4" />
                 </div>
-              ))}
-            </div>
-          </div>
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-foreground text-sm">{i.title}</h4>
+                  <p className="mt-1 text-muted-foreground text-xs leading-snug">{i.body}</p>
+                </div>
+              </div>
+            </SectionCard>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <SectionCard icon={ChartLine} title="Revenue forecast">
+          <p className="text-muted-foreground text-sm">
+            Forecast vs. actual chart placeholder. Wire to real data once the reports query layer
+            ships (#32 + #11).
+          </p>
+        </SectionCard>
+        <div className="flex flex-col gap-4">
+          <SectionCard icon={Zap} title="What changed this week">
+            <p className="text-sm leading-relaxed">
+              Pipeline grew{' '}
+              <span className="font-semibold text-green-600">+{fmtMoney(18_000_00)}</span>{' '}
+              with 4 new deals. Two closed won, 3 slipped past close. Net new pipeline
+              <span className="font-semibold text-green-600"> +12% MoM</span>.
+            </p>
+          </SectionCard>
+          <SectionCard icon={BookOpen} title="Saved reports">
+            <p className="text-muted-foreground text-sm">Saved-report list comes online with #11.</p>
+          </SectionCard>
         </div>
       </div>
     </>

@@ -2,10 +2,12 @@
 
 import { PageActions } from '@/components/northbeam/app-shell';
 import { Spinner } from '@/components/northbeam/primitives';
-import { Button } from '@/components/northbeam/button-legacy';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { trpc } from '@/lib/api';
 import { fmtMoney } from '@/lib/mock-crm';
 import { DEAL_STAGE_TONE, type DealStage } from '@/lib/tones';
+import { Plus } from 'lucide-react';
 
 const STAGE_ORDER: DealStage[] = ['new', 'qualified', 'negotiation', 'won', 'lost'];
 
@@ -14,8 +16,8 @@ export default function PipelinePage() {
 
   if (list.isLoading) {
     return (
-      <div style={{ display: 'grid', placeItems: 'center', padding: 40 }}>
-        <Spinner />
+      <div className="grid place-items-center p-12">
+        <Spinner style={{ color: 'var(--brand)' }} />
       </div>
     );
   }
@@ -23,7 +25,6 @@ export default function PipelinePage() {
   const rows = list.data?.rows ?? [];
   const refLabels = list.data?.refLabels ?? {};
 
-  // Group deals by stage. `stage` is a picklist field; values match STAGE_ORDER.
   const grouped = STAGE_ORDER.map((stage) => {
     const deals = rows.filter((r) => (r.data.stage as string | undefined) === stage);
     const sum = deals.reduce((s, d) => s + (Number(d.data.amount ?? 0) || 0), 0);
@@ -33,23 +34,32 @@ export default function PipelinePage() {
   return (
     <>
       <PageActions>
-        <Button variant="primary" icon="plus">
+        <Button>
+          <Plus />
           New deal
         </Button>
       </PageActions>
 
-      <div className="kanban">
+      <div className="flex gap-3.5 overflow-x-auto pb-2">
         {grouped.map(({ stage, deals, sum }) => {
           const tone = DEAL_STAGE_TONE[stage];
           return (
-            <div className="kan-col" key={stage}>
-              <div className="kan-col__h">
-                <span style={{ width: 8, height: 8, borderRadius: 99, background: tone.fg }} />
-                <b>{tone.label}</b>
-                <span className="kan-col__count">{deals.length}</span>
-              </div>
-              <div className="kan-col__sum">{fmtMoney(sum * 100)}</div>
-              <div className="kan-col__body">
+            <Card key={stage} className="w-72 shrink-0 gap-0 bg-muted/30 py-0">
+              <CardHeader className="border-b px-3.5 py-3">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="size-2 rounded-full"
+                    style={{ background: tone.fg }}
+                    aria-hidden="true"
+                  />
+                  <span className="font-semibold text-sm">{tone.label}</span>
+                  <span className="ml-auto rounded-full bg-secondary px-2 py-0.5 font-semibold text-xs">
+                    {deals.length}
+                  </span>
+                </div>
+                <p className="text-muted-foreground text-sm tabular-nums">{fmtMoney(sum * 100)}</p>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2 px-2 py-2.5">
                 {deals.map((d) => {
                   const accountId = d.data.account as string | undefined;
                   const accountLabel = accountId
@@ -57,29 +67,22 @@ export default function PipelinePage() {
                     : null;
                   const amount = Number(d.data.amount ?? 0) || 0;
                   return (
-                    <div className="kan-card" key={d.id}>
-                      <div className="kan-card__name">{d.name}</div>
-                      {accountLabel && <div className="kan-card__acct">{accountLabel}</div>}
-                      <div className="kan-card__foot">
-                        <span className="kan-card__amt">{fmtMoney(amount * 100)}</span>
+                    <Card key={d.id} className="cursor-grab gap-1 py-3 shadow-xs hover:shadow-sm">
+                      <div className="px-3 font-semibold text-foreground text-sm">{d.name}</div>
+                      {accountLabel && (
+                        <div className="px-3 text-muted-foreground text-xs">{accountLabel}</div>
+                      )}
+                      <div className="mt-1 px-3 font-semibold text-foreground tabular-nums">
+                        {fmtMoney(amount * 100)}
                       </div>
-                    </div>
+                    </Card>
                   );
                 })}
                 {deals.length === 0 && (
-                  <div
-                    style={{
-                      padding: 16,
-                      textAlign: 'center',
-                      color: 'var(--ink-subtle)',
-                      fontSize: 'var(--text-sm)',
-                    }}
-                  >
-                    None
-                  </div>
+                  <p className="py-4 text-center text-muted-foreground text-sm">None</p>
                 )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           );
         })}
       </div>

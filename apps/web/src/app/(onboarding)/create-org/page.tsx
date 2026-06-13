@@ -5,10 +5,12 @@
 // "sign in required" error). Mutation errors with code UNAUTHORIZED also
 // bounce to /sign-in. Users who already have an active org are sent to /.
 
-import { Spinner } from '@/components/northbeam/primitives';
-import { Button } from '@/components/northbeam/button-legacy';
-import { Field, TextInput } from '@/components/northbeam/input-legacy';
+import { Field } from '@/components/northbeam/field';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { trpc } from '@/lib/api';
+import { Building2, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -63,57 +65,60 @@ export default function CreateOrgPage() {
 
   if (boot.isLoading || !boot.data || !boot.data.session || boot.data.activeOrg) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center' }}>
-        <Spinner style={{ color: 'var(--brand)' }} />
+      <div className="flex items-center justify-center gap-3">
+        <Loader2 className="size-5 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
     <form onSubmit={handleSubmit}>
-      <h1
-        style={{
-          fontSize: 'var(--text-2xl)',
-          fontWeight: 600,
-          letterSpacing: '-0.02em',
-          margin: '0 0 8px',
-        }}
-      >
-        Create your workspace
-      </h1>
-      <p style={{ color: 'var(--ink-muted)', margin: '0 0 22px', lineHeight: 1.5 }}>
+      <h1 className="mb-2 font-semibold text-2xl tracking-tight">Create your workspace</h1>
+      <p className="mb-5 text-muted-foreground leading-relaxed">
         This is where your contacts, accounts, and deals live. You can invite teammates later.
       </p>
-      <div className="stack" style={{ gap: 14 }}>
+      <div className="flex flex-col gap-3.5">
         <Field label="Workspace name" required htmlFor="org-name">
-          <TextInput value={name} onChange={onName} leadIcon="buildings" placeholder="Acme Corp" />
+          <InputGroup>
+            <InputGroupAddon>
+              <Building2 />
+            </InputGroupAddon>
+            <InputGroupInput
+              id="org-name"
+              value={name}
+              onChange={(e) => onName(e.target.value)}
+              placeholder="Acme Corp"
+              required
+            />
+          </InputGroup>
         </Field>
-        <Field label="URL slug" hint="Lowercase letters, digits, and dashes" htmlFor="org-slug">
-          <TextInput
-            value={slug}
-            onChange={(v) => {
-              setSlugEdited(true);
-              setSlug(slugify(v));
-            }}
-            leadAffix="northbeam.app/"
-            placeholder="acme"
-          />
+        <Field label="URL slug" description="Lowercase letters, digits, and dashes" htmlFor="org-slug">
+          <InputGroup>
+            <InputGroupAddon className="text-muted-foreground">northbeam.app/</InputGroupAddon>
+            <InputGroupInput
+              id="org-slug"
+              value={slug}
+              onChange={(e) => {
+                setSlugEdited(true);
+                setSlug(slugify(e.target.value));
+              }}
+              placeholder="acme"
+            />
+          </InputGroup>
         </Field>
       </div>
-      <div style={{ marginTop: 18 }}>
+      <div className="mt-4">
         <Button
           type="submit"
-          block
-          loading={create.isPending}
-          disabled={!name.trim() || !slug.trim()}
+          className="w-full"
+          disabled={!name.trim() || !slug.trim() || create.isPending}
         >
+          {create.isPending && <Loader2 className="size-4 animate-spin" />}
           Create workspace
         </Button>
       </div>
       {create.isError && !isUnauthorized(create.error) && (
-        <p style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)', marginTop: 12 }}>
-          {create.error.message}
-        </p>
+        <p className="mt-3 text-destructive text-sm">{create.error.message}</p>
       )}
     </form>
   );

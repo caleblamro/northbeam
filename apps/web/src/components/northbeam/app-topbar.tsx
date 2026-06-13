@@ -5,9 +5,10 @@
 // global search · ❓ 🔔 user menu. Theme controls live inside the user menu
 // popover (not on the topbar itself).
 
-import { IconButton } from '@/components/northbeam/button-legacy';
+import { Button } from '@/components/ui/button';
 import { isNavActive } from '@/lib/nav';
 import { usePinnedTabs } from '@/lib/pinned-tabs';
+import { Bell, HelpCircle, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AppLauncher } from './app-launcher';
@@ -60,7 +61,7 @@ export function AppTopbar({
                     unpin(tab.href);
                   }}
                 >
-                  <Icon name="x" size={11} />
+                  <X size={11} />
                 </button>
               )}
             </div>
@@ -68,13 +69,17 @@ export function AppTopbar({
         })}
       </nav>
       <button type="button" className="shellbar__search" onClick={onOpenSearch}>
-        <Icon name="magnifying-glass" size={15} />
+        <Search size={15} />
         <span>Search…</span>
         <Kbd>⌘K</Kbd>
       </button>
       <div className="shellbar__actions">
-        <IconButton icon="question" label="Help" />
-        <IconButton icon="bell" label="Notifications" />
+        <Button variant="ghost" size="icon-sm" aria-label="Help">
+          <HelpCircle />
+        </Button>
+        <Button variant="ghost" size="icon-sm" aria-label="Notifications">
+          <Bell />
+        </Button>
         <UserMenu name={userName} email={userEmail} compact />
       </div>
     </header>

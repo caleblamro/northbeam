@@ -5,11 +5,29 @@
 // create/edit, and FieldValue renders the right formatter for detail/list/read.
 // One registry, used everywhere a dynamic field appears.
 
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
+import { MaskInput } from '@/components/ui/mask-input';
+import {
+  PhoneInput,
+  PhoneInputCountrySelect,
+  PhoneInputField,
+} from '@/components/ui/phone-input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import type { FieldConfig, FieldType } from '@northbeam/db/field-types';
+import { Calendar, Check, Clock, Link as LinkIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { CurrencyInput, EmailInput, MaskedInput, PhoneInput, TextInput } from './input-legacy';
-import { Combobox, type Option, Select } from './select-legacy';
+import { COMMON_CURRENCIES } from './currency-combobox';
 import { Icon } from './icons';
+import { Combobox, type Option } from './select-legacy';
 
 export type FieldDefLite = {
   key: string;
@@ -20,6 +38,33 @@ export type FieldDefLite = {
 };
 
 const READONLY: FieldType[] = ['autonumber', 'formula', 'rollup', 'ai'];
+
+/** Format a phone number for read display. Accepts a few common storage forms:
+ *  E.164-ish ("+14806696775"), bare digits ("14806696775" or "4806696775"), or
+ *  any legacy masked string ("(480) 669-6775"). Special-cases NANP (+1)
+ *  because that's the bulk of CRM phone numbers we see; everything else falls
+ *  back to a digit-grouped international format. */
+function formatPhoneForDisplay(raw: string): string {
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return raw;
+
+  // NANP: 11 digits starting with 1, OR 10 digits without a country code.
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
+  // International fallback: keep the leading + and group remaining digits in
+  // chunks of 3 for readability.
+  if (raw.trim().startsWith('+') || digits.length > 11) {
+    const grouped = digits.replace(/(\d{3})(?=\d)/g, '$1 ');
+    return `+${grouped}`;
+  }
+  return raw;
+}
 
 /* ── create / edit input (masked per type) ─────────────────────────────────── */
 export function FieldInput({
@@ -43,122 +88,158 @@ export function FieldInput({
   switch (field.type) {
     case 'textarea':
       return (
-        <textarea
-          className="bare"
+        <Textarea
           rows={3}
           value={str}
-          placeholder={cfg.helpText}
+          placeholder={cfg.placeholder ?? cfg.helpText}
           onChange={(e) => onChange(e.target.value)}
         />
       );
     case 'email':
-      return <EmailInput value={str} onChange={onChange} />;
+      return (
+        <Input
+          type="email"
+          value={str}
+          placeholder={cfg.placeholder}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      );
     case 'phone':
-      return <PhoneInput value={str} onChange={onChange} />;
+      return (
+        <PhoneInput
+          value={str}
+          onValueChange={onChange}
+          defaultCountry="US"
+          placeholder={cfg.placeholder ?? '(555) 123-4567'}
+        >
+          <PhoneInputCountrySelect />
+          <PhoneInputField />
+        </PhoneInput>
+      );
     case 'url':
       return (
-        <TextInput
-          type="url"
-          leadIcon="link-simple"
-          placeholder="https://"
-          value={str}
-          onChange={onChange}
-        />
+        <InputGroup>
+          <InputGroupAddon>
+            <LinkIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="url"
+            placeholder={cfg.placeholder ?? 'https://'}
+            value={str}
+            onChange={(e) => onChange(e.target.value)}
+          />
+        </InputGroup>
       );
     case 'number':
       return (
-        <TextInput
+        <Input
           inputMode="numeric"
           value={str}
-          onChange={(v) => onChange(v === '' ? null : Number(v.replace(/[^\d.-]/g, '')))}
+          placeholder={cfg.placeholder}
+          onChange={(e) => {
+            const v = e.target.value;
+            onChange(v === '' ? null : Number(v.replace(/[^\d.-]/g, '')));
+          }}
         />
       );
-    case 'currency':
+    case 'currency': {
+      // The MaskInput currency mode injects the locale's currency symbol into
+      // the displayed value (e.g. "$1,234.56") — so we DON'T render a leading
+      // symbol addon (would duplicate). The trailing addon shows the ISO code
+      // for clarity. When #16 lands, the trailing addon becomes a
+      // CurrencyCombobox so users can change the currency per record.
+      const code = cfg.currencyCode ?? 'USD';
       return (
-        <CurrencyInput
-          value={str}
-          code={cfg.currencyCode ?? 'USD'}
-          onChange={(v) => onChange(v === '' ? null : Number(v.replace(/,/g, '')))}
-        />
+        <InputGroup>
+          <MaskInput
+            asChild
+            mask="currency"
+            currency={code}
+            // Strip MaskInput's own border/radius/bg/shadow when nested inside
+            // InputGroup — InputGroup owns the wrapper styling. Otherwise we
+            // get a double-bordered inner box.
+            className="rounded-none border-0 bg-transparent shadow-none focus-visible:border-0 focus-visible:ring-0"
+            value={str}
+            placeholder={cfg.placeholder}
+            onValueChange={(_masked, unmasked) =>
+              onChange(unmasked === '' ? null : Number(unmasked))
+            }
+          >
+            <InputGroupInput />
+          </MaskInput>
+          <InputGroupAddon align="inline-end" className="font-mono text-muted-foreground text-xs">
+            {code}
+          </InputGroupAddon>
+        </InputGroup>
       );
+    }
     case 'percent':
       return (
-        <TextInput
-          inputMode="decimal"
-          trailAffix="%"
+        <MaskInput
+          mask="percentage"
           value={str}
-          onChange={(v) => onChange(v === '' ? null : Number(v.replace(/[^\d.]/g, '')))}
+          placeholder={cfg.placeholder}
+          onValueChange={(_masked, unmasked) =>
+            onChange(unmasked === '' ? null : Number(unmasked))
+          }
         />
       );
     case 'date':
       return (
-        <MaskedInput
-          mask="99/99/9999"
-          leadIcon="calendar-blank"
-          placeholder="MM/DD/YYYY"
-          value={str}
-          onChange={onChange}
-        />
+        <InputGroup>
+          <InputGroupAddon>
+            <Calendar />
+          </InputGroupAddon>
+          <MaskInput
+            mask="date"
+            asChild
+            value={str}
+            placeholder={cfg.placeholder ?? 'MM/DD/YYYY'}
+            onValueChange={(masked) => onChange(masked)}
+          >
+            <InputGroupInput />
+          </MaskInput>
+        </InputGroup>
       );
     case 'datetime':
       return (
-        <MaskedInput
-          mask="99/99/9999 99:99"
-          leadIcon="clock"
-          placeholder="MM/DD/YYYY HH:MM"
-          value={str}
-          onChange={onChange}
-        />
+        <InputGroup>
+          <InputGroupAddon>
+            <Clock />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="text"
+            placeholder={cfg.placeholder ?? 'MM/DD/YYYY HH:MM'}
+            value={str}
+            onChange={(e) => onChange(e.target.value)}
+          />
+        </InputGroup>
       );
     case 'checkbox':
       return (
-        <button
-          type="button"
-          role="switch"
-          aria-checked={!!value}
-          onClick={() => onChange(!value)}
-          style={{
-            width: 38,
-            height: 22,
-            borderRadius: 99,
-            border: 'none',
-            cursor: 'pointer',
-            background: value ? 'var(--brand)' : 'var(--surface-active)',
-            position: 'relative',
-            transition: 'background .15s',
-          }}
-        >
-          <span
-            style={{
-              position: 'absolute',
-              top: 2,
-              left: value ? 18 : 2,
-              width: 18,
-              height: 18,
-              borderRadius: 99,
-              background: '#fff',
-              boxShadow: 'var(--shadow-xs)',
-              transition: 'left .15s',
-            }}
-          />
-        </button>
+        <Checkbox
+          checked={!!value}
+          onCheckedChange={(checked) => onChange(checked === true)}
+        />
       );
     case 'picklist':
       return (
-        <Select
-          value={str}
-          onChange={onChange}
-          placeholder="Select…"
-          options={(cfg.options ?? []).map((o) => ({
-            value: o.value,
-            label: o.label,
-            color: o.color,
-          }))}
-        />
+        <Select value={str} onValueChange={onChange}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder={cfg.placeholder ?? 'Select…'} />
+          </SelectTrigger>
+          <SelectContent>
+            {(cfg.options ?? []).map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       );
     case 'multipicklist':
       return (
-        <div className="row row--tight">
+        <div className="flex flex-wrap gap-1.5">
           {(cfg.options ?? []).map((o) => {
             const arr = Array.isArray(value) ? (value as string[]) : [];
             const on = arr.includes(o.value);
@@ -188,18 +269,18 @@ export function FieldInput({
           value={referenceValue ?? null}
           onChange={(o) => onChange(o?.value ?? null)}
           loadOptions={loadReference ?? (async () => [])}
-          placeholder={`Search ${cfg.targetObject ?? 'records'}…`}
+          placeholder={cfg.placeholder ?? `Search ${cfg.targetObject ?? 'records'}…`}
           emptyText="No matches"
         />
       );
     default:
       // text + read-only computed types (autonumber/formula/rollup/ai)
       return (
-        <TextInput
+        <Input
           value={str}
-          onChange={onChange}
+          placeholder={cfg.placeholder}
+          onChange={(e) => onChange(e.target.value)}
           disabled={READONLY.includes(field.type)}
-          leadIcon={READONLY.includes(field.type) ? 'function' : undefined}
         />
       );
   }
@@ -216,13 +297,13 @@ export function FieldValue({
   referenceLabel?: string;
 }): ReactNode {
   const cfg: FieldConfig = field.config ?? {};
-  if (value == null || value === '') return <span style={{ color: 'var(--ink-subtle)' }}>—</span>;
+  if (value == null || value === '') return <span className="text-ink-subtle">—</span>;
 
   switch (field.type) {
     case 'currency': {
       const n = Number(value);
       return (
-        <span className="num">
+        <span className="tabular-nums">
           {new Intl.NumberFormat('en-US', {
             style: 'currency',
             currency: cfg.currencyCode ?? 'USD',
@@ -237,19 +318,27 @@ export function FieldValue({
       return <span className="num">{Number(value).toLocaleString('en-US')}</span>;
     case 'checkbox':
       return value ? (
-        <Icon name="check-circle" size={16} />
+        <Check className="size-4 text-primary" />
       ) : (
-        <span style={{ color: 'var(--ink-subtle)' }}>—</span>
+        <span className="text-ink-subtle">—</span>
       );
     case 'email':
       return (
-        <a href={`mailto:${value}`} style={{ color: 'var(--brand)' }}>
+        <a href={`mailto:${value}`} className="text-primary">
           {String(value)}
         </a>
       );
+    case 'phone': {
+      const raw = String(value);
+      return (
+        <a href={`tel:${raw.replace(/[^\d+]/g, '')}`} className="tabular-nums">
+          {formatPhoneForDisplay(raw)}
+        </a>
+      );
+    }
     case 'url':
       return (
-        <a href={String(value)} target="_blank" rel="noreferrer" style={{ color: 'var(--brand)' }}>
+        <a href={String(value)} target="_blank" rel="noreferrer" className="text-primary">
           {String(value)}
         </a>
       );
@@ -274,7 +363,7 @@ export function FieldValue({
     case 'multipicklist': {
       const arr = Array.isArray(value) ? (value as string[]) : [];
       return (
-        <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+        <span className="inline-flex flex-wrap gap-1.5">
           {arr.map((v) => {
             const opt = (cfg.options ?? []).find((o) => o.value === v);
             return (
@@ -292,3 +381,7 @@ export function FieldValue({
       return <span>{String(value)}</span>;
   }
 }
+
+// Silence "unused import" warning for icons barrel — kept here for callers
+// that re-export FieldDefLite + Icon together.
+export { Icon };

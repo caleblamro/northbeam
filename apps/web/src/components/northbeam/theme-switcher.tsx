@@ -15,8 +15,9 @@ import {
   type Palette,
   useTheme,
 } from '@/lib/theme';
+import { Button } from '@/components/ui/button';
+import { Palette as PaletteIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { IconButton } from './button-legacy';
 import { Icon } from './icons';
 import { Popover } from './primitives';
 
@@ -63,14 +64,15 @@ export function TweaksButton() {
   return (
     <div style={{ display: 'inline-flex' }}>
       <span ref={ref} style={{ display: 'inline-flex' }}>
-        <IconButton
-          icon="palette"
-          variant="bordered"
-          size="sm"
-          label="Tweaks"
-          active={open}
+        <Button
+          size="icon-sm"
+          variant="outline"
+          aria-label="Tweaks"
+          data-state={open ? 'open' : undefined}
           onClick={() => setOpen((o) => !o)}
-        />
+        >
+          <PaletteIcon />
+        </Button>
       </span>
       <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} align="right" width={244}>
         <div style={{ padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 14 }}>

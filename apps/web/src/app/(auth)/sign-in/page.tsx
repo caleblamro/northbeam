@@ -1,8 +1,10 @@
 'use client';
 
-import { Button } from '@/components/northbeam/button-legacy';
-import { EmailInput, Field } from '@/components/northbeam/input-legacy';
+import { Field } from '@/components/northbeam/field';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { trpc } from '@/lib/api';
+import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 export default function SignInPage() {
@@ -20,24 +22,15 @@ export default function SignInPage() {
   if (requestLink.isSuccess) {
     return (
       <div>
-        <h1
-          style={{
-            fontSize: 'var(--text-2xl)',
-            fontWeight: 600,
-            letterSpacing: '-0.02em',
-            margin: '0 0 10px',
-          }}
-        >
-          Check your inbox
-        </h1>
-        <p style={{ color: 'var(--ink-secondary)', lineHeight: 1.55, margin: 0 }}>
+        <h1 className="mb-2.5 font-semibold text-2xl tracking-tight">Check your inbox</h1>
+        <p className="m-0 text-secondary-foreground leading-relaxed">
           We sent a magic link to <b>{email}</b>. Click it to finish signing in — it expires in 10
           minutes.
         </p>
-        <p style={{ color: 'var(--ink-muted)', fontSize: 'var(--text-sm)', marginTop: 14 }}>
+        <p className="mt-3.5 text-muted-foreground text-sm">
           In local dev the link is printed in the API server console.
         </p>
-        <div style={{ marginTop: 22 }}>
+        <div className="mt-5">
           <Button
             variant="link"
             onClick={() => {
@@ -54,31 +47,33 @@ export default function SignInPage() {
 
   return (
     <form onSubmit={handleSubmit}>
-      <h1
-        style={{
-          fontSize: 'var(--text-2xl)',
-          fontWeight: 600,
-          letterSpacing: '-0.02em',
-          margin: '0 0 8px',
-        }}
-      >
-        Sign in to Northbeam
-      </h1>
-      <p style={{ color: 'var(--ink-muted)', margin: '0 0 22px', lineHeight: 1.5 }}>
+      <h1 className="mb-2 font-semibold text-2xl tracking-tight">Sign in to Northbeam</h1>
+      <p className="mb-5 text-muted-foreground leading-relaxed">
         Enter your email and we'll send you a magic link.
       </p>
       <Field label="Work email" htmlFor="email">
-        <EmailInput value={email} onChange={setEmail} />
+        <Input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          autoComplete="email"
+          required
+        />
       </Field>
-      <div style={{ marginTop: 18 }}>
-        <Button type="submit" block loading={requestLink.isPending} disabled={!email.trim()}>
+      <div className="mt-4">
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={!email.trim() || requestLink.isPending}
+        >
+          {requestLink.isPending && <Loader2 className="size-4 animate-spin" />}
           Send magic link
         </Button>
       </div>
       {requestLink.isError && (
-        <p style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)', marginTop: 12 }}>
-          {requestLink.error.message}
-        </p>
+        <p className="mt-3 text-destructive text-sm">{requestLink.error.message}</p>
       )}
     </form>
   );

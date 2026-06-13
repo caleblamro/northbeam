@@ -45,6 +45,37 @@ Every `(app)/<page>` is a Client Component (`'use client'`) that:
 - `pnpm --filter @northbeam/web typecheck` — should be clean before submitting.
 - `pnpm --filter @northbeam/web dev` — runs Next on :3000. The API must be running on :8000 separately (or use `pnpm dev` at the root to spin both via Turbo).
 
+## Page composition discipline
+
+Pages should be **30–80 lines**. If a page is longer, the missing wrapper hasn't been built yet — extract it to `components/northbeam/*` rather than inlining Tailwind walls.
+
+**Always reach for the existing wrapper first.** Current inventory in `components/northbeam/`:
+
+| Wrapper | Purpose |
+|---|---|
+| `PageHeader` | Gradient icon + title + subtitle + actions row. Variants for `tone` (brand/ai/neutral) and `size`. |
+| `SectionCard` | Card with icon + title + optional action + body. Replaces inline `<Card><CardHeader>...` boilerplate. Variants for `elevation` and `padding`. |
+| `MetricGroup` | Row of `Stat` tiles. Takes `items: MetricItem[]` + `loading`. Handles skeleton states. Variants for `columns`. |
+| `DescriptionList` | The `<dl>` label/value grid. Variants for `density` and `labelWidth`. |
+| `ListToolbar` | Search input + view-mode toggle + actions slot. One element above any record collection. |
+| `EmptyState` | DiceUI-native empty state. Variants for `size`. |
+| `CreateMenu` | The "New ▾" dropdown — `items: CreateMenuItem[]` with `type: 'item' | 'label' | 'separator'`. |
+| `ActivityTimeline` | Activity rows → DiceUI Timeline. Maps subtype → icon. |
+| `RecordListView` | Full record-collection page with list + grid + edit drawer + delete. |
+| `RecordFormDrawer` | Create/edit drawer for any object, driven by `field_def` metadata. |
+| `RecordView` | Record detail page with hero, stat strip, tabs, sectioned grid. |
+| `Field` | Form-field wrapper: Label + slot + hint/error. Composes DiceUI `Label`. |
+
+**Why this matters:** the AI artifact renderer (task #11) will target this same wrapper API. Every wrapper we build extends what an AI-generated page can express; every inline Tailwind wall in a page is something the AI can't reproduce. So: extract aggressively.
+
+### When to add a new wrapper
+
+Add a wrapper when the same JSX pattern appears in **2+ pages** OR when a page contains more than ~10 lines of pure layout JSX. Component files can be up to ~500 lines; pages should not.
+
+### When inline Tailwind is OK
+
+Tight, page-specific layout where extraction would be over-engineering: a few `mt-4` / `flex gap-3` for one-off spacing inside an already-extracted wrapper. Never write a `<div className="flex flex-col gap-6 rounded-xl border bg-card py-6 shadow-sm">` — that's `<Card>`. Never write a `<div className="grid grid-cols-4 gap-3">` of metric tiles — that's `<MetricGroup>`.
+
 ## Component library: two layers (transitional)
 
 The app is mid-migration to a single design system. Two layers coexist:

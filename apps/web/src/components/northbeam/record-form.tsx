@@ -5,14 +5,15 @@
 // column grid). Reference fields use an async combobox that searches the target
 // object's records. Masked inputs come from the shared FieldInput renderer.
 
+import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/api';
 import type { LayoutSection } from '@northbeam/db/field-types';
+import { Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Button } from './button-legacy';
-import { Field } from './input-legacy';
-import { Combobox, type Option } from './select-legacy';
 import { RecordDrawer } from './app-bits';
+import { Field } from './field';
 import { type FieldDefLite, FieldInput } from './field-render';
+import { Combobox, type Option } from './select-legacy';
 
 const READONLY = new Set(['formula', 'rollup', 'ai', 'autonumber']);
 const FULL_WIDTH = new Set(['textarea', 'multipicklist']);
@@ -99,10 +100,11 @@ export function RecordFormDrawer({
       footer={
         <>
           <span className="spacer" />
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" loading={saving} onClick={save}>
+          <Button disabled={saving} onClick={save}>
+            {saving && <Loader2 className="animate-spin" />}
             {record ? 'Save changes' : 'Create'}
           </Button>
         </>
@@ -120,7 +122,9 @@ export function RecordFormDrawer({
                 key={f.key}
                 label={f.label}
                 required={f.required}
-                style={g.cols > 1 && FULL_WIDTH.has(f.type) ? { gridColumn: '1 / -1' } : undefined}
+                description={f.config?.description}
+                helpText={f.config?.helpText}
+                className={g.cols > 1 && FULL_WIDTH.has(f.type) ? 'col-span-full' : undefined}
               >
                 {f.type === 'reference' ? (
                   <Combobox

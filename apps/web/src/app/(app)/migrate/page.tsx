@@ -1,19 +1,36 @@
 'use client';
 
-// The Salesforce migration wizard, wired to the real pipeline:
+// Salesforce migration wizard, wired to the real pipeline:
 // connect (OAuth or dev token) → pick objects → review the auto-mapping →
-// execute → live progress → summary. State machine follows migration_run.status.
+// execute → live progress → summary.
 
 import { ObjChip } from '@/components/northbeam/app-bits';
-import { Icon } from '@/components/northbeam/icons';
-import { EmptyState } from '@/components/northbeam/page-head';
+import { EmptyState } from '@/components/northbeam/empty-state';
 import { Spinner } from '@/components/northbeam/primitives';
-import { Button } from '@/components/northbeam/button-legacy';
+import { SectionCard } from '@/components/northbeam/section-card';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { trpc } from '@/lib/api';
+import {
+  AlertCircle,
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
-// Dev default mirrors lib/api/provider.tsx.
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 export default function MigratePage() {
@@ -21,7 +38,6 @@ export default function MigratePage() {
   const latest = trpc.salesforce.latestRun.useQuery(undefined, {
     enabled: Boolean(status.data?.connected),
   });
-  // null = follow latest; 'new' = force the discover screen; otherwise a run id.
   const [override, setOverride] = useState<string | null>(null);
   const runId = override === 'new' ? null : (override ?? latest.data?.id ?? null);
 
@@ -40,7 +56,6 @@ export default function MigratePage() {
   return <RunScreen key={runId} runId={runId} onStartOver={() => setOverride('new')} />;
 }
 
-/* ── 1 · connect ────────────────────────────────────────────────────────────── */
 function ConnectScreen({
   oauthConfigured,
   status,
@@ -49,47 +64,40 @@ function ConnectScreen({
   status: string | null;
 }) {
   return (
-    <div className="rcard" style={{ maxWidth: 560 }}>
-      <div className="rcard__body" style={{ display: 'grid', gap: 12, padding: 28 }}>
-        <h2 style={{ margin: 0, fontSize: 'var(--text-lg)' }}>Connect your Salesforce org</h2>
-        <p style={{ margin: 0, color: 'var(--ink-muted)' }}>
-          Northbeam reads your objects, fields, record types, and records through the Salesforce
-          API, maps them onto native objects, and imports everything in one run.
+    <SectionCard
+      icon={RefreshCw}
+      title="Connect your Salesforce org"
+      className="max-w-2xl"
+    >
+      <p className="text-muted-foreground text-sm leading-relaxed">
+        Northbeam reads your objects, fields, record types, and records through the Salesforce
+        API, maps them onto native objects, and imports everything in one run.
+      </p>
+      {status === 'error' && (
+        <p className="mt-3 text-destructive text-sm">
+          The stored connection token expired or was revoked — reconnect to continue.
         </p>
-        {status === 'error' && (
-          <p style={{ margin: 0, color: 'var(--danger)' }}>
-            The stored connection token expired or was revoked — reconnect to continue.
-          </p>
-        )}
-        {oauthConfigured ? (
-          <a href={`${API_URL}/api/salesforce/oauth/start`} style={{ justifySelf: 'start' }}>
-            <Button variant="primary" icon="arrows-clockwise">
-              Connect Salesforce
-            </Button>
-          </a>
-        ) : (
-          <div
-            style={{
-              background: 'var(--surface-sunken)',
-              borderRadius: 'var(--radius-md)',
-              padding: 14,
-              fontSize: 'var(--text-sm)',
-              color: 'var(--ink-secondary)',
-            }}
-          >
-            <b>Dev setup:</b> no Connected App configured (SF_CLIENT_ID / SF_TOKEN_KEY). Seed a
-            connection from your sf CLI session instead:
-            <pre style={{ margin: '8px 0 0', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-              pnpm --filter @northbeam/api sf:dev-connect &lt;orgId&gt; testOrg
-            </pre>
-          </div>
-        )}
-      </div>
-    </div>
+      )}
+      {oauthConfigured ? (
+        <a href={`${API_URL}/api/salesforce/oauth/start`} className="mt-4 inline-block">
+          <Button>
+            <RefreshCw />
+            Connect Salesforce
+          </Button>
+        </a>
+      ) : (
+        <div className="mt-4 rounded-md bg-muted px-3.5 py-3 text-sm text-secondary-foreground">
+          <span className="font-semibold">Dev setup:</span> no Connected App configured. Seed a
+          connection from your sf CLI session instead:
+          <pre className="mt-2 font-mono text-xs">
+            pnpm --filter @northbeam/api sf:dev-connect &lt;orgId&gt; testOrg
+          </pre>
+        </div>
+      )}
+    </SectionCard>
   );
 }
 
-/* ── 2 · discover & pick objects ────────────────────────────────────────────── */
 function DiscoverScreen({ onCreated }: { onCreated: (runId: string) => void }) {
   const discover = trpc.salesforce.discover.useQuery();
   const createRun = trpc.salesforce.createRun.useMutation({
@@ -100,7 +108,7 @@ function DiscoverScreen({ onCreated }: { onCreated: (runId: string) => void }) {
   if (discover.isError) {
     return (
       <EmptyState
-        icon="warning-circle"
+        icon={AlertCircle}
         title="Couldn't reach Salesforce"
         body={discover.error.message}
       />
@@ -117,72 +125,59 @@ function DiscoverScreen({ onCreated }: { onCreated: (runId: string) => void }) {
     });
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <div className="toolbar">
-        <span style={{ color: 'var(--ink-muted)' }}>
+    <div className="flex flex-col gap-4">
+      <div className="mb-1 flex items-center gap-3">
+        <p className="text-muted-foreground text-sm">
           {discover.data.length} importable objects · {picked.size} selected
-        </span>
-        <span className="toolbar__spacer" />
+        </p>
+        <div className="flex-1" />
         <Button
-          variant="primary"
-          icon="arrow-right"
-          disabled={picked.size === 0}
-          loading={createRun.isPending}
+          disabled={picked.size === 0 || createRun.isPending}
           onClick={() => createRun.mutate({ objects: [...picked] })}
         >
+          {createRun.isPending ? <Loader2 className="animate-spin" /> : <ArrowRight />}
           Analyze {picked.size || ''} object{picked.size === 1 ? '' : 's'}
         </Button>
       </div>
       {createRun.isPending && (
         <Centered spinner label="Describing objects and sampling records — this takes a moment…" />
       )}
-      <div className="tbl-card">
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th style={{ width: 36 }} />
-              <th>Object</th>
-              <th>API name</th>
-              <th>Maps to</th>
-              <th className="right">Records</th>
-            </tr>
-          </thead>
-          <tbody>
+      <Card className="overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-8" />
+              <TableHead>Object</TableHead>
+              <TableHead>API name</TableHead>
+              <TableHead>Maps to</TableHead>
+              <TableHead className="text-right">Records</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {discover.data.map((o) => (
-              <tr key={o.name} data-clickable="true" onClick={() => toggle(o.name)}>
-                <td onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={picked.has(o.name)}
-                    onChange={() => toggle(o.name)}
-                  />
-                </td>
-                <td>
-                  <b style={{ fontWeight: 600 }}>{o.labelPlural}</b>
-                </td>
-                <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{o.name}</td>
-                <td>
-                  {o.standardTarget ? (
-                    <span className="chip">→ {o.standardTarget}</span>
-                  ) : (
-                    <span className="chip" style={{ color: 'var(--ink-muted)' }}>
-                      new object
-                    </span>
-                  )}
-                </td>
-                <td className="right">
-                  <span className="num">{o.count?.toLocaleString() ?? '—'}</span>
-                </td>
-              </tr>
+              <TableRow key={o.name} className="cursor-pointer" onClick={() => toggle(o.name)}>
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Checkbox checked={picked.has(o.name)} onCheckedChange={() => toggle(o.name)} />
+                </TableCell>
+                <TableCell className="font-semibold text-foreground">{o.labelPlural}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{o.name}</TableCell>
+                <TableCell>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+                    {o.standardTarget ? `→ ${o.standardTarget}` : 'new object'}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {o.count?.toLocaleString() ?? '—'}
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Card>
     </div>
   );
 }
 
-/* ── 3+4+5 · review / progress / summary, keyed off run status ──────────────── */
 function RunScreen({ runId, onStartOver }: { runId: string; onStartOver: () => void }) {
   const run = trpc.salesforce.getRun.useQuery(
     { runId },
@@ -202,60 +197,49 @@ function RunScreen({ runId, onStartOver }: { runId: string; onStartOver: () => v
 
   if (r.status === 'running') {
     return (
-      <div className="rcard" style={{ maxWidth: 640 }}>
-        <div className="rcard__body" style={{ display: 'grid', gap: 14, padding: 28 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Spinner style={{ color: 'var(--brand)' }} />
-            <h2 style={{ margin: 0, fontSize: 'var(--text-lg)' }}>
-              Importing{stats.currentObject ? ` — ${stats.currentObject}` : '…'}
-            </h2>
-          </div>
-          <StatsRow stats={stats} />
-        </div>
-      </div>
+      <SectionCard icon={Loader2} title={`Importing${stats.currentObject ? ` — ${stats.currentObject}` : '…'}`} className="max-w-3xl">
+        <StatsRow stats={stats} />
+      </SectionCard>
     );
   }
 
   if (r.status === 'completed' || r.status === 'failed') {
     return (
-      <div className="rcard" style={{ maxWidth: 640 }}>
-        <div className="rcard__body" style={{ display: 'grid', gap: 14, padding: 28 }}>
-          <h2 style={{ margin: 0, fontSize: 'var(--text-lg)' }}>
-            {r.status === 'completed' ? 'Migration complete' : 'Migration failed'}
-          </h2>
-          {r.status === 'failed' && stats.error && (
-            <p style={{ margin: 0, color: 'var(--danger)' }}>{stats.error}</p>
-          )}
-          <StatsRow stats={stats} />
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {r.status === 'completed' &&
-              objects
-                .filter((o) => o.action !== 'skip')
-                .map((o) => {
-                  const meta = o.meta as { targetKey?: string; labelPlural?: string };
-                  return (
-                    <Link key={o.id} href={`/${meta.targetKey ?? o.sfObject}`}>
-                      <Button variant="secondary" iconRight="arrow-right">
-                        View {meta.labelPlural ?? o.sfLabel ?? o.sfObject}
-                      </Button>
-                    </Link>
-                  );
-                })}
-            {r.status === 'failed' && (
-              <Button
-                variant="primary"
-                loading={execute.isPending}
-                onClick={() => execute.mutate({ runId })}
-              >
-                Retry import
-              </Button>
-            )}
-            <Button variant="ghost" onClick={onStartOver}>
-              Start a new run
+      <SectionCard
+        icon={r.status === 'completed' ? RefreshCw : AlertCircle}
+        title={r.status === 'completed' ? 'Migration complete' : 'Migration failed'}
+        className="max-w-3xl"
+      >
+        {r.status === 'failed' && stats.error && (
+          <p className="mb-3 text-destructive text-sm">{stats.error}</p>
+        )}
+        <StatsRow stats={stats} />
+        <div className="mt-4 flex flex-wrap gap-2">
+          {r.status === 'completed' &&
+            objects
+              .filter((o) => o.action !== 'skip')
+              .map((o) => {
+                const meta = o.meta as { targetKey?: string; labelPlural?: string };
+                return (
+                  <Link key={o.id} href={`/${meta.targetKey ?? o.sfObject}`}>
+                    <Button variant="outline">
+                      View {meta.labelPlural ?? o.sfLabel ?? o.sfObject}
+                      <ArrowRight />
+                    </Button>
+                  </Link>
+                );
+              })}
+          {r.status === 'failed' && (
+            <Button disabled={execute.isPending} onClick={() => execute.mutate({ runId })}>
+              {execute.isPending && <Loader2 className="animate-spin" />}
+              Retry import
             </Button>
-          </div>
+          )}
+          <Button variant="ghost" onClick={onStartOver}>
+            Start a new run
+          </Button>
         </div>
-      </div>
+      </SectionCard>
     );
   }
 
@@ -273,22 +257,18 @@ function RunScreen({ runId, onStartOver }: { runId: string; onStartOver: () => v
   );
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <div className="toolbar">
-        <span style={{ color: 'var(--ink-muted)' }}>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3">
+        <p className="text-muted-foreground text-sm">
           {objects.length} objects · {totals.mapped} fields mapped · {totals.review} need review ·{' '}
           {totals.skip} skipped
-        </span>
-        <span className="toolbar__spacer" />
+        </p>
+        <div className="flex-1" />
         <Button variant="ghost" onClick={onStartOver}>
           Re-pick objects
         </Button>
-        <Button
-          variant="primary"
-          icon="arrows-clockwise"
-          loading={execute.isPending}
-          onClick={() => execute.mutate({ runId })}
-        >
+        <Button disabled={execute.isPending} onClick={() => execute.mutate({ runId })}>
+          {execute.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />}
           Run import
         </Button>
       </div>
@@ -341,42 +321,37 @@ function ObjectMappingCard({
   );
 
   return (
-    <div className="rcard">
+    <Card className="overflow-hidden">
       <button
         type="button"
-        className="rcard__head"
-        style={{
-          width: '100%',
-          cursor: 'pointer',
-          border: 'none',
-          textAlign: 'left',
-          font: 'inherit',
-        }}
+        className="flex w-full items-center gap-3 border-b bg-muted/40 px-5 py-3 text-left"
         onClick={() => setOpen((v) => !v)}
       >
         <ObjChip label={o.sfLabel ?? o.sfObject} size={22} />
-        <span className="rcard__title">
+        <span className="font-semibold text-foreground text-sm">
           {o.sfObject} → {meta.targetKey ?? '?'}
         </span>
-        <span className="chip">{o.recordCount.toLocaleString()} records</span>
-        <span className="count">
+        <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+          {o.recordCount.toLocaleString()} records
+        </span>
+        <span className="ml-auto text-muted-foreground text-xs">
           {counts.mapped} mapped · {counts.review} review · {counts.skip} skip
         </span>
-        <Icon name={open ? 'caret-up' : 'caret-down'} size={14} />
+        {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
       </button>
       {open && (
-        <div className="tbl-scroll" style={{ maxHeight: 420, overflowY: 'auto' }}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Salesforce field</th>
-                <th>Type</th>
-                <th>Northbeam field</th>
-                <th className="right">Populated</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="max-h-[420px] overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Salesforce field</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Northbeam field</TableHead>
+                <TableHead className="text-right">Populated</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {o.fields.map((f) => {
                 const m = f.meta as {
                   key?: string;
@@ -385,62 +360,45 @@ function ObjectMappingCard({
                   populatedPct?: number | null;
                 };
                 return (
-                  <tr key={f.id}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{f.sfField}</td>
-                    <td>
-                      <span className="chip">{f.sfType}</span>
-                    </td>
-                    <td>
+                  <TableRow key={f.id}>
+                    <TableCell className="font-mono text-xs">{f.sfField}</TableCell>
+                    <TableCell>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs">{f.sfType}</span>
+                    </TableCell>
+                    <TableCell>
                       {f.status === 'skip' ? (
-                        <span style={{ color: 'var(--ink-subtle)' }}>—</span>
+                        <span className="text-muted-foreground">—</span>
                       ) : (
                         <span>
-                          {m.key} <span style={{ color: 'var(--ink-muted)' }}>({m.type})</span>
+                          {m.key}{' '}
+                          <span className="text-muted-foreground">({m.type})</span>
                         </span>
                       )}
                       {m.reason && (
-                        <div style={{ fontSize: 11, color: 'var(--ink-muted)' }}>{m.reason}</div>
+                        <div className="text-muted-foreground text-xs">{m.reason}</div>
                       )}
-                    </td>
-                    <td className="right">
-                      <span className="num">
-                        {m.populatedPct == null ? '—' : `${m.populatedPct}%`}
-                      </span>
-                    </td>
-                    <td>
-                      <button
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {m.populatedPct == null ? '—' : `${m.populatedPct}%`}
+                    </TableCell>
+                    <TableCell>
+                      <Button
                         type="button"
-                        className="chip"
-                        style={{
-                          cursor: 'pointer',
-                          border: 'none',
-                          color:
-                            f.status === 'mapped'
-                              ? 'var(--success)'
-                              : f.status === 'review'
-                                ? 'var(--warning)'
-                                : 'var(--ink-muted)',
-                          background:
-                            f.status === 'mapped'
-                              ? 'var(--success-bg)'
-                              : f.status === 'review'
-                                ? 'var(--warning-bg)'
-                                : 'var(--surface-active)',
-                        }}
-                        title="Toggle include/skip"
+                        size="sm"
+                        variant={f.status === 'mapped' ? 'default' : f.status === 'review' ? 'outline' : 'ghost'}
                         onClick={() => onToggleField(f.id, f.status)}
                       >
                         {f.status}
-                      </button>
-                    </td>
-                  </tr>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -453,21 +411,13 @@ function StatsRow({ stats }: { stats: Record<string, unknown> }) {
     ['References linked', stats.refsResolved],
   ];
   return (
-    <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap' }}>
+    <div className="flex flex-wrap gap-6">
       {items.map(([label, v]) => (
         <div key={label}>
-          <div
-            style={{
-              fontSize: 'var(--text-xs)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              color: 'var(--ink-subtle)',
-              fontWeight: 600,
-            }}
-          >
+          <div className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
             {label}
           </div>
-          <div className="num" style={{ fontSize: 'var(--text-lg)', fontWeight: 600 }}>
+          <div className="font-semibold text-lg tabular-nums">
             {typeof v === 'number' ? v.toLocaleString() : '—'}
           </div>
         </div>
@@ -478,9 +428,9 @@ function StatsRow({ stats }: { stats: Record<string, unknown> }) {
 
 function Centered({ spinner, label }: { spinner?: boolean; label?: string }) {
   return (
-    <div style={{ display: 'grid', placeItems: 'center', padding: 64, gap: 10 }}>
+    <div className="grid place-items-center gap-2.5 p-16 text-center">
       {spinner && <Spinner style={{ color: 'var(--brand)' }} />}
-      {label && <span style={{ color: 'var(--ink-muted)' }}>{label}</span>}
+      {label && <span className="text-muted-foreground text-sm">{label}</span>}
     </div>
   );
 }
