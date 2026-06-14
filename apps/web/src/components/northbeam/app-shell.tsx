@@ -22,7 +22,6 @@ import {
 } from 'react';
 import { CommandPalette } from './command-legacy';
 import { AppTopbar } from './app-topbar';
-import { Icon } from './icons';
 import { Spinner } from './primitives';
 
 // Lets a page inject action buttons into the layout-owned page header without
@@ -55,15 +54,8 @@ export function HidePageHead() {
 
 function FullScreenSpinner() {
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'grid',
-        placeItems: 'center',
-        background: 'var(--bg-page)',
-      }}
-    >
-      <Spinner style={{ color: 'var(--brand)' }} />
+    <div className="grid min-h-screen place-items-center bg-background">
+      <Spinner style={{ color: 'var(--ink-muted)' }} />
     </div>
   );
 }
@@ -117,11 +109,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="app-wrap app-wrap--wide">
             {!hideHead && (
               <div className="page-head">
-                {meta.icon && (
-                  <div className="page-head__icon">
-                    <Icon name={meta.icon} size={20} />
-                  </div>
-                )}
                 <div className="page-head__text" style={{ minWidth: 0 }}>
                   <h1>{meta.title}</h1>
                   {meta.subtitle && <p>{meta.subtitle}</p>}

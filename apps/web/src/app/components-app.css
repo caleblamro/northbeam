@@ -4,18 +4,15 @@
    renamed st-* → app-* and extended with responsive rules.
    ============================================================ */
 
-/* AI accent (used by Reports + migration), works in both themes */
+/* AI accent — flat indigo, no gradient. Maps to the system's --accent token
+   so AI surfaces tint with whatever accent the workspace has set. */
 :root {
-  --ai: #7c5cff;
-  --ai-2: #c43ce0;
-  --ai-grad: linear-gradient(120deg, #7c5cff, #c43ce0);
-  --ai-soft: color-mix(in srgb, var(--ai) 12%, var(--surface));
-  --ai-border: color-mix(in srgb, var(--ai) 30%, var(--surface));
-  --sf: #1f9ed1; /* Salesforce provenance tone */
-}
-:root[data-theme="dark"] {
-  --ai: #9d86ff;
-  --ai-2: #e36bf5;
+  --ai: var(--accent);
+  --ai-2: var(--accent);
+  --ai-grad: var(--accent);
+  --ai-soft: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  --ai-border: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  --sf: #6b7280; /* Salesforce provenance — neutral gray, not a brand color */
 }
 
 /* ---- app shell: fixed sidebar + one topbar + scrolling content ---- */
@@ -278,8 +275,9 @@
 }
 .usermenu__name {
   font-size: var(--text-base);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-medium);
   color: var(--ink);
+  letter-spacing: -0.005em;
 }
 .usermenu__email {
   font-size: var(--text-sm);
@@ -698,7 +696,8 @@
 .drawer__head h2 {
   margin: 0;
   font-size: var(--text-lg);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-medium);
+  letter-spacing: -0.015em;
 }
 .drawer__head p {
   margin: 1px 0 0;
@@ -718,7 +717,7 @@
   align-items: center;
   gap: 10px;
   padding: 16px 22px;
-  border-top: 1px solid var(--divider);
+  border-top: 1px solid var(--border);
   background: var(--surface-sunken);
 }
 .drawer__foot .spacer {
@@ -1264,21 +1263,21 @@
 .mig-banner {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 18px 20px;
+  gap: 14px;
+  padding: 16px 18px;
   margin-bottom: 20px;
-  border: 1px solid var(--ai-border);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(110deg, var(--ai-soft), var(--surface) 60%);
+  background: var(--surface);
 }
 .mig-banner__ic {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: var(--ai-grad);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent);
   display: grid;
   place-items: center;
-  color: #fff;
   flex-shrink: 0;
 }
 .mig-banner h2 {
@@ -1797,36 +1796,36 @@
   color: var(--brand) !important;
 }
 
-/* page header = Studio: gradient icon + large title + description + actions */
+/* page header — minimal: muted icon + large light-weight title + subtitle + actions */
 .page-head {
   display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 22px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
   min-height: 0;
 }
 .page-head__icon {
-  width: 46px;
-  height: 46px;
-  border-radius: var(--radius-lg);
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--ink-muted);
   flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
-  background: linear-gradient(150deg, var(--brand), color-mix(in srgb, var(--brand) 55%, #11d1c4));
+  background: transparent;
+  border-radius: var(--radius-md);
 }
 .page-head h1 {
   font-size: var(--text-2xl);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-medium);
   letter-spacing: -0.02em;
-  line-height: 1.2;
+  line-height: 1.15;
   margin: 0;
+  color: var(--ink);
 }
 .page-head__text p {
   margin: 4px 0 0;
   color: var(--ink-muted);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   max-width: 64ch;
   line-height: var(--lh-snug);
 }
@@ -2080,21 +2079,21 @@
 
 /* sectioned create/edit form (RecordFormDrawer) */
 .form-section + .form-section {
-  margin-top: 22px;
+  margin-top: 28px;
 }
 .form-section__label {
-  font-size: var(--text-xs);
+  font-size: 0.6875rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--ink-subtle);
-  font-weight: var(--fw-semibold);
-  padding-bottom: 7px;
-  margin-bottom: 14px;
-  border-bottom: 1px solid var(--divider);
+  letter-spacing: 0.14em;
+  color: var(--ink-muted);
+  font-weight: var(--fw-medium);
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
 }
 .form-grid {
   display: grid;
-  gap: 14px 18px;
+  gap: 16px 20px;
 }
 
 /* narrow viewports: collapse record + form grids to one column */
@@ -2147,11 +2146,10 @@
   position: sticky;
   top: 0;
   z-index: 30;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  backdrop-filter: saturate(140%) blur(10px);
-  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 0 0 color-mix(in srgb, var(--ink) 4%, transparent);
 }
 .app-content {
   flex: 1;
@@ -2198,9 +2196,9 @@
   color: var(--ink);
 }
 .launcher-btn[data-open="true"] {
-  background: color-mix(in srgb, var(--brand) 12%, var(--surface));
-  color: var(--brand);
-  border-color: color-mix(in srgb, var(--brand) 24%, transparent);
+  background: var(--surface-active);
+  color: var(--ink);
+  border-color: var(--border);
 }
 
 /* Org chip — the OrgSwitcher trigger lives inside. Single source of org
@@ -2260,18 +2258,17 @@
   background: var(--surface-hover);
 }
 .shelltab-cell[data-active="true"] {
-  background: color-mix(in srgb, var(--brand) 5%, var(--surface));
+  background: transparent;
 }
 .shelltab-cell[data-active="true"]::after {
   content: "";
   position: absolute;
-  left: 8px;
-  right: 8px;
+  left: 11px;
+  right: 11px;
   bottom: -1px;
   height: 2px;
-  background: var(--brand);
+  background: var(--ink);
   border-radius: 2px;
-  box-shadow: 0 0 8px 0 color-mix(in srgb, var(--brand) 50%, transparent);
 }
 .shelltab {
   display: inline-flex;
@@ -2297,10 +2294,10 @@
 }
 .shelltab-cell[data-active="true"] .shelltab {
   color: var(--ink);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-medium);
 }
 .shelltab-cell[data-active="true"] .shelltab svg {
-  color: var(--brand);
+  color: var(--ink);
 }
 .shelltab__close {
   display: grid;
@@ -2454,7 +2451,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 14px 8px 12px;
   border: 1px solid transparent;
   background: transparent;
@@ -2462,34 +2459,39 @@
   cursor: pointer;
   font: inherit;
   text-align: center;
-  color: var(--ink-secondary);
-  transition: background 0.12s, border-color 0.12s, transform 0.08s, box-shadow 0.12s;
+  color: var(--ink);
+  transition: background 0.12s var(--ease), border-color 0.12s var(--ease);
 }
 .launcher__tile:hover {
-  background: var(--surface);
+  background: var(--surface-hover);
   border-color: var(--border);
-  box-shadow: var(--shadow-sm);
   color: var(--ink);
-  transform: translateY(-1px);
 }
 .launcher__tile:active {
-  transform: translateY(0);
-  box-shadow: var(--shadow-xs);
+  background: var(--surface-active);
 }
 .launcher__tile-ic {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--brand) 10%, var(--surface-sunken));
-  color: var(--brand);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 14%, transparent);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  border: 1px solid var(--border);
+}
+.launcher__tile:hover .launcher__tile-ic {
+  background: var(--surface);
+  border-color: var(--border-strong);
 }
 .launcher__tile[data-accent="true"] .launcher__tile-ic {
-  background: var(--ai-soft);
-  color: var(--ai);
-  box-shadow: inset 0 0 0 1px var(--ai-border);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.launcher__tile[data-accent="true"]:hover .launcher__tile-ic {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .launcher__tile-label {
   font-size: var(--text-sm);
@@ -2521,7 +2523,7 @@
   color: var(--ink);
 }
 .launcher__tile-pin[data-pinned="true"] {
-  color: var(--brand);
+  color: var(--accent);
 }
 .launcher__empty {
   padding: 24px 16px;
@@ -2530,25 +2532,26 @@
   font-size: var(--text-sm);
 }
 
-/* page-head: smaller in the new shell (the tabs already announce the section) */
+/* page-head in the new shell — tabs already announce the section, so this is quiet */
 .app-content .page-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  min-height: 40px;
+  gap: 10px;
+  margin-bottom: 24px;
+  min-height: 32px;
 }
 .app-content .page-head__icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
 }
 .app-content .page-head h1 {
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
+  font-weight: var(--fw-medium);
   letter-spacing: -0.02em;
 }
 .app-content .page-head__text p {
-  margin: 2px 0 0;
+  margin: 4px 0 0;
   font-size: var(--text-sm);
   color: var(--ink-muted);
   max-width: 72ch;

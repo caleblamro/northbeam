@@ -3,7 +3,6 @@
 import { PageActions } from '@/components/northbeam/app-shell';
 import { SectionCard } from '@/components/northbeam/section-card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { fmtMoney } from '@/lib/mock-crm';
 import {
@@ -33,9 +32,9 @@ const INSIGHTS = [
 ];
 
 const TONE_CLASS: Record<'danger' | 'warning' | 'success', string> = {
-  danger: 'bg-destructive/10 text-destructive',
-  warning: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-  success: 'bg-green-500/15 text-green-600 dark:text-green-400',
+  danger: 'bg-muted text-destructive',
+  warning: 'bg-muted text-[var(--warning)]',
+  success: 'bg-muted text-[var(--success)]',
 };
 
 export default function ReportsPage() {
@@ -50,9 +49,9 @@ export default function ReportsPage() {
         </Button>
       </PageActions>
 
-      <InputGroup className="mb-2.5">
+      <InputGroup className="mb-3">
         <InputGroupAddon>
-          <Sparkles className="text-primary" />
+          <Sparkles className="text-link" />
         </InputGroupAddon>
         <InputGroupInput
           value={q}
@@ -66,30 +65,30 @@ export default function ReportsPage() {
           </Button>
         </InputGroupAddon>
       </InputGroup>
-      <div className="mb-6 flex flex-wrap gap-1.5">
+      <div className="mb-7 flex flex-wrap gap-1.5">
         {SUGGESTIONS.map((s) => (
           <button
             key={s}
             type="button"
             onClick={() => setQ(s)}
-            className="rounded-full border bg-card px-3 py-1 text-muted-foreground text-xs hover:border-primary/30 hover:text-primary"
+            className="rounded-full border border-border bg-card px-3 py-1 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
           >
             {s}
           </button>
         ))}
       </div>
 
-      <div className="mb-6 grid gap-3 md:grid-cols-3">
+      <div className="mb-7 grid gap-3 md:grid-cols-3">
         {INSIGHTS.map((i) => {
           const IconCmp = i.icon;
           return (
             <SectionCard key={i.title}>
               <div className="flex gap-3">
-                <div className={`grid size-9 shrink-0 place-items-center rounded-md ${TONE_CLASS[i.tone]}`}>
-                  <IconCmp className="size-4" />
+                <div className={`grid size-8 shrink-0 place-items-center rounded-md ${TONE_CLASS[i.tone]}`}>
+                  <IconCmp className="size-3.5" />
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-semibold text-foreground text-sm">{i.title}</h4>
+                  <h4 className="font-medium text-foreground text-sm">{i.title}</h4>
                   <p className="mt-1 text-muted-foreground text-xs leading-snug">{i.body}</p>
                 </div>
               </div>
@@ -99,23 +98,27 @@ export default function ReportsPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <SectionCard icon={ChartLine} title="Revenue forecast">
+        <SectionCard title="Revenue forecast">
           <p className="text-muted-foreground text-sm">
             Forecast vs. actual chart placeholder. Wire to real data once the reports query layer
             ships (#32 + #11).
           </p>
         </SectionCard>
         <div className="flex flex-col gap-4">
-          <SectionCard icon={Zap} title="What changed this week">
-            <p className="text-sm leading-relaxed">
+          <SectionCard title="What changed this week">
+            <p className="text-sm leading-relaxed text-foreground">
               Pipeline grew{' '}
-              <span className="font-semibold text-green-600">+{fmtMoney(18_000_00)}</span>{' '}
+              <span className="font-medium text-[var(--success)]">
+                +{fmtMoney(18_000_00)}
+              </span>{' '}
               with 4 new deals. Two closed won, 3 slipped past close. Net new pipeline
-              <span className="font-semibold text-green-600"> +12% MoM</span>.
+              <span className="font-medium text-[var(--success)]"> +12% MoM</span>.
             </p>
           </SectionCard>
-          <SectionCard icon={BookOpen} title="Saved reports">
-            <p className="text-muted-foreground text-sm">Saved-report list comes online with #11.</p>
+          <SectionCard title="Saved reports">
+            <p className="text-muted-foreground text-sm">
+              Saved-report list comes online with #11.
+            </p>
           </SectionCard>
         </div>
       </div>

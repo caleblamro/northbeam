@@ -7,6 +7,7 @@
 
 import { EmptyState } from '@/components/northbeam/empty-state';
 import { SectionCard } from '@/components/northbeam/section-card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -18,6 +19,7 @@ import {
 } from '@/components/ui/table';
 import { trpc } from '@/lib/api';
 import { ChevronRight, Database, Plus } from 'lucide-react';
+// Database stays — used by the empty state below.
 import Link from 'next/link';
 
 export default function ObjectManagerPage() {
@@ -26,7 +28,6 @@ export default function ObjectManagerPage() {
 
   return (
     <SectionCard
-      icon={Database}
       title="Object manager"
       action={
         <Button variant="outline" disabled>
@@ -71,15 +72,9 @@ export default function ObjectManagerPage() {
                   </code>
                 </TableCell>
                 <TableCell>
-                  <span
-                    className={
-                      obj.isSystem
-                        ? 'rounded-full bg-muted px-2 py-0.5 font-medium text-xs'
-                        : 'rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary text-xs'
-                    }
-                  >
+                  <Badge tone={obj.isSystem ? 'neutral' : 'brand'} size="sm">
                     {obj.isSystem ? 'Standard' : 'Custom'}
-                  </span>
+                  </Badge>
                 </TableCell>
                 <TableCell className="text-muted-foreground text-xs capitalize">
                   {obj.source ?? 'native'}

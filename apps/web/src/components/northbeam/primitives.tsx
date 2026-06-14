@@ -200,22 +200,21 @@ export function useRovingIndex(length: number, open: boolean) {
   return [idx, setIdx, onKey] as const;
 }
 
-/* ── Brand chip (gradient square) — matches .sb__logo / .toc__logo ───────── */
+/* ── Brand chip (flat workspace monogram) ────────────────────────────────── */
 export function BrandChip({ letter = 'N', size = 30 }: { letter?: string; size?: number }) {
   return (
     <span
       style={{
         width: size,
         height: size,
-        borderRadius: size > 32 ? 9 : 8,
-        background:
-          'linear-gradient(150deg, var(--brand), color-mix(in srgb, var(--brand) 52%, #12cabc))',
+        borderRadius: size > 32 ? 9 : 7,
+        background: 'var(--brand)',
         display: 'grid',
         placeItems: 'center',
-        color: '#fff',
-        fontWeight: 700,
-        fontSize: size > 32 ? 17 : 15,
-        boxShadow: 'var(--shadow-sm)',
+        color: 'var(--brand-contrast)',
+        fontWeight: 600,
+        fontSize: size > 32 ? 15 : 13,
+        letterSpacing: '-0.02em',
         flexShrink: 0,
       }}
     >

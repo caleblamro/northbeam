@@ -6,7 +6,7 @@ import { FileClock } from 'lucide-react';
 
 export default function AuditSetupPage() {
   return (
-    <SectionCard icon={FileClock} title="Audit log">
+    <SectionCard title="Audit log">
       <EmptyState
         icon={FileClock}
         title="Audit log isn't built yet"

@@ -22,17 +22,18 @@ export default function SignInPage() {
   if (requestLink.isSuccess) {
     return (
       <div>
-        <h1 className="mb-2.5 font-semibold text-2xl tracking-tight">Check your inbox</h1>
-        <p className="m-0 text-secondary-foreground leading-relaxed">
-          We sent a magic link to <b>{email}</b>. Click it to finish signing in — it expires in 10
-          minutes.
+        <h1 className="mb-2 font-medium text-2xl tracking-[-0.02em]">Check your inbox</h1>
+        <p className="m-0 text-muted-foreground leading-relaxed">
+          We sent a magic link to <span className="font-medium text-foreground">{email}</span>.
+          Click it to finish signing in — it expires in 10 minutes.
         </p>
-        <p className="mt-3.5 text-muted-foreground text-sm">
+        <p className="mt-4 text-muted-foreground text-sm">
           In local dev the link is printed in the API server console.
         </p>
         <div className="mt-5">
           <Button
             variant="link"
+            className="h-auto p-0"
             onClick={() => {
               requestLink.reset();
               setEmail('');
@@ -47,8 +48,8 @@ export default function SignInPage() {
 
   return (
     <form onSubmit={handleSubmit}>
-      <h1 className="mb-2 font-semibold text-2xl tracking-tight">Sign in to Northbeam</h1>
-      <p className="mb-5 text-muted-foreground leading-relaxed">
+      <h1 className="mb-2 font-medium text-2xl tracking-[-0.02em]">Sign in to Northbeam</h1>
+      <p className="mb-6 text-muted-foreground leading-relaxed">
         Enter your email and we'll send you a magic link.
       </p>
       <Field label="Work email" htmlFor="email">

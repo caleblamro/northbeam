@@ -6,7 +6,7 @@ import { CreditCard } from 'lucide-react';
 
 export default function BillingSetupPage() {
   return (
-    <SectionCard icon={CreditCard} title="Billing & plan">
+    <SectionCard title="Billing & plan">
       <EmptyState
         icon={CreditCard}
         title="Billing isn't wired up yet"

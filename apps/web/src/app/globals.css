@@ -46,14 +46,21 @@
   --color-destructive: var(--danger);
   --color-destructive-foreground: var(--ink-onfill);
 
-  /* Borders + form controls */
+  /* Borders + form controls. Focus ring is the accent (indigo), not brand
+     (near-black) — feedback should feel like a hint of color, not a hard
+     outline. */
   --color-border: var(--border);
   --color-input: var(--border-field);
-  --color-ring: var(--brand);
+  --color-ring: var(--accent);
+
+  /* Link / accent — the system's only chromatic note. Expose so utilities like
+     `text-link`, `bg-link/10`, `ring-link` resolve. */
+  --color-link: var(--accent);
+  --color-link-foreground: var(--accent-hover);
 
   /* Charts (placeholder palette — Northbeam-tuned later) */
   --color-chart-1: var(--brand);
-  --color-chart-2: var(--info);
+  --color-chart-2: var(--accent);
   --color-chart-3: var(--success);
   --color-chart-4: var(--warning);
   --color-chart-5: var(--danger);
@@ -79,39 +86,44 @@
   }
 }
 
-/* ─── Brand accent variants (Tweak → pick one for production) ────────────────
-   Each sets --brand and its derived shades. Default (no attribute) is the
-   blurple defined in tokens.css. Hover/active mirror the handoff's mix()
-   (12% / 22% toward black); ring is 40% alpha. */
+/* ─── Accent variants (Tweak → pick one for production) ─────────────────────
+   These override --accent (not --brand). Primary actions stay near-black; the
+   accent is the single chromatic note used for focus rings, link color, and
+   tone-pill dot prefixes. Default (no attribute) is indigo (see tokens.css). */
 [data-accent="iris"] {
-  --brand: #4f46e5;
-  --brand-hover: color-mix(in srgb, #4f46e5 88%, #000);
-  --brand-active: color-mix(in srgb, #4f46e5 78%, #000);
-  --brand-ring: color-mix(in srgb, #4f46e5 40%, transparent);
+  --accent: #4f46e5;
+  --accent-hover: color-mix(in srgb, #4f46e5 88%, #000);
+  --accent-active: color-mix(in srgb, #4f46e5 78%, #000);
+  --accent-ring: color-mix(in srgb, #4f46e5 28%, transparent);
+  --accent-soft: color-mix(in srgb, #4f46e5 8%, transparent);
 }
 [data-accent="sky"] {
-  --brand: #0284c7;
-  --brand-hover: color-mix(in srgb, #0284c7 88%, #000);
-  --brand-active: color-mix(in srgb, #0284c7 78%, #000);
-  --brand-ring: color-mix(in srgb, #0284c7 40%, transparent);
+  --accent: #0284c7;
+  --accent-hover: color-mix(in srgb, #0284c7 88%, #000);
+  --accent-active: color-mix(in srgb, #0284c7 78%, #000);
+  --accent-ring: color-mix(in srgb, #0284c7 28%, transparent);
+  --accent-soft: color-mix(in srgb, #0284c7 8%, transparent);
 }
 [data-accent="emerald"] {
-  --brand: #0e9f6e;
-  --brand-hover: color-mix(in srgb, #0e9f6e 88%, #000);
-  --brand-active: color-mix(in srgb, #0e9f6e 78%, #000);
-  --brand-ring: color-mix(in srgb, #0e9f6e 40%, transparent);
+  --accent: #0e9f6e;
+  --accent-hover: color-mix(in srgb, #0e9f6e 88%, #000);
+  --accent-active: color-mix(in srgb, #0e9f6e 78%, #000);
+  --accent-ring: color-mix(in srgb, #0e9f6e 28%, transparent);
+  --accent-soft: color-mix(in srgb, #0e9f6e 8%, transparent);
 }
 [data-accent="violet"] {
-  --brand: #7c3aed;
-  --brand-hover: color-mix(in srgb, #7c3aed 88%, #000);
-  --brand-active: color-mix(in srgb, #7c3aed 78%, #000);
-  --brand-ring: color-mix(in srgb, #7c3aed 40%, transparent);
+  --accent: #7c3aed;
+  --accent-hover: color-mix(in srgb, #7c3aed 88%, #000);
+  --accent-active: color-mix(in srgb, #7c3aed 78%, #000);
+  --accent-ring: color-mix(in srgb, #7c3aed 28%, transparent);
+  --accent-soft: color-mix(in srgb, #7c3aed 8%, transparent);
 }
 [data-accent="slate"] {
-  --brand: #334155;
-  --brand-hover: color-mix(in srgb, #334155 88%, #000);
-  --brand-active: color-mix(in srgb, #334155 78%, #000);
-  --brand-ring: color-mix(in srgb, #334155 40%, transparent);
+  --accent: #334155;
+  --accent-hover: color-mix(in srgb, #334155 88%, #000);
+  --accent-active: color-mix(in srgb, #334155 78%, #000);
+  --accent-ring: color-mix(in srgb, #334155 28%, transparent);
+  --accent-soft: color-mix(in srgb, #334155 8%, transparent);
 }
 
 /* ─── Neutral palette presets (Tweak) ───────────────────────────────────────

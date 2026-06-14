@@ -1,21 +1,32 @@
 'use client';
 
-// Record detail page — highlight header + stat strip + Details/Related tabs +
-// a sectioned, click-to-edit detail grid. Structure ported from the On Q OS
-// handoff; rendered with our own components + tokens. Every section/field comes
-// from the object's `layout` metadata, so this works for any object.
+// Record detail page — hero + stat strip + Details/Related tabs +
+// click-to-edit detail grid. Structure ported from the On Q OS handoff;
+// rendered against DiceUI primitives + tokens. Layout metadata drives
+// every section/field, so this works for any object.
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { LoadingScreen } from '@/components/ui/loading-screen';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trpc } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import type { FieldConfig, ObjectLayout } from '@northbeam/db/field-types';
-import { Loader2, Pencil } from 'lucide-react';
+import { Loader2, Pencil, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { ObjChip } from './app-bits';
 import { HidePageHead } from './app-shell';
+import { EmptyState } from './empty-state';
 import { type FieldDefLite, FieldInput, FieldValue } from './field-render';
-import { EmptyState } from './page-head';
-import { Spinner } from './primitives';
 import { RecordFormDrawer } from './record-form';
 
 const READONLY = new Set(['formula', 'rollup', 'ai', 'autonumber']);
@@ -27,17 +38,9 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
   const rec = trpc.record.get.useQuery({ objectKey, id });
   const related = trpc.record.related.useQuery({ objectKey, id });
 
-  if (rec.isLoading) {
-    return (
-      <div style={{ display: 'grid', placeItems: 'center', padding: 64 }}>
-        <Spinner style={{ color: 'var(--brand)' }} />
-      </div>
-    );
-  }
+  if (rec.isLoading) return <LoadingScreen size="lg" />;
   if (!rec.data) {
-    return (
-      <EmptyState icon="warning-circle" title="Record not found" body="It may have been deleted." />
-    );
+    return <EmptyState icon={Users} title="Record not found" body="It may have been deleted." />;
   }
 
   const { object, fields, row, refLabels } = rec.data;
@@ -52,103 +55,104 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
   const relatedCount = relatedGroups.reduce((n, g) => n + g.rows.length, 0);
 
   return (
-    <div className="rec">
+    <div className="flex flex-col gap-7">
       <HidePageHead />
 
-      <div className="rec-crumb">
-        {/* object.key, not labelPlural — works for imported objects (/property)
-            where no static plural route exists. */}
-        <Link href={`/${object.key}`}>{object.labelPlural}</Link>
-        <span className="sep">›</span>
-        <span className="here">{row.name}</span>
-      </div>
+      <nav className="flex items-center gap-1.5 text-sm" aria-label="Breadcrumb">
+        <Link href={`/${object.key}`} className="text-muted-foreground hover:text-foreground">
+          {object.labelPlural}
+        </Link>
+        <span className="text-muted-foreground/60">/</span>
+        <span className="font-medium text-foreground">{row.name}</span>
+      </nav>
 
-      {/* highlight */}
-      <div className="rec-hl">
-        <div className="rec-hl__top">
-          <ObjChip label={object.label} color={object.color} size={46} />
-          <div className="rec-hl__text">
-            <div className="rec-eyebrow">
-              {object.label} <span className="mono">{id.slice(0, 8)}</span>
-            </div>
-            <h1 className="rec-title">{row.name}</h1>
-            {compactKeys.length > 0 && (
-              <div className="rec-compact">
-                {compactKeys.map((k) => {
-                  const f = byKey.get(k);
-                  if (!f) return null;
-                  const v = row.data[k];
-                  if (v == null || v === '') return null;
-                  return (
-                    <span key={k}>
-                      <span className="k">{f.label}:</span>
+      <header className="flex items-start gap-4 border-border border-b pb-6">
+        <ObjChip label={object.label} color={object.color} size={44} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-muted-foreground text-xs">
+            <span>{object.label}</span>
+            <span className="font-mono text-[0.6875rem]">{id.slice(0, 8)}</span>
+          </div>
+          <h1 className="mt-1 truncate font-medium text-3xl text-foreground tracking-[-0.02em]">
+            {row.name}
+          </h1>
+          {compactKeys.length > 0 && (
+            <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-sm">
+              {compactKeys.map((k) => {
+                const f = byKey.get(k);
+                if (!f) return null;
+                const v = row.data[k];
+                if (v == null || v === '') return null;
+                return (
+                  <div key={k} className="flex items-center gap-1.5">
+                    <dt className="text-muted-foreground">{f.label}:</dt>
+                    <dd className="text-foreground">
                       <FieldValue field={f} value={v} referenceLabel={refLabels[String(v)]} />
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          <div className="rec-hl__actions">
-            <Button variant="outline" onClick={() => setEditing(true)}>
-              <Pencil />
-              Edit
-            </Button>
-          </div>
-        </div>
-
-        {statKeys.length > 0 && (
-          <div className="rec-stats">
-            {statKeys.map((k) => {
-              const f = byKey.get(k);
-              if (!f) return null;
-              return (
-                <div className="rec-stat" key={k}>
-                  <div className="rec-stat__lbl">{f.label}</div>
-                  <div className="rec-stat__val">
-                    <FieldValue field={f} value={row.data[k]} />
+                    </dd>
                   </div>
+                );
+              })}
+            </dl>
+          )}
+        </div>
+        <Button variant="outline" onClick={() => setEditing(true)}>
+          <Pencil />
+          Edit
+        </Button>
+      </header>
+
+      {statKeys.length > 0 && (
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-4">
+          {statKeys.map((k) => {
+            const f = byKey.get(k);
+            if (!f) return null;
+            return (
+              <div key={k} className="bg-card p-4">
+                <div className="font-medium text-[0.6875rem] text-muted-foreground uppercase tracking-wider">
+                  {f.label}
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                <div className="mt-1.5 font-medium text-foreground text-lg tabular-nums">
+                  <FieldValue field={f} value={row.data[k]} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-      {/* tabs */}
-      <div className="tabs">
-        <button
-          type="button"
-          className="tab"
-          data-active={tab === 'details' ? 'true' : undefined}
-          onClick={() => setTab('details')}
-        >
-          Details
-        </button>
-        <button
-          type="button"
-          className="tab"
-          data-active={tab === 'related' ? 'true' : undefined}
-          onClick={() => setTab('related')}
-        >
-          Related
-          {relatedCount > 0 && <span className="count">{relatedCount}</span>}
-        </button>
-      </div>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as 'details' | 'related')} className="gap-6">
+        <TabsList>
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="related">
+            Related
+            {relatedCount > 0 && (
+              <Badge variant="default" size="sm" className="ml-1">
+                {relatedCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-      {tab === 'details' && (
-        <div className="rec-grid">
+        <TabsContent value="details" className="flex flex-col gap-5">
           {sections.map((sec) => {
             const cols = sec.cols ?? 2;
             const secFields = sec.fields.map((k) => byKey.get(k)).filter(Boolean) as FieldDefLite[];
             if (!secFields.length) return null;
             return (
-              <div key={sec.id} className={`rcard${cols === 1 ? ' rcard--full' : ''}`}>
-                <div className="rcard__head">
-                  <span className="rcard__title">{sec.label}</span>
+              <section
+                key={sec.id}
+                className={cn(
+                  'overflow-hidden rounded-lg border border-border bg-card',
+                  cols === 1 && 'col-span-full',
+                )}
+              >
+                <div className="border-border border-b px-5 py-3">
+                  <h2 className="font-medium text-[0.9375rem] text-foreground tracking-[-0.005em]">
+                    {sec.label}
+                  </h2>
                 </div>
                 <div
-                  className="rcard__body rfields"
+                  className="grid gap-x-6 gap-y-4 px-5 py-5"
                   style={{ gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))` }}
                 >
                   {secFields.map((f) => (
@@ -163,17 +167,15 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
                     />
                   ))}
                 </div>
-              </div>
+              </section>
             );
           })}
-        </div>
-      )}
+        </TabsContent>
 
-      {tab === 'related' && (
-        <div className="rec-grid rec-grid--single">
+        <TabsContent value="related" className="flex flex-col gap-5">
           {relatedGroups.length === 0 ? (
             <EmptyState
-              icon="users-three"
+              icon={Users}
               title="Nothing related yet"
               body="Records that reference this one will appear here."
             />
@@ -186,49 +188,54 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
                 .filter(Boolean)
                 .slice(0, 4) as FieldDefLite[];
               return (
-                <div key={`${g.object.key}.${g.via.key}`} className="rcard rcard--full">
-                  <div className="rcard__head">
+                <section
+                  key={`${g.object.key}.${g.via.key}`}
+                  className="overflow-hidden rounded-lg border border-border bg-card"
+                >
+                  <div className="flex items-center gap-2.5 border-border border-b px-5 py-3">
                     <ObjChip label={g.object.label} color={g.object.color} size={20} />
-                    <span className="rcard__title">{g.object.labelPlural}</span>
-                    <span className="count">{g.rows.length}</span>
+                    <h2 className="flex-1 font-medium text-[0.9375rem] text-foreground tracking-[-0.005em]">
+                      {g.object.labelPlural}
+                    </h2>
+                    <Badge variant="default" size="sm">
+                      {g.rows.length}
+                    </Badge>
                   </div>
-                  <div className="tbl-scroll">
-                    <table className="tbl">
-                      <thead>
-                        <tr>
-                          <th>Name</th>
-                          {cols.map((c) => (
-                            <th key={c.key}>{c.label}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {g.rows.map((r) => (
-                          <tr key={r.id} data-clickable="true">
-                            <td>
-                              <Link
-                                href={`/${g.object.key}/${r.id}`}
-                                style={{ color: 'var(--ink)', fontWeight: 600 }}
-                              >
-                                {r.name}
-                              </Link>
-                            </td>
-                            {cols.map((c) => (
-                              <td key={c.key}>
-                                <FieldValue field={c} value={r.data[c.key]} />
-                              </td>
-                            ))}
-                          </tr>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        {cols.map((c) => (
+                          <TableHead key={c.key}>{c.label}</TableHead>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {g.rows.map((r) => (
+                        <TableRow key={r.id} className="group cursor-pointer hover:bg-muted/40">
+                          <TableCell>
+                            <Link
+                              href={`/${g.object.key}/${r.id}`}
+                              className="font-medium text-foreground after:absolute after:inset-0"
+                            >
+                              {r.name}
+                            </Link>
+                          </TableCell>
+                          {cols.map((c) => (
+                            <TableCell key={c.key} className="text-muted-foreground">
+                              <FieldValue field={c} value={r.data[c.key]} />
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </section>
               );
             })
           )}
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
 
       {editing && (
         <RecordFormDrawer
@@ -246,7 +253,6 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
   );
 }
 
-/* ── one click-to-edit field on the detail grid ─────────────────────────────── */
 function InlineField({
   objectKey,
   recordId,
@@ -282,13 +288,13 @@ function InlineField({
   const empty = value == null || value === '' || (Array.isArray(value) && value.length === 0);
 
   return (
-    <div className={`rfield${fullWidth ? ' rfield--full' : ''}`}>
-      <div className="rfield__lbl">
+    <div className={cn('flex flex-col gap-1', fullWidth && 'col-span-full')}>
+      <div className="flex items-center gap-1 font-medium text-muted-foreground text-xs">
         {field.label}
-        {field.required && <span className="req">*</span>}
+        {field.required && <span className="text-destructive">*</span>}
       </div>
       {editing ? (
-        <div className="rfield__edit">
+        <div className="flex flex-col gap-2">
           <FieldInput
             field={field}
             value={draft}
@@ -302,7 +308,7 @@ function InlineField({
               utils.record.searchRefs.fetch({ objectKey: cfg.targetObject ?? '', q })
             }
           />
-          <div className="rfield__edit-actions">
+          <div className="flex items-center gap-2">
             <Button
               size="sm"
               disabled={update.isPending}
@@ -326,42 +332,25 @@ function InlineField({
           </div>
         </div>
       ) : readOnly ? (
-        <div className={`rfield__val${empty ? ' rfield__val--empty' : ''}`}>
+        <div className={cn('text-sm', empty ? 'text-muted-foreground' : 'text-foreground')}>
           {empty ? '—' : <FieldValue field={field} value={value} referenceLabel={refLabel} />}
         </div>
       ) : (
-        <div
-          className="rfield__disp"
+        <button
+          type="button"
+          className="-mx-1.5 -my-0.5 group flex items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-sm transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => {
             setDraft(value);
             setEditing(true);
           }}
           title="Click to edit"
         >
-          <span className={empty ? 'rfield__val--empty' : undefined}>
+          <span className={cn('truncate', empty ? 'text-muted-foreground' : 'text-foreground')}>
             {empty ? 'Empty' : <FieldValue field={field} value={value} referenceLabel={refLabel} />}
           </span>
-          <PencilIcon />
-        </div>
+          <Pencil className="size-3 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
+        </button>
       )}
     </div>
-  );
-}
-
-function PencilIcon() {
-  return (
-    <svg
-      className="pencil"
-      width={13}
-      height={13}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      aria-hidden="true"
-    >
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
   );
 }

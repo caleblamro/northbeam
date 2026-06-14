@@ -23,14 +23,14 @@
 .sb__logo {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
-  background: linear-gradient(150deg, var(--brand), color-mix(in srgb, var(--brand) 55%, #11d1c4));
+  border-radius: 7px;
+  background: var(--brand);
   display: grid;
   place-items: center;
-  color: #fff;
-  font-weight: var(--fw-bold);
-  font-size: 15px;
-  box-shadow: var(--shadow-sm);
+  color: var(--brand-contrast);
+  font-weight: var(--fw-semibold);
+  font-size: 13px;
+  letter-spacing: -0.02em;
   flex-shrink: 0;
 }
 .sb__brand-name {
@@ -353,23 +353,25 @@
   font-size: var(--text-md);
 }
 .cmdk__item[data-active="true"] {
-  background: color-mix(in srgb, var(--brand) 12%, var(--surface));
+  background: var(--surface-hover);
   color: var(--ink);
 }
 .cmdk__icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  font-size: 17px;
+  font-size: 15px;
   background: var(--surface-sunken);
-  color: var(--ink-muted);
+  color: var(--ink-secondary);
+  border: 1px solid var(--border);
 }
 .cmdk__item[data-active="true"] .cmdk__icon {
-  background: var(--brand);
-  color: #fff;
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--border-strong);
 }
 .cmdk__item-body {
   display: flex;

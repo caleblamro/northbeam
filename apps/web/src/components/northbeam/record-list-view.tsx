@@ -7,7 +7,6 @@
 import { EmptyState } from '@/components/northbeam/empty-state';
 import { FilterBar } from '@/components/northbeam/filter-bar';
 import { ListToolbar } from '@/components/northbeam/list-toolbar';
-import { Spinner } from '@/components/northbeam/primitives';
 import { RecordFormDrawer } from '@/components/northbeam/record-form';
 import { SavedViews } from '@/components/northbeam/saved-views';
 import { ObjChip } from '@/components/northbeam/app-bits';
@@ -15,6 +14,7 @@ import { HidePageHead, PageActions } from '@/components/northbeam/app-shell';
 import { type FieldDefLite, FieldValue } from '@/components/northbeam/field-render';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { LoadingScreen } from '@/components/ui/loading-screen';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,11 +49,16 @@ export function RecordListView({
   newLabel,
   showImport = true,
   standalone = false,
+  staticFilters,
 }: {
   objectKey: string;
   newLabel?: string;
   showImport?: boolean;
   standalone?: boolean;
+  /** Always-applied filters that aren't user-editable and don't appear in the
+   *  URL. Use to scope a derived list (e.g. /tasks = activities where
+   *  type=task). The user's own filters layer on top via the FilterBar. */
+  staticFilters?: Filter[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -93,9 +98,16 @@ export function RecordListView({
   // the next move once the dynamic-records layer grows predicate support — at
   // that point this `rows` is `allRows` again and the `filters` array is
   // passed straight into the tRPC query.
+  const effectiveFilters = useMemo(
+    () => (staticFilters ? [...staticFilters, ...filters] : filters),
+    [staticFilters, filters],
+  );
   const rows = useMemo(
-    () => (filters.length === 0 ? allRows : allRows.filter((r) => rowPassesFilters(fields, r.data, filters))),
-    [allRows, fields, filters],
+    () =>
+      effectiveFilters.length === 0
+        ? allRows
+        : allRows.filter((r) => rowPassesFilters(fields, r.data, effectiveFilters)),
+    [allRows, fields, effectiveFilters],
   );
   const refLabels = list.data?.refLabels ?? {};
   const object = list.data?.object;
@@ -135,12 +147,14 @@ export function RecordListView({
       {standalone ? (
         <>
           <HidePageHead />
-          <header className="mb-5 flex items-center gap-4">
-            <ObjChip label={objectLabel || objectKey} color={object?.color} size={46} />
+          <header className="mb-6 flex items-center gap-3">
+            <ObjChip label={objectLabel || objectKey} color={object?.color} size={32} />
             <div className="min-w-0 flex-1">
-              <h1 className="font-semibold text-2xl tracking-tight">{objectPlural || objectKey}</h1>
+              <h1 className="font-medium text-2xl tracking-[-0.02em]">{objectPlural || objectKey}</h1>
               {!list.isLoading && (
-                <p className="text-muted-foreground text-sm">{rows.length} records</p>
+                <p className="text-muted-foreground text-sm tabular-nums">
+                  {rows.length.toLocaleString()} {rows.length === 1 ? 'record' : 'records'}
+                </p>
               )}
             </div>
             <div>{createBtn}</div>
@@ -184,8 +198,8 @@ export function RecordListView({
       />
 
       {list.isLoading ? (
-        <Card className="grid place-items-center p-12">
-          <Spinner style={{ color: 'var(--brand)' }} />
+        <Card className="p-0">
+          <LoadingScreen size="md" />
         </Card>
       ) : rows.length === 0 ? (
         <Card className="p-0">
@@ -218,10 +232,10 @@ export function RecordListView({
               {rows.map((r) => (
                 <TableRow
                   key={r.id}
-                  className="cursor-pointer"
+                  className="cursor-pointer transition-colors hover:bg-muted/40"
                   onClick={() => router.push(`/${objectKey}/${r.id}`)}
                 >
-                  <TableCell className="font-semibold text-foreground">{r.name}</TableCell>
+                  <TableCell className="font-medium text-foreground">{r.name}</TableCell>
                   {columns.map((c) => (
                     <TableCell key={c.key} className={NUMERIC.has(c.type) ? 'text-right' : undefined}>
                       <FieldValue

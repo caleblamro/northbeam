@@ -1,7 +1,7 @@
 /* ============================================================
    CRM Design System — Foundations
-   Stripe-inspired: cool grays, navy ink, blurple brand,
-   layered soft shadows, restrained radii.
+   Modern minimalist: near-black primary, single indigo accent,
+   flat surfaces, typography-driven hierarchy.
    ============================================================ */
 
 /* ---- Tweakable knobs (overridden by Tweaks panel) ---- */
@@ -9,15 +9,25 @@
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, monospace;
 
-  /* brand hue */
-  --brand: #635bff;
-  --brand-hover: #5249f5;
-  --brand-active: #463cf0;
-  --brand-ring: rgba(99, 91, 255, 0.4);
+  /* brand = primary action (Linear/Vercel pattern: near-black on white).
+     Brand is NOT the accent. Accents only appear as focus rings, link color,
+     active tab underline, and tone-pill dot prefixes. */
+  --brand: #0a0e1a;
+  --brand-hover: #1a1f2e;
+  --brand-active: #000000;
+  --brand-ring: rgba(10, 14, 26, 0.18);
   --brand-contrast: #ffffff;
-  --on-brand-shadow: rgba(45, 35, 120, 0.45);
+  --on-brand-shadow: rgba(10, 14, 26, 0.12);
 
-  /* radius scale (base is tweakable) */
+  /* accent = the only chromatic note in the system. Used sparingly:
+     focus rings, links, active-state indicators, AI-feature highlights. */
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-active: #3730a3;
+  --accent-ring: rgba(79, 70, 229, 0.28);
+  --accent-soft: rgba(79, 70, 229, 0.08);
+
+  /* radius scale — Stripe-inspired soft corners */
   --radius-base: 6px;
   --radius-xs: 3px;
   --radius-sm: calc(var(--radius-base) - 2px);
@@ -26,10 +36,10 @@
   --radius-xl: calc(var(--radius-base) + 8px);
   --radius-full: 999px;
 
-  /* control heights (density scales these) */
-  --h-sm: 30px;
-  --h-md: 38px;
-  --h-lg: 46px;
+  /* control heights (density scales these) — slightly more breathing room */
+  --h-sm: 32px;
+  --h-md: 40px;
+  --h-lg: 48px;
   --pad-x-sm: 10px;
   --pad-x-md: 14px;
   --pad-x-lg: 18px;
@@ -59,8 +69,8 @@
   --text-display: 46px;
 
   --lh-tight: 1.15;
-  --lh-snug: 1.35;
-  --lh-base: 1.5;
+  --lh-snug: 1.4;
+  --lh-base: 1.55;
 
   --fw-regular: 400;
   --fw-medium: 500;
@@ -73,18 +83,18 @@
 
 /* ---- Density variants ---- */
 :root[data-density="compact"] {
-  --h-sm: 26px;
-  --h-md: 32px;
-  --h-lg: 40px;
+  --h-sm: 28px;
+  --h-md: 34px;
+  --h-lg: 42px;
   --pad-x-sm: 8px;
   --pad-x-md: 11px;
   --pad-x-lg: 15px;
   --row-gap: 10px;
 }
 :root[data-density="spacious"] {
-  --h-sm: 34px;
-  --h-md: 44px;
-  --h-lg: 52px;
+  --h-sm: 36px;
+  --h-md: 46px;
+  --h-lg: 54px;
   --pad-x-sm: 13px;
   --pad-x-md: 18px;
   --pad-x-lg: 22px;
@@ -97,120 +107,133 @@
 :root,
 :root[data-theme="light"] {
   --bg: #ffffff;
-  --bg-page: #f5f7fb;
+  --bg-page: #fafafa;
   --surface: #ffffff;
   --surface-raised: #ffffff;
-  --surface-sunken: #f6f9fc;
-  --surface-hover: #f6f8fb;
-  --surface-active: #eef1f6;
-  --overlay: rgba(10, 37, 64, 0.4);
+  --surface-sunken: #f7f7f8;
+  --surface-hover: #f5f5f7;
+  --surface-active: #ececef;
+  --overlay: rgba(10, 14, 26, 0.4);
 
-  --border: #e3e8ee;
-  --border-strong: #d2dae3;
-  --border-field: #d5dce4;
-  --divider: #edf0f4;
+  --border: #ececef;
+  --border-strong: #d4d4d8;
+  --border-field: #dcdce0;
+  --divider: #f1f1f3;
 
-  --ink: #0a2540;
-  --ink-secondary: #3c4257;
-  --ink-muted: #697386;
-  --ink-subtle: #8792a2;
-  --ink-disabled: #aab7c4;
+  --ink: #0a0e1a;
+  --ink-secondary: #3f3f46;
+  --ink-muted: #71717a;
+  --ink-subtle: #9ca3af;
+  --ink-disabled: #c1c1c7;
   --ink-onfill: #ffffff;
 
   --field-bg: #ffffff;
-  --field-bg-disabled: #f6f8fb;
-  --placeholder: #9aa6b6;
+  --field-bg-disabled: #f7f7f8;
+  --placeholder: #a1a1aa;
 
-  --success: #117a52;
-  --success-bg: #ddf3ea;
-  --success-border: #a6e0cd;
-  --warning: #9a6800;
-  --warning-bg: #fcefcf;
-  --warning-border: #f4d98a;
-  --danger: #df1b41;
-  --danger-hover: #c70f37;
-  --danger-active: #b00c30;
-  --danger-ring: rgba(223, 27, 65, 0.3);
-  --danger-bg: #ffeef1;
-  --danger-border: #f8c2cd;
-  --info: #3d5afe;
-  --info-bg: #e8edff;
-  --neutralchip: #697386;
-  --neutralchip-bg: #eef1f6;
-  --lilac: #6a5acd;
-  --lilac-bg: #ebe9fb;
+  --success: #16a34a;
+  --success-bg: #ecfdf3;
+  --success-border: #bbf7d0;
+  --warning: #b45309;
+  --warning-bg: #fef3c7;
+  --warning-border: #fde68a;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-active: #991b1b;
+  --danger-ring: rgba(220, 38, 38, 0.25);
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --info: #4f46e5;
+  --info-bg: #eef2ff;
+  --neutralchip: #71717a;
+  --neutralchip-bg: #f4f4f5;
+  --lilac: #7c3aed;
+  --lilac-bg: #f5f3ff;
 
-  --shadow-xs: 0 1px 1px rgba(10, 37, 64, 0.06);
-  --shadow-sm: 0 1px 2px rgba(10, 37, 64, 0.08), 0 1px 1px rgba(10, 37, 64, 0.04);
-  --shadow-md: 0 4px 10px -3px rgba(10, 37, 64, 0.12), 0 2px 4px -2px rgba(10, 37, 64, 0.06);
-  --shadow-lg: 0 16px 32px -10px rgba(10, 37, 64, 0.2), 0 6px 12px -6px rgba(10, 37, 64, 0.1);
-  --shadow-pop: 0 12px 28px -8px rgba(10, 37, 64, 0.22), 0 4px 10px -4px rgba(10, 37, 64, 0.12);
-  --shadow-btn: 0 1px 1px rgba(10, 37, 64, 0.06), 0 1px 2px rgba(10, 37, 64, 0.08);
-  --shadow-btn-brand: 0 1px 1px rgba(10, 37, 64, 0.08), 0 2px 5px var(--on-brand-shadow);
-  --ring-focus: 0 0 0 1px var(--brand), 0 0 0 4px var(--brand-ring);
-  --inset-hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  /* Shadows: barely-there. Reserved for floating overlays only;
+     cards/buttons stay flat with hairline borders. */
+  --shadow-xs: 0 1px 1px rgba(10, 14, 26, 0.04);
+  --shadow-sm: 0 1px 2px rgba(10, 14, 26, 0.05);
+  --shadow-md: 0 2px 6px -2px rgba(10, 14, 26, 0.08), 0 1px 2px rgba(10, 14, 26, 0.04);
+  --shadow-lg: 0 8px 20px -8px rgba(10, 14, 26, 0.12), 0 2px 6px -2px rgba(10, 14, 26, 0.06);
+  --shadow-pop: 0 6px 16px -6px rgba(10, 14, 26, 0.12), 0 2px 4px -2px rgba(10, 14, 26, 0.06);
+  --shadow-btn: 0 1px 1px rgba(10, 14, 26, 0.04);
+  --shadow-btn-brand: 0 1px 1px rgba(10, 14, 26, 0.06);
+  --ring-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent-ring);
+  --inset-hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 /* ============================================================
    DARK THEME — deep navy slate
    ============================================================ */
 :root[data-theme="dark"] {
-  --bg: #0e1525;
-  --bg-page: #0a101e;
-  --surface: #141d31;
-  --surface-raised: #1a2540;
-  --surface-sunken: #0e1626;
-  --surface-hover: #1c2740;
-  --surface-active: #243153;
-  --overlay: rgba(3, 8, 18, 0.62);
+  --bg: #0a0a0c;
+  --bg-page: #08080a;
+  --surface: #101012;
+  --surface-raised: #161618;
+  --surface-sunken: #0a0a0c;
+  --surface-hover: #161618;
+  --surface-active: #1f1f22;
+  --overlay: rgba(0, 0, 0, 0.6);
 
-  --border: #283450;
-  --border-strong: #364463;
-  --border-field: #313e5e;
-  --divider: #1e2942;
+  --border: #1f1f22;
+  --border-strong: #2c2c30;
+  --border-field: #28282c;
+  --divider: #18181b;
 
-  --ink: #f5f8fd;
-  --ink-secondary: #c3cce0;
-  --ink-muted: #8d9bb8;
-  --ink-subtle: #6b7a96;
-  --ink-disabled: #4f5d7a;
-  --ink-onfill: #ffffff;
+  --ink: #fafafa;
+  --ink-secondary: #c9c9ce;
+  --ink-muted: #8a8a92;
+  --ink-subtle: #6a6a72;
+  --ink-disabled: #44444a;
+  --ink-onfill: #0a0a0c;
 
-  --field-bg: #0f1828;
-  --field-bg-disabled: #121b2c;
-  --placeholder: #61708f;
+  /* Field bg matches DiceUI Input's rendered look (~bg-card + bg-input/30
+     overlay). Keeps legacy .combo / .field controls visually consistent with
+     the DiceUI Input/Textarea/Select in the same form. */
+  --field-bg: #161618;
+  --field-bg-disabled: #131316;
+  --placeholder: #5e5e66;
 
-  --brand: #7d76ff;
-  --brand-hover: #8d87ff;
-  --brand-active: #6b63f5;
-  --brand-ring: rgba(125, 118, 255, 0.4);
-  --brand-contrast: #ffffff;
-  --on-brand-shadow: rgba(0, 0, 0, 0.45);
+  /* Primary flips to near-white on dark (Linear/Vercel pattern). */
+  --brand: #fafafa;
+  --brand-hover: #ffffff;
+  --brand-active: #e5e5e5;
+  --brand-ring: rgba(250, 250, 250, 0.16);
+  --brand-contrast: #0a0a0c;
+  --on-brand-shadow: rgba(0, 0, 0, 0.3);
 
-  --success: #2bd4a0;
-  --success-bg: #0f2e26;
-  --success-border: #1d5645;
-  --warning: #f5c451;
-  --warning-bg: #2e2611;
-  --warning-border: #5a4a1c;
-  --danger: #ff6b85;
-  --danger-hover: #ff829a;
-  --danger-active: #f0566f;
-  --danger-ring: rgba(255, 107, 133, 0.34);
-  --danger-bg: #2e1620;
-  --danger-border: #5a2434;
-  --info: #7d9bff;
-  --info-bg: #15203b;
+  /* Accent stays indigo, slightly brighter for dark-mode contrast. */
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-active: #6366f1;
+  --accent-ring: rgba(129, 140, 248, 0.3);
+  --accent-soft: rgba(129, 140, 248, 0.12);
 
-  --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.3);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 6px 14px -4px rgba(0, 0, 0, 0.55), 0 2px 5px -2px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 22px 40px -12px rgba(0, 0, 0, 0.7), 0 8px 16px -8px rgba(0, 0, 0, 0.5);
-  --shadow-pop: 0 18px 38px -10px rgba(0, 0, 0, 0.68), 0 6px 14px -6px rgba(0, 0, 0, 0.5);
-  --shadow-btn: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-btn-brand: 0 1px 2px rgba(0, 0, 0, 0.55);
-  --ring-focus: 0 0 0 1px var(--brand), 0 0 0 4px var(--brand-ring);
-  --inset-hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --success: #34d399;
+  --success-bg: #0a1f17;
+  --success-border: #1a3a2a;
+  --warning: #fbbf24;
+  --warning-bg: #1f1810;
+  --warning-border: #3a2e1a;
+  --danger: #f87171;
+  --danger-hover: #fca5a5;
+  --danger-active: #ef4444;
+  --danger-ring: rgba(248, 113, 113, 0.28);
+  --danger-bg: #1f1112;
+  --danger-border: #3a1d20;
+  --info: #818cf8;
+  --info-bg: #15172e;
+
+  --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.25);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 2px 6px -2px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 20px -8px rgba(0, 0, 0, 0.55), 0 2px 6px -2px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 6px 16px -6px rgba(0, 0, 0, 0.55), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-btn: 0 1px 1px rgba(0, 0, 0, 0.4);
+  --shadow-btn-brand: 0 1px 1px rgba(0, 0, 0, 0.4);
+  --ring-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent-ring);
+  --inset-hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 /* ============================================================

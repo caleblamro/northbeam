@@ -78,8 +78,10 @@ export function ActivityTimeline({
             {idx < arr.length - 1 && <TimelineConnector />}
             <TimelineContent>
               <div className="flex items-baseline justify-between gap-3">
-                <span className="font-semibold text-foreground">{a.name}</span>
-                <span className="text-muted-foreground text-xs">{formatTime(a.createdAt)}</span>
+                <span className="font-medium text-foreground">{a.name}</span>
+                <span className="text-muted-foreground text-xs tabular-nums">
+                  {formatTime(a.createdAt)}
+                </span>
               </div>
             </TimelineContent>
           </TimelineItem>

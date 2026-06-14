@@ -84,6 +84,15 @@ const AiConfigSchema = BaseConfigSchema.extend({
   aiPrompt: z.string().min(1, 'ai field requires an aiPrompt'),
 });
 
+const DurationConfigSchema = BaseConfigSchema.extend({
+  maxMinutes: z.number().int().positive().optional(),
+});
+
+const AddressConfigSchema = BaseConfigSchema.extend({
+  countries: z.array(z.string().length(2)).optional(),
+  requireCoordinates: z.boolean().optional(),
+});
+
 /** The schema to use for each FieldType — same shape as FieldConfigForType. */
 export const FieldConfigSchemas = {
   text: TextConfigSchema,
@@ -97,10 +106,12 @@ export const FieldConfigSchemas = {
   autonumber: NumberConfigSchema,
   date: BaseConfigSchema,
   datetime: BaseConfigSchema,
+  duration: DurationConfigSchema,
   checkbox: BaseConfigSchema,
   picklist: PicklistConfigSchema,
   multipicklist: PicklistConfigSchema,
   reference: ReferenceConfigSchema,
+  address: AddressConfigSchema,
   formula: FormulaConfigSchema,
   rollup: RollupConfigSchema,
   ai: AiConfigSchema,

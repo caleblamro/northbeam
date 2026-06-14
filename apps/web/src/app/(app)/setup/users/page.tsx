@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/northbeam/empty-state';
 import { Field } from '@/components/northbeam/field';
 import { Avatar } from '@/components/northbeam/primitives';
 import { SectionCard } from '@/components/northbeam/section-card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -48,6 +49,7 @@ import { trpc } from '@/lib/api';
 // can't bundle for the browser.
 import { ROLES, ROLE_LABELS, type Role } from '@northbeam/core/roles';
 import { Loader2, Mail, MoreHorizontal, ShieldAlert, UserPlus, Users } from 'lucide-react';
+// Users icon stays — used by the empty state below.
 import { useState } from 'react';
 
 const INVITABLE_ROLES: Role[] = ['admin', 'member', 'viewer'];
@@ -72,7 +74,6 @@ export default function UsersSetupPage() {
   return (
     <>
       <SectionCard
-        icon={Users}
         title="Members"
         action={<InviteButton onInvited={() => utils.org.members.invalidate()} />}
         padding="none"
@@ -100,7 +101,7 @@ export default function UsersSetupPage() {
                     <div className="flex items-center gap-3">
                       <Avatar name={m.name || m.email} className="size-8" />
                       <div className="min-w-0">
-                        <div className="font-semibold text-foreground">{m.name || m.email}</div>
+                        <div className="font-medium text-foreground">{m.name || m.email}</div>
                         <div className="text-muted-foreground text-xs">{m.email}</div>
                       </div>
                     </div>
@@ -142,28 +143,29 @@ export default function UsersSetupPage() {
 
         {data && data.invitations.length > 0 && (
           <div className="border-t px-5 py-4">
-            <div className="mb-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+            <div className="mb-3 font-medium text-muted-foreground text-[0.6875rem] uppercase tracking-wider">
               Pending invitations
             </div>
-            {data.invitations.map((inv) => (
-              <div key={inv.id} className="flex items-center gap-3 py-1.5 text-sm">
-                <Mail className="size-4 text-muted-foreground" />
-                <span>{inv.email}</span>
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs capitalize">
-                  {inv.role}
-                </span>
-                <span className="ml-auto">
+            <div className="flex flex-col gap-1">
+              {data.invitations.map((inv) => (
+                <div key={inv.id} className="flex items-center gap-3 py-1.5 text-sm">
+                  <Mail className="size-4 text-muted-foreground" />
+                  <span className="text-foreground">{inv.email}</span>
+                  <Badge tone="neutral" size="sm" className="capitalize">
+                    {inv.role}
+                  </Badge>
                   <Button
                     variant="ghost"
                     size="sm"
+                    className="ml-auto"
                     disabled={cancelInvite.isPending}
                     onClick={() => cancelInvite.mutate({ invitationId: inv.id })}
                   >
                     Cancel
                   </Button>
-                </span>
-              </div>
-            ))}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </SectionCard>

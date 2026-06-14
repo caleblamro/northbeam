@@ -36,6 +36,13 @@ export const FIELD_TYPES = [
   // ── Date & boolean ──────────────────────────────────────────────────────
   { id: 'date', label: 'Date', icon: 'calendar-blank', group: 'Date & time', storage: 'date' },
   { id: 'datetime', label: 'Date / time', icon: 'clock', group: 'Date & time', storage: 'date' },
+  {
+    id: 'duration',
+    label: 'Duration',
+    icon: 'timer',
+    group: 'Date & time',
+    storage: 'number',
+  },
   { id: 'checkbox', label: 'Checkbox', icon: 'check-square', group: 'Choice', storage: 'bool' },
   // ── Choice ──────────────────────────────────────────────────────────────
   {
@@ -59,6 +66,14 @@ export const FIELD_TYPES = [
     icon: 'arrow-bend-up-right',
     group: 'Relationship',
     storage: 'ref',
+  },
+  // ── Structured composite ────────────────────────────────────────────────
+  {
+    id: 'address',
+    label: 'Address',
+    icon: 'map-pin',
+    group: 'Structured',
+    storage: 'json',
   },
   // ── Advanced / derived (read-only) ───────────────────────────────────────
   //
@@ -164,6 +179,39 @@ export type CurrencyFieldConfig = NumberFieldConfig & {
 /** date | datetime */
 export type DateFieldConfig = BaseFieldConfig;
 
+/** duration — stored as integer minutes (bigint). The UI accepts loose text
+ *  ("1h3m", "90m", "1.5h", "2:30") and writes the canonical minute value. */
+export type DurationFieldConfig = BaseFieldConfig & {
+  /** Cap on the input value (in minutes). Off by default. */
+  maxMinutes?: number;
+};
+
+/** address — stored as JSONB matching the AddressValue shape:
+ *    { line1, line2, city, region, postal_code, country,
+ *      formatted, coordinates: {lat, lng}, mapbox_id }
+ *  All keys optional so partial / manually-entered values round-trip cleanly. */
+export type AddressFieldConfig = BaseFieldConfig & {
+  /** Limit the autocomplete to one or more ISO 3166-1 alpha-2 country codes. */
+  countries?: string[];
+  /** Override the workspace default — useful for a "shipping" vs "billing"
+   *  field on the same object where the rules differ. */
+  requireCoordinates?: boolean;
+};
+
+/** AddressValue — the JSONB row stored for an `address` field. Mirrors the
+ *  shape returned by Mapbox Search Box retrieve, normalized + flattened. */
+export type AddressValue = {
+  line1?: string;
+  line2?: string;
+  city?: string;
+  region?: string;
+  postal_code?: string;
+  country?: string;
+  formatted?: string;
+  coordinates?: { lat: number; lng: number };
+  mapbox_id?: string;
+};
+
 /** checkbox */
 export type CheckboxFieldConfig = BaseFieldConfig;
 
@@ -217,10 +265,12 @@ export type FieldConfigForType = {
   autonumber: NumberFieldConfig;
   date: DateFieldConfig;
   datetime: DateFieldConfig;
+  duration: DurationFieldConfig;
   checkbox: CheckboxFieldConfig;
   picklist: PicklistFieldConfig;
   multipicklist: PicklistFieldConfig;
   reference: ReferenceFieldConfig;
+  address: AddressFieldConfig;
   formula: FormulaFieldConfig;
   rollup: RollupFieldConfig;
   ai: AiFieldConfig;
@@ -235,6 +285,8 @@ export type FieldConfig = TextFieldConfig &
   CurrencyFieldConfig &
   PicklistFieldConfig &
   ReferenceFieldConfig &
+  DurationFieldConfig &
+  AddressFieldConfig &
   FormulaFieldConfig &
   RollupFieldConfig &
   AiFieldConfig;
@@ -278,7 +330,7 @@ export const SF_TYPE_MAP: Record<string, FieldType> = {
   reference: 'reference',
   id: 'text',
   formula: 'formula',
-  address: 'textarea',
+  address: 'address',
   combobox: 'picklist',
   encryptedstring: 'text',
   time: 'text',
@@ -295,6 +347,49 @@ export const SF_TYPE_MAP: Record<string, FieldType> = {
 export function mapSalesforceType(sfType: string): { type: FieldType; confident: boolean } {
   const t = SF_TYPE_MAP[sfType.toLowerCase()];
   return t ? { type: t, confident: true } : { type: 'text', confident: false };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Duration helpers — parser/formatter for the `duration` field type. Lives
+   here (and not in dynamic/pgtypes) so the web app can import via the public
+   `@northbeam/db/field-types` subpath without pulling in drizzle / pg.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/** Parse loose duration text into integer minutes. Accepts:
+ *    "1h3m", "1h 3m", "1.5h", "90m", "2:30" (h:m), "150" (raw minutes),
+ *    "2 hours 30 minutes". Returns null when nothing parses. */
+export function parseDurationMinutes(input: string): number | null {
+  const s = input.trim().toLowerCase();
+  if (!s) return null;
+
+  const colon = s.match(/^(\d+):([0-5]?\d)$/);
+  if (colon && colon[1] && colon[2]) {
+    return Number(colon[1]) * 60 + Number(colon[2]);
+  }
+
+  const hMatch = s.match(/(\d+(?:\.\d+)?)\s*(?:h(?:ours?|rs?)?|hr)/);
+  const mMatch = s.match(/(\d+(?:\.\d+)?)\s*(?:m(?:in(?:utes?)?)?)/);
+  if (hMatch || mMatch) {
+    const h = hMatch?.[1] ? Number(hMatch[1]) : 0;
+    const m = mMatch?.[1] ? Number(mMatch[1]) : 0;
+    const total = h * 60 + m;
+    return Number.isFinite(total) ? total : null;
+  }
+
+  const bare = Number(s);
+  if (Number.isFinite(bare)) return Math.round(bare);
+
+  return null;
+}
+
+/** Format integer minutes as "1h 30m" / "1h" / "30m". Returns "" for 0/null. */
+export function formatDurationMinutes(minutes: number | null | undefined): string {
+  if (minutes == null || !Number.isFinite(minutes) || minutes <= 0) return '';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────

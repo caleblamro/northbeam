@@ -35,13 +35,13 @@
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  background: linear-gradient(150deg, var(--brand), color-mix(in srgb, var(--brand) 50%, #12cabc));
+  background: var(--brand);
   display: grid;
   place-items: center;
-  color: #fff;
-  font-weight: var(--fw-bold);
-  font-size: 17px;
-  box-shadow: var(--shadow-sm);
+  color: var(--brand-contrast);
+  font-weight: var(--fw-semibold);
+  font-size: 15px;
+  letter-spacing: -0.02em;
 }
 .toc__brand-name {
   font-weight: var(--fw-semibold);

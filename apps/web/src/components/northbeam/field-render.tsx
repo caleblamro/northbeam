@@ -22,10 +22,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { FieldConfig, FieldType } from '@northbeam/db/field-types';
-import { Calendar, Check, Clock, Link as LinkIcon } from 'lucide-react';
+import {
+  type AddressValue,
+  type FieldConfig,
+  type FieldType,
+  formatDurationMinutes,
+} from '@northbeam/db/field-types';
+import { Check, Link as LinkIcon, MapPin } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { AddressInput, formatAddressOneLine } from './address-input';
 import { COMMON_CURRENCIES } from './currency-combobox';
+import { DatePicker, formatLongDate } from './date-picker';
+import { DateTimePicker } from './date-time-picker';
+import { DurationInput } from './duration-input';
 import { Icon } from './icons';
 import { Combobox, type Option } from './select-legacy';
 
@@ -191,34 +200,35 @@ export function FieldInput({
       );
     case 'date':
       return (
-        <InputGroup>
-          <InputGroupAddon>
-            <Calendar />
-          </InputGroupAddon>
-          <MaskInput
-            mask="date"
-            asChild
-            value={str}
-            placeholder={cfg.placeholder ?? 'MM/DD/YYYY'}
-            onValueChange={(masked) => onChange(masked)}
-          >
-            <InputGroupInput />
-          </MaskInput>
-        </InputGroup>
+        <DatePicker
+          value={typeof value === 'string' ? value : null}
+          onChange={onChange}
+          placeholder={cfg.placeholder ?? 'Pick a date'}
+        />
       );
     case 'datetime':
       return (
-        <InputGroup>
-          <InputGroupAddon>
-            <Clock />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="text"
-            placeholder={cfg.placeholder ?? 'MM/DD/YYYY HH:MM'}
-            value={str}
-            onChange={(e) => onChange(e.target.value)}
-          />
-        </InputGroup>
+        <DateTimePicker
+          value={typeof value === 'string' ? value : null}
+          onChange={onChange}
+          placeholder={cfg.placeholder ?? 'Pick a date'}
+        />
+      );
+    case 'duration':
+      return (
+        <DurationInput
+          value={typeof value === 'number' ? value : value == null ? null : Number(value)}
+          onChange={onChange}
+          placeholder={cfg.placeholder ?? 'e.g. 1h 30m'}
+        />
+      );
+    case 'address':
+      return (
+        <AddressInput
+          value={(value ?? null) as AddressValue | null}
+          onChange={onChange}
+          countries={cfg.countries}
+        />
       );
     case 'checkbox':
       return (
@@ -385,6 +395,55 @@ export function FieldValue({
     }
     case 'reference':
       return <span>{referenceLabel ?? String(value)}</span>;
+    case 'date':
+      return <span className="tabular-nums">{formatLongDate(String(value))}</span>;
+    case 'datetime': {
+      const d = new Date(String(value));
+      if (Number.isNaN(d.getTime())) return <span>{String(value)}</span>;
+      return (
+        <span className="tabular-nums">
+          {d.toLocaleString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+          })}
+        </span>
+      );
+    }
+    case 'duration': {
+      const n = typeof value === 'number' ? value : Number(value);
+      return (
+        <span className="tabular-nums">
+          {formatDurationMinutes(Number.isFinite(n) ? n : null) || '—'}
+        </span>
+      );
+    }
+    case 'address': {
+      const v = value as AddressValue;
+      const line = formatAddressOneLine(v);
+      const lat = v.coordinates?.lat;
+      const lng = v.coordinates?.lng;
+      return (
+        <span className="inline-flex items-start gap-1.5">
+          <MapPin className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0">
+            {line || '—'}
+            {lat != null && lng != null && (
+              <a
+                href={`https://www.google.com/maps?q=${lat},${lng}`}
+                target="_blank"
+                rel="noreferrer"
+                className="ml-2 text-primary text-xs"
+              >
+                map
+              </a>
+            )}
+          </span>
+        </span>
+      );
+    }
     default:
       return <span>{String(value)}</span>;
   }

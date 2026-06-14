@@ -66,18 +66,18 @@ export default function CreateOrgPage() {
   if (boot.isLoading || !boot.data || !boot.data.session || boot.data.activeOrg) {
     return (
       <div className="flex items-center justify-center gap-3">
-        <Loader2 className="size-5 animate-spin text-primary" />
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
     <form onSubmit={handleSubmit}>
-      <h1 className="mb-2 font-semibold text-2xl tracking-tight">Create your workspace</h1>
-      <p className="mb-5 text-muted-foreground leading-relaxed">
+      <h1 className="mb-2 font-medium text-2xl tracking-[-0.02em]">Create your workspace</h1>
+      <p className="mb-6 text-muted-foreground leading-relaxed">
         This is where your contacts, accounts, and deals live. You can invite teammates later.
       </p>
-      <div className="flex flex-col gap-3.5">
+      <div className="flex flex-col gap-4">
         <Field label="Workspace name" required htmlFor="org-name">
           <InputGroup>
             <InputGroupAddon>

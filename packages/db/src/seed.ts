@@ -232,18 +232,20 @@ export const STANDARD_OBJECTS: SeedObject[] = [
           description: 'Use this when this account rolls up to a holding company or parent org.',
         },
       },
-      // Billing address
-      { key: 'billing_street', label: 'Billing street', type: 'text', config: { placeholder: '500 Howard St' } },
-      { key: 'billing_city', label: 'Billing city', type: 'text', config: { placeholder: 'San Francisco' } },
-      { key: 'billing_state', label: 'Billing state / province', type: 'text', config: { placeholder: 'CA' } },
-      { key: 'billing_postal_code', label: 'Billing postal code', type: 'text', config: { placeholder: '94105' } },
-      { key: 'billing_country', label: 'Billing country', type: 'text', config: { placeholder: 'United States' } },
-      // Shipping address
-      { key: 'shipping_street', label: 'Shipping street', type: 'text' },
-      { key: 'shipping_city', label: 'Shipping city', type: 'text' },
-      { key: 'shipping_state', label: 'Shipping state / province', type: 'text' },
-      { key: 'shipping_postal_code', label: 'Shipping postal code', type: 'text' },
-      { key: 'shipping_country', label: 'Shipping country', type: 'text' },
+      // Billing + shipping addresses — single structured fields, not five
+      // text columns each. Mapbox autocomplete + manual entry on the input;
+      // JSONB on disk.
+      {
+        key: 'billing_address',
+        label: 'Billing address',
+        type: 'address',
+        config: { description: 'Where invoices and renewals are sent.' },
+      },
+      {
+        key: 'shipping_address',
+        label: 'Shipping address',
+        type: 'address',
+      },
       {
         key: 'description',
         label: 'Description',
@@ -272,18 +274,8 @@ export const STANDARD_OBJECTS: SeedObject[] = [
           fields: ['employees', 'annual_revenue', 'phone', 'fax', 'ticker_symbol', 'account_number'],
         },
         { id: 'hierarchy', label: 'Hierarchy', cols: 1, fields: ['parent_account'] },
-        {
-          id: 'billing',
-          label: 'Billing address',
-          cols: 2,
-          fields: ['billing_street', 'billing_city', 'billing_state', 'billing_postal_code', 'billing_country'],
-        },
-        {
-          id: 'shipping',
-          label: 'Shipping address',
-          cols: 2,
-          fields: ['shipping_street', 'shipping_city', 'shipping_state', 'shipping_postal_code', 'shipping_country'],
-        },
+        { id: 'billing', label: 'Billing address', cols: 1, fields: ['billing_address'] },
+        { id: 'shipping', label: 'Shipping address', cols: 1, fields: ['shipping_address'] },
         { id: 'notes', label: 'Description', cols: 1, fields: ['description'] },
       ],
     },
@@ -388,18 +380,14 @@ export const STANDARD_OBJECTS: SeedObject[] = [
           options: LEAD_SOURCE_OPTIONS,
         },
       },
-      // Mailing address
-      { key: 'mailing_street', label: 'Mailing street', type: 'text' },
-      { key: 'mailing_city', label: 'Mailing city', type: 'text' },
-      { key: 'mailing_state', label: 'Mailing state / province', type: 'text' },
-      { key: 'mailing_postal_code', label: 'Mailing postal code', type: 'text' },
-      { key: 'mailing_country', label: 'Mailing country', type: 'text' },
-      // Other address (assistant / home etc.)
-      { key: 'other_street', label: 'Other street', type: 'text' },
-      { key: 'other_city', label: 'Other city', type: 'text' },
-      { key: 'other_state', label: 'Other state / province', type: 'text' },
-      { key: 'other_postal_code', label: 'Other postal code', type: 'text' },
-      { key: 'other_country', label: 'Other country', type: 'text' },
+      // Mailing + other addresses — single structured fields.
+      { key: 'mailing_address', label: 'Mailing address', type: 'address' },
+      {
+        key: 'other_address',
+        label: 'Other address',
+        type: 'address',
+        config: { description: 'Home, assistant, or any secondary address.' },
+      },
       {
         key: 'do_not_call',
         label: 'Do not call',
@@ -443,18 +431,8 @@ export const STANDARD_OBJECTS: SeedObject[] = [
           cols: 2,
           fields: ['email', 'phone', 'mobile_phone', 'fax', 'birthdate'],
         },
-        {
-          id: 'mailing',
-          label: 'Mailing address',
-          cols: 2,
-          fields: ['mailing_street', 'mailing_city', 'mailing_state', 'mailing_postal_code', 'mailing_country'],
-        },
-        {
-          id: 'other_address',
-          label: 'Other address',
-          cols: 2,
-          fields: ['other_street', 'other_city', 'other_state', 'other_postal_code', 'other_country'],
-        },
+        { id: 'mailing', label: 'Mailing address', cols: 1, fields: ['mailing_address'] },
+        { id: 'other_address', label: 'Other address', cols: 1, fields: ['other_address'] },
         {
           id: 'preferences',
           label: 'Communication preferences',
@@ -719,12 +697,12 @@ export const STANDARD_OBJECTS: SeedObject[] = [
         config: { helpText: 'Notify the owner at this time.' },
       },
       {
-        key: 'duration_minutes',
+        key: 'duration',
         label: 'Duration',
-        type: 'number',
+        type: 'duration',
         config: {
-          placeholder: '30',
-          helpText: 'Length in minutes (for calls + meetings).',
+          placeholder: '1h 30m',
+          helpText: 'Length of the call / meeting. Type "1h3m" or "90m".',
         },
       },
       {
@@ -756,7 +734,7 @@ export const STANDARD_OBJECTS: SeedObject[] = [
           id: 'timing',
           label: 'Timing',
           cols: 2,
-          fields: ['due_date', 'reminder', 'duration_minutes'],
+          fields: ['due_date', 'reminder', 'duration'],
         },
         { id: 'body', label: 'Notes', cols: 1, fields: ['notes'] },
       ],

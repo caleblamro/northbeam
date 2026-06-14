@@ -1,5 +1,32 @@
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { NextConfig } from 'next';
+
+// Load the workspace-root .env.local before Next does its own env discovery —
+// the repo convention is one shared env file at the monorepo root (the db
+// scripts already read it via `dotenv -e ../../.env.local`), so duplicating
+// it inside apps/web would just drift. Anything already set in process.env
+// wins, so apps/web/.env.local (if present) still takes priority.
+function loadRootEnv() {
+  try {
+    const file = readFileSync(
+      path.join(import.meta.dirname, '..', '..', '.env.local'),
+      'utf8',
+    );
+    for (const raw of file.split('\n')) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+      if (!m || !m[1]) continue;
+      if (process.env[m[1]] !== undefined) continue;
+      const value = (m[2] ?? '').replace(/^["']|["']$/g, '');
+      process.env[m[1]] = value;
+    }
+  } catch {
+    // Missing root file — fine, devs may keep envs inside apps/web/.
+  }
+}
+loadRootEnv();
 
 // Host redirects. Mirrors BRAND.url / BRAND.redirectFrom — inlined because
 // next.config.ts compiles in an isolated step that doesn't honor

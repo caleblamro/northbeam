@@ -22,7 +22,7 @@ import { Icon } from './icons';
 import { Popover } from './primitives';
 
 const ACCENT_HEX: Record<Accent, string> = {
-  indigo: '#635bff',
+  indigo: '#4f46e5',
   iris: '#4f46e5',
   sky: '#0284c7',
   emerald: '#0e9f6e',

@@ -25,8 +25,8 @@ export default function VerifyPage() {
   }, [boot.data, router]);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--ink-secondary)' }}>
-      <Spinner style={{ color: 'var(--brand)' }} />
+    <div className="flex items-center gap-3 text-muted-foreground text-sm">
+      <Spinner style={{ color: 'var(--ink-muted)' }} />
       Signing you in…
     </div>
   );

@@ -7,6 +7,7 @@
 // table, and the static map becomes the seed for the default policy.
 
 import { SectionCard } from '@/components/northbeam/section-card';
+import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/cn';
 // Import from the /roles subpath, not the barrel — the barrel pulls
@@ -20,7 +21,7 @@ import {
   type Role,
   can,
 } from '@northbeam/core/roles';
-import { Check, Info, Minus, ShieldCheck } from 'lucide-react';
+import { Check, Info, Minus } from 'lucide-react';
 
 export default function PermissionsSetupPage() {
   return (
@@ -36,7 +37,7 @@ export default function PermissionsSetupPage() {
         </div>
       </div>
 
-      <SectionCard icon={ShieldCheck} title="Roles">
+      <SectionCard title="Roles">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {ROLES.map((r) => (
             <RoleCard key={r} role={r} />
@@ -45,7 +46,6 @@ export default function PermissionsSetupPage() {
       </SectionCard>
 
       <SectionCard
-        icon={ShieldCheck}
         title="Permission matrix"
         action={
           <span className="text-muted-foreground text-xs">
@@ -58,13 +58,13 @@ export default function PermissionsSetupPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
-                <th className="px-4 py-2.5 text-left font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-[0.6875rem] uppercase tracking-wider">
                   Action
                 </th>
                 {ROLES.map((r) => (
                   <th
                     key={r}
-                    className="w-24 px-3 py-2.5 text-center font-semibold text-muted-foreground text-xs uppercase tracking-wider"
+                    className="w-24 px-3 py-2.5 text-center font-medium text-muted-foreground text-[0.6875rem] uppercase tracking-wider"
                   >
                     {ROLE_LABELS[r]}
                   </th>
@@ -85,16 +85,16 @@ export default function PermissionsSetupPage() {
 
 function RoleCard({ role }: { role: Role }) {
   return (
-    <div className="rounded-md border bg-card p-3.5">
-      <div className="flex items-center gap-1.5">
-        <span className="font-semibold text-foreground text-sm">{ROLE_LABELS[role]}</span>
+    <div className="rounded-md border bg-card p-4">
+      <div className="flex items-center gap-2">
+        <span className="font-medium text-foreground text-sm">{ROLE_LABELS[role]}</span>
         {role === 'owner' && (
-          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-[10px] text-primary uppercase tracking-wider">
+          <Badge tone="accent" size="sm">
             Singleton
-          </span>
+          </Badge>
         )}
       </div>
-      <p className="mt-1 text-muted-foreground text-xs leading-relaxed">
+      <p className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
         {ROLE_DESCRIPTIONS[role]}
       </p>
     </div>
@@ -111,7 +111,7 @@ function PermissionGroupRows({
       <tr className="border-b bg-muted/20">
         <td
           colSpan={1 + ROLES.length}
-          className="px-4 py-1.5 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider"
+          className="px-4 py-1.5 font-medium text-[0.6875rem] text-muted-foreground uppercase tracking-wider"
         >
           {group.label}
         </td>
@@ -153,10 +153,8 @@ function PermissionCell({ allowed }: { allowed: boolean }) {
   return (
     <span
       className={cn(
-        'inline-flex size-6 items-center justify-center rounded-md',
-        allowed
-          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-          : 'text-muted-foreground/40',
+        'inline-flex size-6 items-center justify-center',
+        allowed ? 'text-foreground' : 'text-muted-foreground/30',
       )}
       aria-label={allowed ? 'Allowed' : 'Not allowed'}
     >

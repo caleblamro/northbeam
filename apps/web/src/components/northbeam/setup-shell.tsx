@@ -68,12 +68,12 @@ export function SetupShell({ children }: { children: ReactNode }) {
                   key={it.href}
                   href={it.href}
                   data-active={active ? 'true' : undefined}
-                  className="group flex items-center gap-2.5 rounded-md px-2.5 py-2 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground data-[active=true]:bg-primary/10 data-[active=true]:text-primary"
+                  className="group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground"
                 >
-                  <Icon className="size-4" />
+                  <Icon className="size-3.5" />
                   <span className="flex-1">{it.label}</span>
                   {it.soon && (
-                    <span className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground uppercase tracking-wider group-data-[active=true]:bg-primary/20 group-data-[active=true]:text-primary">
+                    <span className="rounded-full bg-muted px-1.5 py-0.5 font-medium text-[9px] text-muted-foreground uppercase tracking-wider group-data-[active=true]:bg-background">
                       Soon
                     </span>
                   )}

@@ -1,9 +1,10 @@
 'use client';
 
 import { SectionCard } from '@/components/northbeam/section-card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/api';
-import { ArrowRight, CheckCircle2, CloudUpload, Plug } from 'lucide-react';
+import { ArrowRight, CloudUpload, Plug } from 'lucide-react';
 import Link from 'next/link';
 
 export default function IntegrationsSetupPage() {
@@ -11,7 +12,7 @@ export default function IntegrationsSetupPage() {
   const connected = status.data?.connected ?? false;
 
   return (
-    <SectionCard icon={Plug} title="Integrations">
+    <SectionCard title="Integrations">
       <div className="divide-y rounded-md border bg-card">
         <IntegrationRow
           icon={CloudUpload}
@@ -54,10 +55,9 @@ function IntegrationRow({
         <div className="flex items-center gap-2">
           <div className="font-semibold text-foreground text-sm">{name}</div>
           {status === 'connected' && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 font-medium text-[10px] text-emerald-600 uppercase tracking-wider dark:text-emerald-400">
-              <CheckCircle2 className="size-3" />
+            <Badge tone="success" size="sm">
               Connected
-            </span>
+            </Badge>
           )}
         </div>
         <div className="text-muted-foreground text-xs">{body}</div>

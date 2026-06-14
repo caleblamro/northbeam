@@ -7,7 +7,10 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card"
       className={cn(
-        "flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm",
+        // Stripe-inspired: rounded-xl corners, hairline border, very subtle shadow.
+        // Interactive cards should add `transition-shadow hover:shadow-sm` or
+        // `transition-colors hover:bg-muted/40`.
+        "flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-xs",
         className,
       )}
       {...props}
@@ -32,7 +35,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("font-semibold leading-none", className)}
+      className={cn("font-medium leading-none tracking-[-0.01em]", className)}
       {...props}
     />
   );

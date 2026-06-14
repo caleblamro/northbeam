@@ -5,7 +5,7 @@ import { SectionCard } from '@/components/northbeam/section-card';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { trpc } from '@/lib/api';
-import { Building2, Loader2, Settings as SettingsIcon } from 'lucide-react';
+import { Building2, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export default function WorkspaceSetupPage() {
@@ -30,7 +30,6 @@ export default function WorkspaceSetupPage() {
 
   return (
     <SectionCard
-      icon={SettingsIcon}
       title="Workspace"
       action={<span className="text-muted-foreground text-xs">Identity & branding</span>}
     >

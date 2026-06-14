@@ -50,12 +50,6 @@ export const LAUNCHER_TILES: NavSection[] = [
   {
     label: 'Setup',
     items: [
-      {
-        label: 'Migrate from Salesforce',
-        href: '/migrate',
-        icon: 'arrows-clockwise',
-        accent: true,
-      },
       { label: 'Setup', href: '/setup', icon: 'gear-six', match: starts('/setup', '/settings') },
     ],
   },

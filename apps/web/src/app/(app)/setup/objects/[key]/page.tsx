@@ -8,7 +8,9 @@
 import { DescriptionList } from '@/components/northbeam/description-list';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import { SectionCard } from '@/components/northbeam/section-card';
+import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { LoadingScreen } from '@/components/ui/loading-screen';
 import {
   Table,
   TableBody,
@@ -19,41 +21,15 @@ import {
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { trpc } from '@/lib/api';
-import { cn } from '@/lib/cn';
-import { type VariantProps, cva } from 'class-variance-authority';
-import {
-  ArrowLeft,
-  Check,
-  Database,
-  Info,
-  Loader2,
-  Minus,
-  Pencil,
-} from 'lucide-react';
+import { ArrowLeft, Check, Database, Info, Minus, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 
-// Color-coded type groups so the field list reads at a glance. Computed types
-// keep their warning tint until the engine ships (issue #17 backlog).
-const typePillVariants = cva(
-  'inline-flex items-center rounded-full px-2 py-0.5 font-medium text-[10px] uppercase tracking-wider',
-  {
-    variants: {
-      tone: {
-        text: 'bg-muted text-muted-foreground',
-        number: 'bg-blue-500/10 text-blue-700 dark:text-blue-300',
-        date: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
-        choice: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
-        relation: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-        computed: 'bg-orange-500/10 text-orange-700 dark:text-orange-300',
-      },
-    },
-    defaultVariants: { tone: 'text' },
-  },
-);
-
-type TypeTone = NonNullable<VariantProps<typeof typePillVariants>['tone']>;
+// Field-type → tone mapping. The tones share a neutral background and only
+// differ in a small color-dot prefix, so the field list reads as a label,
+// not a colored block. Defined in components/ui/badge.tsx.
+type TypeTone = Extract<BadgeTone, 'text' | 'number' | 'date' | 'choice' | 'relation' | 'computed'>;
 
 const TYPE_TONE: Record<string, TypeTone> = {
   text: 'text',
@@ -81,19 +57,11 @@ export default function ObjectDetailPage() {
   const key = params.key;
   const q = trpc.object.get.useQuery({ key });
 
-  if (q.isLoading) {
-    return (
-      <SectionCard icon={Database} title="Loading…">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        </div>
-      </SectionCard>
-    );
-  }
+  if (q.isLoading) return <LoadingScreen size="md" />;
 
   if (!q.data) {
     return (
-      <SectionCard icon={Database} title="Not found">
+      <SectionCard title="Not found">
         <EmptyState
           icon={Database}
           title="Object not found"
@@ -111,12 +79,11 @@ export default function ObjectDetailPage() {
       <Breadcrumb objectLabel={object.label} />
 
       <SectionCard
-        icon={Database}
         title="Properties"
         action={
-          <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground text-xs">
+          <Badge tone={object.isSystem ? 'neutral' : 'brand'}>
             {object.isSystem ? 'Standard' : 'Custom'}
-          </span>
+          </Badge>
         }
       >
         <DescriptionList
@@ -135,16 +102,13 @@ export default function ObjectDetailPage() {
             },
             {
               label: 'Source',
-              value: (
-                <span className="capitalize">{object.source ?? 'native'}</span>
-              ),
+              value: <span className="capitalize">{object.source ?? 'native'}</span>,
             },
           ]}
         />
       </SectionCard>
 
       <SectionCard
-        icon={Database}
         title={`Fields (${fields.length})`}
         action={
           <Button variant="outline" disabled>
@@ -175,13 +139,7 @@ export default function ObjectDetailPage() {
             </TableHeader>
             <TableBody>
               {fields.map((f) => {
-                const cfg = (f.config ?? {}) as {
-                  description?: string;
-                  helpText?: string;
-                  targetObject?: string;
-                  currencyCode?: string;
-                  options?: { value: string; label: string }[];
-                };
+                const cfg = (f.config ?? {});
                 const tone = TYPE_TONE[f.type] ?? 'text';
                 const meta = fieldMeta(f.type, cfg);
                 return (
@@ -215,10 +173,10 @@ export default function ObjectDetailPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className={cn(typePillVariants({ tone }))}>{f.type}</span>
-                        {meta && (
-                          <span className="text-muted-foreground text-xs">{meta}</span>
-                        )}
+                        <Badge tone={tone} size="sm" className="uppercase tracking-wider">
+                          {f.type}
+                        </Badge>
+                        {meta && <span className="text-muted-foreground text-xs">{meta}</span>}
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
@@ -228,12 +186,7 @@ export default function ObjectDetailPage() {
                       <BoolDot value={f.indexed} />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Edit field"
-                        disabled
-                      >
+                      <Button variant="ghost" size="icon-sm" aria-label="Edit field" disabled>
                         <Pencil className="size-3.5" />
                       </Button>
                     </TableCell>

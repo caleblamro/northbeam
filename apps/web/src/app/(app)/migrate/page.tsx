@@ -6,11 +6,12 @@
 
 import { ObjChip } from '@/components/northbeam/app-bits';
 import { EmptyState } from '@/components/northbeam/empty-state';
-import { Spinner } from '@/components/northbeam/primitives';
 import { SectionCard } from '@/components/northbeam/section-card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { LoadingScreen } from '@/components/ui/loading-screen';
 import {
   Table,
   TableBody,
@@ -64,11 +65,7 @@ function ConnectScreen({
   status: string | null;
 }) {
   return (
-    <SectionCard
-      icon={RefreshCw}
-      title="Connect your Salesforce org"
-      className="max-w-2xl"
-    >
+    <SectionCard title="Connect your Salesforce org" className="max-w-2xl">
       <p className="text-muted-foreground text-sm leading-relaxed">
         Northbeam reads your objects, fields, record types, and records through the Salesforce
         API, maps them onto native objects, and imports everything in one run.
@@ -79,17 +76,17 @@ function ConnectScreen({
         </p>
       )}
       {oauthConfigured ? (
-        <a href={`${API_URL}/api/salesforce/oauth/start`} className="mt-4 inline-block">
+        <a href={`${API_URL}/api/salesforce/oauth/start`} className="mt-5 inline-block">
           <Button>
             <RefreshCw />
             Connect Salesforce
           </Button>
         </a>
       ) : (
-        <div className="mt-4 rounded-md bg-muted px-3.5 py-3 text-sm text-secondary-foreground">
-          <span className="font-semibold">Dev setup:</span> no Connected App configured. Seed a
+        <div className="mt-5 rounded-md border border-border bg-muted/40 px-4 py-3 text-foreground text-sm">
+          <span className="font-medium">Dev setup:</span> no Connected App configured. Seed a
           connection from your sf CLI session instead:
-          <pre className="mt-2 font-mono text-xs">
+          <pre className="mt-2 font-mono text-muted-foreground text-xs">
             pnpm --filter @northbeam/api sf:dev-connect &lt;orgId&gt; testOrg
           </pre>
         </div>
@@ -159,12 +156,12 @@ function DiscoverScreen({ onCreated }: { onCreated: (runId: string) => void }) {
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <Checkbox checked={picked.has(o.name)} onCheckedChange={() => toggle(o.name)} />
                 </TableCell>
-                <TableCell className="font-semibold text-foreground">{o.labelPlural}</TableCell>
+                <TableCell className="font-medium text-foreground">{o.labelPlural}</TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">{o.name}</TableCell>
                 <TableCell>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+                  <Badge tone={o.standardTarget ? 'relation' : 'neutral'} size="sm">
                     {o.standardTarget ? `→ ${o.standardTarget}` : 'new object'}
-                  </span>
+                  </Badge>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {o.count?.toLocaleString() ?? '—'}
@@ -197,7 +194,10 @@ function RunScreen({ runId, onStartOver }: { runId: string; onStartOver: () => v
 
   if (r.status === 'running') {
     return (
-      <SectionCard icon={Loader2} title={`Importing${stats.currentObject ? ` — ${stats.currentObject}` : '…'}`} className="max-w-3xl">
+      <SectionCard
+        title={`Importing${stats.currentObject ? ` — ${stats.currentObject}` : '…'}`}
+        className="max-w-3xl"
+      >
         <StatsRow stats={stats} />
       </SectionCard>
     );
@@ -206,7 +206,6 @@ function RunScreen({ runId, onStartOver }: { runId: string; onStartOver: () => v
   if (r.status === 'completed' || r.status === 'failed') {
     return (
       <SectionCard
-        icon={r.status === 'completed' ? RefreshCw : AlertCircle}
         title={r.status === 'completed' ? 'Migration complete' : 'Migration failed'}
         className="max-w-3xl"
       >
@@ -324,20 +323,24 @@ function ObjectMappingCard({
     <Card className="gap-0 overflow-hidden py-0">
       <button
         type="button"
-        className="flex w-full items-center gap-3 border-b bg-muted/40 px-5 py-3 text-left"
+        className="flex w-full items-center gap-3 border-b bg-muted/40 px-5 py-3 text-left transition-colors hover:bg-muted/60"
         onClick={() => setOpen((v) => !v)}
       >
         <ObjChip label={o.sfLabel ?? o.sfObject} size={22} />
-        <span className="font-semibold text-foreground text-sm">
+        <span className="font-medium text-foreground text-sm">
           {o.sfObject} → {meta.targetKey ?? '?'}
         </span>
-        <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+        <Badge tone="neutral" size="sm">
           {o.recordCount.toLocaleString()} records
-        </span>
-        <span className="ml-auto text-muted-foreground text-xs">
+        </Badge>
+        <span className="ml-auto text-muted-foreground text-xs tabular-nums">
           {counts.mapped} mapped · {counts.review} review · {counts.skip} skip
         </span>
-        {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+        {open ? (
+          <ChevronUp className="size-4 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="size-4 text-muted-foreground" />
+        )}
       </button>
       {open && (
         <div className="max-h-[420px] overflow-auto">
@@ -363,7 +366,9 @@ function ObjectMappingCard({
                   <TableRow key={f.id}>
                     <TableCell className="font-mono text-xs">{f.sfField}</TableCell>
                     <TableCell>
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs">{f.sfType}</span>
+                      <Badge tone="neutral" size="sm">
+                        {f.sfType}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       {f.status === 'skip' ? (
@@ -411,13 +416,13 @@ function StatsRow({ stats }: { stats: Record<string, unknown> }) {
     ['References linked', stats.refsResolved],
   ];
   return (
-    <div className="flex flex-wrap gap-6">
+    <div className="flex flex-wrap gap-x-8 gap-y-4">
       {items.map(([label, v]) => (
         <div key={label}>
-          <div className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+          <div className="font-medium text-[0.6875rem] text-muted-foreground uppercase tracking-[0.14em]">
             {label}
           </div>
-          <div className="font-semibold text-lg tabular-nums">
+          <div className="mt-1 font-medium text-foreground text-xl tabular-nums tracking-[-0.02em]">
             {typeof v === 'number' ? v.toLocaleString() : '—'}
           </div>
         </div>
@@ -427,9 +432,10 @@ function StatsRow({ stats }: { stats: Record<string, unknown> }) {
 }
 
 function Centered({ spinner, label }: { spinner?: boolean; label?: string }) {
+  if (spinner && !label) return <LoadingScreen size="lg" />;
   return (
-    <div className="grid place-items-center gap-2.5 p-16 text-center">
-      {spinner && <Spinner style={{ color: 'var(--brand)' }} />}
+    <div className="grid place-items-center gap-3 p-16 text-center">
+      {spinner && <Loader2 className="size-5 animate-spin text-muted-foreground" />}
       {label && <span className="text-muted-foreground text-sm">{label}</span>}
     </div>
   );
