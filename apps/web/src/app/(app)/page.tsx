@@ -89,10 +89,10 @@ export default function HomePage() {
             ) : (
               <>
                 <div className="font-semibold text-2xl tabular-nums tracking-tight">
-                  {fmtMoney(summary.data!.pipelineValue)}
+                  {fmtMoney(summary.data.pipelineValue)}
                 </div>
                 <p className="mt-1 text-muted-foreground text-sm">
-                  Across {counts!.deals} open deals.
+                  Across {counts?.deals} open deals.
                 </p>
                 <Button variant="link" className="mt-2 h-auto p-0">
                   View pipeline
@@ -113,17 +113,17 @@ export default function HomePage() {
                 items={[
                   {
                     label: 'Accounts',
-                    value: counts!.accounts.toLocaleString(),
+                    value: counts?.accounts.toLocaleString(),
                     valueClassName: 'tabular-nums',
                   },
                   {
                     label: 'Contacts',
-                    value: counts!.contacts.toLocaleString(),
+                    value: counts?.contacts.toLocaleString(),
                     valueClassName: 'tabular-nums',
                   },
                   {
                     label: 'Deals',
-                    value: counts!.deals.toLocaleString(),
+                    value: counts?.deals.toLocaleString(),
                     valueClassName: 'tabular-nums',
                   },
                 ]}

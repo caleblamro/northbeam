@@ -57,7 +57,7 @@ export default function TasksPage() {
         }
       />
 
-      <Card className="overflow-hidden">
+      <Card className="gap-0 overflow-hidden py-0">
         {list.isLoading && (
           <div className="grid place-items-center p-10">
             <Spinner style={{ color: 'var(--brand)' }} />

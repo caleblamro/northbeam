@@ -12,7 +12,12 @@ const config: NextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error'] } : false,
   },
-  transpilePackages: ['@northbeam/config', '@northbeam/core'],
+  // @northbeam/db is in here so client components can transitively reach the
+  // `/roles` subpath (re-exported through @northbeam/core's PERMISSION_GROUPS
+  // / ROLE_LABELS). That subpath is a tiny pure-TS file with no drizzle / pg
+  // dependencies, so adding the package here doesn't drag the ORM into the
+  // browser bundle — tree-shaking drops anything not actually imported.
+  transpilePackages: ['@northbeam/config', '@northbeam/core', '@northbeam/db'],
   typedRoutes: false,
   // Workspace packages use NodeNext-style `.js` imports against `.ts` source.
   turbopack: {

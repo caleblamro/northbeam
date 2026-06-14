@@ -248,8 +248,16 @@ export async function resolveRefLabels(
     );
     if (!target) continue;
     const tbl = sql.raw(qualified(orgId, target.object.tableName));
+    // `where id = any($1::uuid[])` looks right but drizzle interpolates the JS
+    // array as a single scalar param, so PG sees `any($1::uuid[])` with $1 = a
+    // single uuid string and rejects it. Expand into `in (v1, v2, …)` with one
+    // bound param per id — same shape sumField uses.
+    const values = sql.join(
+      ids.map((id) => sql`${id}::uuid`),
+      sql`, `,
+    );
     const res = await db.execute(
-      sql`select ${col(SYS.id)}, ${col(SYS.name)} from ${tbl} where ${col(SYS.id)} = any(${ids}::uuid[])`,
+      sql`select ${col(SYS.id)}, ${col(SYS.name)} from ${tbl} where ${col(SYS.id)} in (${values})`,
     );
     for (const row of asRows(res)) labels[String(row[SYS.id])] = String(row[SYS.name] ?? '');
   }

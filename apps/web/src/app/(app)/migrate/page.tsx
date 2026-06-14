@@ -142,7 +142,7 @@ function DiscoverScreen({ onCreated }: { onCreated: (runId: string) => void }) {
       {createRun.isPending && (
         <Centered spinner label="Describing objects and sampling records — this takes a moment…" />
       )}
-      <Card className="overflow-hidden">
+      <Card className="gap-0 overflow-hidden py-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -321,7 +321,7 @@ function ObjectMappingCard({
   );
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="gap-0 overflow-hidden py-0">
       <button
         type="button"
         className="flex w-full items-center gap-3 border-b bg-muted/40 px-5 py-3 text-left"

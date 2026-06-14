@@ -61,3 +61,103 @@ export type Permission = keyof typeof PERMISSIONS;
 export function can(role: Role, action: Permission): boolean {
   return meetsRole(role, PERMISSIONS[action]);
 }
+
+// Labels + grouping for permissions — drives the Setup → Permissions matrix
+// editor. Keep colocated with PERMISSIONS so any new action has exactly one
+// place to be declared.
+export type PermissionEntry = { key: Permission; label: string; description?: string };
+export type PermissionGroup = { id: string; label: string; permissions: PermissionEntry[] };
+
+export const PERMISSION_GROUPS: PermissionGroup[] = [
+  {
+    id: 'org',
+    label: 'Workspace',
+    permissions: [
+      {
+        key: 'org.settings.update',
+        label: 'Update workspace settings',
+        description: 'Edit org name, slug, and logo.',
+      },
+      {
+        key: 'org.delete',
+        label: 'Delete workspace',
+        description: 'Permanently delete this org and all of its data.',
+      },
+      {
+        key: 'org.transfer',
+        label: 'Transfer ownership',
+        description: 'Hand ownership of the workspace to another member.',
+      },
+      {
+        key: 'org.billing.manage',
+        label: 'Manage billing',
+        description: 'Plans, payment methods, and invoices.',
+      },
+    ],
+  },
+  {
+    id: 'members',
+    label: 'Members',
+    permissions: [
+      { key: 'org.members.invite', label: 'Invite members' },
+      { key: 'org.members.remove', label: 'Remove members' },
+      { key: 'org.members.role', label: 'Change member roles' },
+    ],
+  },
+  {
+    id: 'records',
+    label: 'Records',
+    permissions: [
+      { key: 'contact.read', label: 'Read contacts' },
+      { key: 'contact.write', label: 'Create / edit contacts' },
+      { key: 'contact.delete', label: 'Delete contacts' },
+      { key: 'account.read', label: 'Read accounts' },
+      { key: 'account.write', label: 'Create / edit accounts' },
+      { key: 'account.delete', label: 'Delete accounts' },
+      { key: 'deal.read', label: 'Read deals' },
+      { key: 'deal.write', label: 'Create / edit deals' },
+      { key: 'deal.delete', label: 'Delete deals' },
+    ],
+  },
+  {
+    id: 'migration',
+    label: 'Migration',
+    permissions: [
+      {
+        key: 'migration.run',
+        label: 'Run Salesforce migration',
+        description: 'Map and import Salesforce data into this workspace.',
+      },
+    ],
+  },
+  {
+    id: 'apikey',
+    label: 'API Keys',
+    permissions: [
+      {
+        key: 'apikey.personal.manage',
+        label: 'Manage personal API keys',
+        description: 'Personal access tokens scoped to the caller.',
+      },
+      {
+        key: 'apikey.service.manage',
+        label: 'Manage workspace API keys',
+        description: 'Service-account tokens scoped to the workspace.',
+      },
+    ],
+  },
+];
+
+export const ROLE_LABELS: Record<Role, string> = {
+  owner: 'Owner',
+  admin: 'Admin',
+  member: 'Member',
+  viewer: 'Viewer',
+};
+
+export const ROLE_DESCRIPTIONS: Record<Role, string> = {
+  owner: 'Full access. Exactly one per workspace. Can transfer ownership and delete the workspace.',
+  admin: 'Manage members, settings, and all records. Cannot delete the workspace.',
+  member: 'Create and edit records. Cannot delete records or manage members.',
+  viewer: 'Read-only access to records. Useful for stakeholders and auditors.',
+};

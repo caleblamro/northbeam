@@ -56,7 +56,7 @@ export const LAUNCHER_TILES: NavSection[] = [
         icon: 'arrows-clockwise',
         accent: true,
       },
-      { label: 'Settings', href: '/settings', icon: 'gear-six', match: starts('/settings') },
+      { label: 'Setup', href: '/setup', icon: 'gear-six', match: starts('/setup', '/settings') },
     ],
   },
 ];
@@ -103,7 +103,27 @@ export const PAGE_META: Record<string, PageMeta> = {
     title: 'Migrate from Salesforce',
     subtitle: "One-click import — Northbeam's AI maps your objects and fields.",
   },
-  '/settings': { title: 'Settings', subtitle: 'Manage your workspace, team, and billing.' },
+  '/settings': { title: 'Setup', subtitle: 'Manage your workspace, team, and billing.' },
+  '/setup': { title: 'Setup', subtitle: 'Manage your workspace, team, and billing.' },
+  '/setup/workspace': { title: 'Setup', subtitle: 'Workspace identity and defaults.' },
+  '/setup/billing': { title: 'Setup', subtitle: 'Plan, payment methods, and invoices.' },
+  '/setup/users': { title: 'Setup', subtitle: 'Members, invitations, and roles.' },
+  '/setup/permissions': {
+    title: 'Setup',
+    subtitle: 'What each role can do across the workspace.',
+  },
+  '/setup/objects': {
+    title: 'Setup',
+    subtitle: 'Manage objects, fields, and layouts.',
+  },
+  '/setup/integrations': {
+    title: 'Setup',
+    subtitle: 'Connect Salesforce and other external systems.',
+  },
+  '/setup/audit': {
+    title: 'Setup',
+    subtitle: 'Every action across the workspace, who did it, and when.',
+  },
 };
 
 export function pageMetaFor(pathname: string): PageMeta {

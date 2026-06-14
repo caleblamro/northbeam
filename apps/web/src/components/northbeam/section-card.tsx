@@ -11,7 +11,11 @@ import { type VariantProps, cva } from 'class-variance-authority';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-const sectionCardVariants = cva('gap-0 overflow-hidden', {
+// `py-0` overrides shadcn Card's default `py-6` — SectionCard manages its own
+// vertical rhythm via the header (px-5 py-3) + body (padding variant), so the
+// outer Card padding would just add a dead band above the header and below
+// the content.
+const sectionCardVariants = cva('gap-0 overflow-hidden py-0', {
   variants: {
     elevation: {
       flat: 'shadow-none',
@@ -70,7 +74,11 @@ export function SectionCard({
       {(title || action) && (
         <CardHeader
           className={cn(
-            'flex items-center gap-2 border-b px-5 py-3',
+            // The `[.border-b]:pb-3` mirrors shadcn CardHeader's own
+            // `[.border-b]:pb-6` conditional — without it, the base class wins
+            // for the bottom padding and the header sits with top=12px,
+            // bottom=24px, pushing the title visibly off-center in the row.
+            'flex items-center gap-2 border-b px-5 py-3 [.border-b]:pb-3',
             'has-data-[slot=card-action]:grid-cols-[1fr_auto]',
           )}
         >
