@@ -13,8 +13,8 @@ import { TRPCError } from '@trpc/server';
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { env } from '../../lib/env.js';
+import { enqueueImport } from '../../queue/sf-import.js';
 import { NoConnectionError, clientForOrg, flagIfAuthError } from '../../salesforce/client.js';
-import { executeRun } from '../../salesforce/import.js';
 import { STANDARD_TARGETS, mapSObject } from '../../salesforce/mapper.js';
 import { protectedProcedure, router } from '../trpc.js';
 
@@ -220,7 +220,9 @@ export const salesforceRouter = router({
       return { ok: true as const };
     }),
 
-  /** Kick the import. Runs in the background; poll getRun for progress. */
+  /** Kick the import. Enqueues a BullMQ job; the sf-import worker consumes it
+   *  off-thread. Poll getRun for progress (the worker writes to
+   *  migration_run.stats as it goes). */
   execute: protectedProcedure
     .input(z.object({ runId: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -234,10 +236,12 @@ export const salesforceRouter = router({
       if (run.status === 'running') {
         throw new TRPCError({ code: 'CONFLICT', message: 'run already in progress' });
       }
-      const client = await clientForOrg(ctx.db, orgId).catch((err) => {
+      // Verify the connection still works *before* enqueueing — fail-fast at
+      // request time is a better UX than the worker erroring 30s later.
+      await clientForOrg(ctx.db, orgId).catch((err) => {
         throw asTrpcError(err);
       });
-      void executeRun(ctx.db, client, orgId, input.runId);
+      await enqueueImport({ orgId, runId: input.runId });
       return { ok: true as const };
     }),
 });

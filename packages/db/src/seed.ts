@@ -9,7 +9,7 @@
 // migration maps onto — keep the field types as close to SF as we can.
 
 import { and, eq } from 'drizzle-orm';
-import type { Database } from './client.js';
+import type { DbExecutor } from './client.js';
 import { createObjectTable, ensureSchema } from './dynamic/ddl.js';
 import { fieldColumnName, objectTableName } from './dynamic/identifiers.js';
 import { pgTypeFor } from './dynamic/pgtypes.js';
@@ -31,6 +31,10 @@ type SeedObject = {
   icon: string;
   color: string;
   description: string;
+  /** The field key(s) whose value renders as the record's display name. Pipe-
+   *  separated to join multiple keys (e.g. 'first_name|last_name' for contacts).
+   *  Stored on object_def.name_expression and consumed by displayName(). */
+  nameExpression: string;
   fields: SeedField[];
   layout: ObjectLayout;
 };
@@ -83,6 +87,7 @@ export const STANDARD_OBJECTS: SeedObject[] = [
     icon: 'buildings',
     color: '#635bff',
     description: 'Companies you do business with.',
+    nameExpression: 'name',
     fields: [
       {
         key: 'name',
@@ -292,6 +297,7 @@ export const STANDARD_OBJECTS: SeedObject[] = [
     icon: 'user',
     color: '#0ea5e9',
     description: 'People at your accounts.',
+    nameExpression: 'first_name|last_name',
     fields: [
       {
         key: 'salutation',
@@ -468,6 +474,7 @@ export const STANDARD_OBJECTS: SeedObject[] = [
     icon: 'currency-circle-dollar',
     color: '#10b981',
     description: 'Opportunities in your pipeline.',
+    nameExpression: 'name',
     fields: [
       {
         key: 'name',
@@ -619,6 +626,7 @@ export const STANDARD_OBJECTS: SeedObject[] = [
     icon: 'lightning',
     color: '#f59e0b',
     description: 'Calls, emails, notes, meetings, and tasks.',
+    nameExpression: 'subject',
     fields: [
       {
         key: 'subject',
@@ -757,8 +765,13 @@ export const STANDARD_OBJECTS: SeedObject[] = [
 ];
 
 /** Idempotently seed the standard objects + fields for an org, and create their
- *  physical tables in the org's Postgres schema. Safe to re-run. */
-export async function seedStandardObjects(db: Database, organizationId: string): Promise<void> {
+ *  physical tables in the org's Postgres schema. Safe to re-run.
+ *
+ *  Caller is responsible for the RLS GUC: pass an executor that already has
+ *  `app.org_id` set (e.g. via `withOrgContext`), or call from a `protectedProcedure`
+ *  context. The `org.create` handler does this explicitly because it runs as
+ *  publicProcedure (no GUC yet) immediately after creating the org. */
+export async function seedStandardObjects(db: DbExecutor, organizationId: string): Promise<void> {
   await ensureSchema(db, organizationId);
   for (const obj of STANDARD_OBJECTS) {
     const [existing] = await db
@@ -780,6 +793,7 @@ export async function seedStandardObjects(db: Database, organizationId: string):
           icon: obj.icon,
           color: obj.color,
           description: obj.description,
+          nameExpression: obj.nameExpression,
           layout: obj.layout,
           isSystem: true,
           source: 'system',
@@ -787,10 +801,15 @@ export async function seedStandardObjects(db: Database, organizationId: string):
         .returning({ id: objectDef.id });
       objectId = inserted?.id;
     } else {
-      // Backfill layout + table name for orgs seeded before those columns existed.
+      // Backfill layout + table name + nameExpression for orgs seeded before
+      // those columns existed.
       await db
         .update(objectDef)
-        .set({ layout: obj.layout, tableName: objectTableName(obj.key) })
+        .set({
+          layout: obj.layout,
+          tableName: objectTableName(obj.key),
+          nameExpression: obj.nameExpression,
+        })
         .where(eq(objectDef.id, objectId));
     }
     if (!objectId) continue;

@@ -2,13 +2,16 @@
 // and (when present) the resolved auth context with active org + role.
 
 import type { AuthContext, Role } from '@northbeam/core';
-import { type Database, createDb, schema } from '@northbeam/db';
+import { type Database, type DbExecutor, createDb, schema } from '@northbeam/db';
 import { and, eq } from 'drizzle-orm';
 import { type Session, getSession } from '../auth/index.js';
 import { env } from '../lib/env.js';
 
 export type Context = {
-  db: Database;
+  /** A query executor — root Database for publicProcedure, a transaction with
+   *  `app.org_id` set for protectedProcedure (RLS gate). Always assignable to
+   *  any helper that takes `DbExecutor` from `@northbeam/db`. */
+  db: DbExecutor;
   session: Session | null;
   auth: AuthContext | null;
   /** Raw fetch request — useful for forwarding cookies to Better Auth wrappers. */
@@ -19,6 +22,14 @@ let cachedDb: Database | undefined;
 function db(): Database {
   if (!cachedDb) cachedDb = createDb(env().DATABASE_URL);
   return cachedDb;
+}
+
+/** Expose the root Database for code paths that need to start their own
+ *  transaction (e.g. org.create wrapping seedStandardObjects in withOrgContext
+ *  after Better Auth creates the org). Inside a protectedProcedure handler,
+ *  callers should prefer `ctx.db` so they reuse the RLS-scoped transaction. */
+export function rootDb(): Database {
+  return db();
 }
 
 export async function createContext({ req }: { req: Request }): Promise<Context> {

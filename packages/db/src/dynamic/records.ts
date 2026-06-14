@@ -3,8 +3,8 @@
 // refLabels) so the tRPC router barely changes — but every value is a real typed
 // column. Returns/accepts records as `{ ...system, data: {fieldKey: value} }`.
 
-import { type SQL, and, eq, sql } from 'drizzle-orm';
-import type { Database } from '../client.js';
+import { type SQL, and, eq, inArray, sql } from 'drizzle-orm';
+import type { DbExecutor } from '../client.js';
 import type { FieldConfig } from '../field-types.js';
 import {
   type FieldRow,
@@ -13,7 +13,7 @@ import {
   getObjectById,
   getObjectByKey,
 } from '../queries/crm.js';
-import { fieldDef } from '../schema.js';
+import { fieldDef, objectDef } from '../schema.js';
 import { SYS, qid, qualified } from './identifiers.js';
 import { COMPUTED, TEXT_TYPES, fromDb, toDb } from './pgtypes.js';
 
@@ -68,7 +68,7 @@ function bindValue(field: FieldRow, value: unknown): SQL {
 const col = (name: string): SQL => sql.raw(qid(name));
 
 export async function listRecords(
-  db: Database,
+  db: DbExecutor,
   opts: {
     orgId: string;
     object: ObjectRow;
@@ -95,7 +95,7 @@ export async function listRecords(
 }
 
 export async function getRecord(
-  db: Database,
+  db: DbExecutor,
   opts: { orgId: string; object: ObjectRow; fields: FieldRow[]; id: string },
 ): Promise<RecordRow | null> {
   const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
@@ -108,7 +108,7 @@ export async function getRecord(
 
 /** count(*) on the object's table — used by home/dashboard summary panels. */
 export async function countRecords(
-  db: Database,
+  db: DbExecutor,
   opts: { orgId: string; object: ObjectRow },
 ): Promise<number> {
   const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
@@ -119,7 +119,7 @@ export async function countRecords(
 
 /** Sum a numeric/currency field on the object's table. Returns 0 if no rows. */
 export async function sumField(
-  db: Database,
+  db: DbExecutor,
   opts: {
     orgId: string;
     object: ObjectRow;
@@ -150,7 +150,7 @@ export async function sumField(
 }
 
 export async function createRecord(
-  db: Database,
+  db: DbExecutor,
   opts: {
     orgId: string;
     object: ObjectRow;
@@ -164,7 +164,7 @@ export async function createRecord(
   const { orgId, object, fields, data } = opts;
   const tbl = sql.raw(qualified(orgId, object.tableName));
   const cols: SQL[] = [col(SYS.name)];
-  const vals: SQL[] = [sql`${displayName(fields, data)}`];
+  const vals: SQL[] = [sql`${displayName(fields, data, object.nameExpression)}`];
   if (opts.ownerId != null) {
     cols.push(col(SYS.ownerId));
     vals.push(sql`${opts.ownerId}`);
@@ -191,7 +191,7 @@ export async function createRecord(
 }
 
 export async function updateRecord(
-  db: Database,
+  db: DbExecutor,
   opts: {
     orgId: string;
     object: ObjectRow;
@@ -203,7 +203,7 @@ export async function updateRecord(
   const { orgId, object, fields, id, data } = opts;
   const tbl = sql.raw(qualified(orgId, object.tableName));
   const sets: SQL[] = [
-    sql`${col(SYS.name)} = ${displayName(fields, data)}`,
+    sql`${col(SYS.name)} = ${displayName(fields, data, object.nameExpression)}`,
     sql`${col(SYS.updatedAt)} = now()`,
   ];
   for (const f of fields) {
@@ -218,16 +218,21 @@ export async function updateRecord(
 }
 
 export async function deleteRecord(
-  db: Database,
+  db: DbExecutor,
   opts: { orgId: string; object: ObjectRow; id: string },
 ): Promise<void> {
   const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
   await db.execute(sql`delete from ${tbl} where ${col(SYS.id)} = ${opts.id}::uuid`);
 }
 
-/** id → display name for every record referenced by a `reference` field in `rows`. */
+/** id → display name for every record referenced by a `reference` field in `rows`.
+ *
+ *  Batched: one SELECT per distinct target object (not per reference field). For
+ *  a list view with 5 lookup fields pointing at 2 objects, this is 2 queries
+ *  instead of 5. The targets and ids are deduped before query so a referenced
+ *  record only fetches once even if it appears under multiple fields. */
 export async function resolveRefLabels(
-  db: Database,
+  db: DbExecutor,
   orgId: string,
   fields: FieldRow[],
   rows: RecordRow[],
@@ -236,16 +241,27 @@ export async function resolveRefLabels(
   const refFields = fields.filter(
     (f) => f.type === 'reference' && (f.config as FieldConfig | null)?.targetObject,
   );
+  if (!refFields.length) return labels;
+
+  // Bucket all referenced ids by target object key. Multiple ref fields can
+  // point at the same object — collapse them so we only query that object once.
+  const idsByTarget = new Map<string, Set<string>>();
   for (const rf of refFields) {
-    const ids = rows
-      .map((r) => r.data[rf.key])
-      .filter((v): v is string => typeof v === 'string' && v.length > 0);
-    if (!ids.length) continue;
-    const target = await getObjectByKey(
-      db,
-      orgId,
-      (rf.config as FieldConfig).targetObject as string,
-    );
+    const target = (rf.config as FieldConfig).targetObject as string;
+    let bucket = idsByTarget.get(target);
+    if (!bucket) {
+      bucket = new Set<string>();
+      idsByTarget.set(target, bucket);
+    }
+    for (const r of rows) {
+      const v = r.data[rf.key];
+      if (typeof v === 'string' && v.length) bucket.add(v);
+    }
+  }
+
+  for (const [targetKey, idSet] of idsByTarget) {
+    if (!idSet.size) continue;
+    const target = await getObjectByKey(db, orgId, targetKey);
     if (!target) continue;
     const tbl = sql.raw(qualified(orgId, target.object.tableName));
     // `where id = any($1::uuid[])` looks right but drizzle interpolates the JS
@@ -253,7 +269,7 @@ export async function resolveRefLabels(
     // single uuid string and rejects it. Expand into `in (v1, v2, …)` with one
     // bound param per id — same shape sumField uses.
     const values = sql.join(
-      ids.map((id) => sql`${id}::uuid`),
+      Array.from(idSet).map((id) => sql`${id}::uuid`),
       sql`, `,
     );
     const res = await db.execute(
@@ -266,7 +282,7 @@ export async function resolveRefLabels(
 
 /** Records on OTHER objects that reference this record (reverse lookups). */
 export async function listRelated(
-  db: Database,
+  db: DbExecutor,
   orgId: string,
   parentObjectKey: string,
   recordId: string,

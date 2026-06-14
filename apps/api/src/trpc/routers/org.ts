@@ -2,7 +2,7 @@
 // Lets the dashboard create, switch, list, update, delete orgs and manage
 // members + pending invitations without a separate client SDK.
 
-import { ROLES, schema, seedStandardObjects } from '@northbeam/db';
+import { ROLES, schema, seedStandardObjects, withOrgContext } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -16,6 +16,7 @@ import {
   updateMemberRole,
   updateOrganization,
 } from '../../auth/index.js';
+import { rootDb } from '../context.js';
 import { permissionProcedure, protectedProcedure, publicProcedure, router } from '../trpc.js';
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
@@ -44,7 +45,12 @@ export const orgRouter = router({
         }
         // Seed the standard objects (account/contact/deal/activity) so the new
         // workspace has its metadata + the targets SF standard objects map onto.
-        await seedStandardObjects(ctx.db, result.id);
+        //
+        // org.create is publicProcedure, so we don't have an RLS-scoped tx yet
+        // — open one explicitly for the seed so the object_def / field_def
+        // INSERTs pass the RLS policy. We also get atomicity: if the seed
+        // fails halfway through, none of the partial metadata sticks around.
+        await withOrgContext(rootDb(), result.id, (tx) => seedStandardObjects(tx, result.id));
         await setActiveOrganization(result.id, ctx.req.headers);
         return result;
       } catch (err) {

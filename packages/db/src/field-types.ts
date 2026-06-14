@@ -30,6 +30,8 @@ export const FIELD_TYPES = [
     icon: 'list-numbers',
     group: 'Number',
     storage: 'number',
+    // Marked unavailable until the per-(org,object,field) sequence engine ships.
+    unavailable: true,
   },
   // ── Date & boolean ──────────────────────────────────────────────────────
   { id: 'date', label: 'Date', icon: 'calendar-blank', group: 'Date & time', storage: 'date' },
@@ -59,9 +61,37 @@ export const FIELD_TYPES = [
     storage: 'ref',
   },
   // ── Advanced / derived (read-only) ───────────────────────────────────────
-  { id: 'formula', label: 'Formula', icon: 'function', group: 'Advanced', storage: 'computed' },
-  { id: 'rollup', label: 'Roll-up summary', icon: 'sigma', group: 'Advanced', storage: 'computed' },
-  { id: 'ai', label: 'AI field', icon: 'sparkle', group: 'Advanced', storage: 'computed' },
+  //
+  // These three are recognised by the data layer (storage/coercion/DDL) but no
+  // compute engine populates them yet. Marking them `unavailable` hides them
+  // from the field-picker so a customer can't create one and see `null`. The
+  // type stays in the union so any already-imported SF formula/rollup field
+  // continues to render its existing value. Once docs/architecture-plan.md §A0
+  // (compute engine) ships, drop the flag.
+  {
+    id: 'formula',
+    label: 'Formula',
+    icon: 'function',
+    group: 'Advanced',
+    storage: 'computed',
+    unavailable: true,
+  },
+  {
+    id: 'rollup',
+    label: 'Roll-up summary',
+    icon: 'sigma',
+    group: 'Advanced',
+    storage: 'computed',
+    unavailable: true,
+  },
+  {
+    id: 'ai',
+    label: 'AI field',
+    icon: 'sparkle',
+    group: 'Advanced',
+    storage: 'computed',
+    unavailable: true,
+  },
 ] as const;
 
 export type FieldType = (typeof FIELD_TYPES)[number]['id'];
@@ -70,63 +100,161 @@ export type FieldStorage = (typeof FIELD_TYPES)[number]['storage'];
 
 export const FIELD_TYPE_IDS = FIELD_TYPES.map((f) => f.id) as [FieldType, ...FieldType[]];
 
+/** Only the field types a user can actively pick when creating a custom field.
+ *  Filters out types that exist in the union (for back-compat with already-
+ *  imported data) but aren't yet supported end-to-end. */
+export const PICKABLE_FIELD_TYPES = FIELD_TYPES.filter(
+  (f) => !('unavailable' in f && f.unavailable),
+);
+
 export function fieldTypeMeta(id: FieldType) {
   return FIELD_TYPES.find((f) => f.id === id) ?? FIELD_TYPES[0];
+}
+
+/** True if the type is recognised but not yet supported (no engine populates it). */
+export function isFieldTypeAvailable(id: FieldType): boolean {
+  const meta = FIELD_TYPES.find((f) => f.id === id);
+  return Boolean(meta && !('unavailable' in meta && meta.unavailable));
 }
 
 export type PicklistOption = { value: string; label: string; color?: string };
 export type RollupFn = 'sum' | 'count' | 'avg' | 'min' | 'max';
 
-/** Type-specific configuration, stored as field_def.config (JSONB). All optional;
- *  which keys are meaningful depends on the field type.
- *
- *  Display semantics (Directus-style):
- *    - `description`: rendered ABOVE the input as muted explanatory text. The
- *      "what is this and why does it matter" the user reads when filling it in.
- *    - `placeholder`: rendered INSIDE the input as ghost text. Example value or
- *      brief prompt — disappears as soon as the user types.
- *    - `helpText`: rendered BELOW the input as small muted text. "Use this if
- *      X" / "Optional but recommended" — non-blocking guidance.
- */
-export type FieldConfig = {
+/** Display semantics shared by every config (Directus-style):
+ *    - `description`: rendered ABOVE the input as muted explanatory text.
+ *    - `placeholder`: rendered INSIDE the input as ghost text.
+ *    - `helpText`:    rendered BELOW the input as small muted text.
+ *  Plus universal security/provenance flags carried regardless of type. */
+export type BaseFieldConfig = {
   description?: string;
   placeholder?: string;
   helpText?: string;
   defaultValue?: unknown;
-  // text
-  maxLength?: number;
-  /** A user-facing input-mask pattern (e.g. "(999) 999-9999", "AA-9999").
-   *  Distinct from the type-level masks (date, datetime) — this lets any text
-   *  field carry its own format. See lib/mask.applyMask in apps/web. */
-  mask?: string;
-  // number / currency / percent
-  precision?: number;
-  scale?: number; // currency/percent stored as integer minor units when scale set
-  /** ISO 4217 code for the field's currency (e.g. 'USD', 'EUR'). Workspace-
-   *  level default lives on organization.metadata.defaultCurrency. */
-  currencyCode?: string;
-  // picklist / multipicklist
-  options?: PicklistOption[];
-  restrictToOptions?: boolean;
-  /** controlling field key for dependent picklists (SF controllerName). */
-  controllingField?: string;
-  // security / provenance
   /** field-level security: hidden from non-admin roles. */
   confidential?: boolean;
   /** value was an encrypted string in the source system. */
   encrypted?: boolean;
   /** compound-field grouping (e.g. all billing_address subfields share a key). */
   compoundKey?: string;
-  // reference (lookup)
-  targetObject?: string; // object_def.key it points at
-  relationshipName?: string; // reverse name, e.g. account → "contacts"
+};
+
+/** text | textarea | email | phone | url */
+export type TextFieldConfig = BaseFieldConfig & {
+  maxLength?: number;
+  /** A user-facing input-mask pattern (e.g. "(999) 999-9999"). Distinct from
+   *  the type-level masks (date, datetime) — this lets any text field carry
+   *  its own format. See lib/mask.applyMask in apps/web. */
+  mask?: string;
+};
+
+/** number | percent | autonumber */
+export type NumberFieldConfig = BaseFieldConfig & {
+  precision?: number;
+  /** Currency/percent stored as integer minor units when scale set. */
+  scale?: number;
+};
+
+/** currency */
+export type CurrencyFieldConfig = NumberFieldConfig & {
+  /** ISO 4217 code (e.g. 'USD', 'EUR'). Workspace-level default lives on
+   *  organization.metadata.defaultCurrency. */
+  currencyCode?: string;
+};
+
+/** date | datetime */
+export type DateFieldConfig = BaseFieldConfig;
+
+/** checkbox */
+export type CheckboxFieldConfig = BaseFieldConfig;
+
+/** picklist | multipicklist — `options` is semantically required but kept
+ *  optional at the type level so partial in-flight forms compile; runtime
+ *  validation rejects an empty picklist via {@link FieldConfigSchemas}. */
+export type PicklistFieldConfig = BaseFieldConfig & {
+  options?: PicklistOption[];
+  restrictToOptions?: boolean;
+  /** Controlling field key for dependent picklists (SF controllerName). */
+  controllingField?: string;
+};
+
+/** reference (lookup) — `targetObject` is semantically required. */
+export type ReferenceFieldConfig = BaseFieldConfig & {
+  /** object_def.key the lookup points at. */
+  targetObject?: string;
+  /** reverse name, e.g. account → "contacts" */
+  relationshipName?: string;
   onDelete?: 'setNull' | 'cascade' | 'restrict';
-  // formula / rollup / ai (read-only, computed)
+};
+
+/** formula — `formula` and `returnType` are semantically required. */
+export type FormulaFieldConfig = BaseFieldConfig & {
   formula?: string;
   returnType?: FieldType;
+};
+
+/** rollup — `rollup` is semantically required. */
+export type RollupFieldConfig = BaseFieldConfig & {
   rollup?: { childObject: string; childField: string; fn: RollupFn; filter?: string };
+};
+
+/** ai — `aiPrompt` is semantically required. */
+export type AiFieldConfig = BaseFieldConfig & {
   aiPrompt?: string;
 };
+
+/** Mapping from FieldType → its semantically-correct config shape. Use with
+ *  {@link narrowFieldConfig} or {@link FieldConfigForType} for type-safe access
+ *  to type-specific keys without `as` casts. */
+export type FieldConfigForType = {
+  text: TextFieldConfig;
+  textarea: TextFieldConfig;
+  email: TextFieldConfig;
+  phone: TextFieldConfig;
+  url: TextFieldConfig;
+  number: NumberFieldConfig;
+  currency: CurrencyFieldConfig;
+  percent: NumberFieldConfig;
+  autonumber: NumberFieldConfig;
+  date: DateFieldConfig;
+  datetime: DateFieldConfig;
+  checkbox: CheckboxFieldConfig;
+  picklist: PicklistFieldConfig;
+  multipicklist: PicklistFieldConfig;
+  reference: ReferenceFieldConfig;
+  formula: FormulaFieldConfig;
+  rollup: RollupFieldConfig;
+  ai: AiFieldConfig;
+};
+
+/** The structural union — accepts any key from any type-specific config. Stored
+ *  as `field_def.config` (JSONB). Tools that need to *write* a config should
+ *  reach for the typed variant ({@link TextFieldConfig}, etc.) so required keys
+ *  appear in completions and the variant's runtime validator catches mistakes. */
+export type FieldConfig = TextFieldConfig &
+  NumberFieldConfig &
+  CurrencyFieldConfig &
+  PicklistFieldConfig &
+  ReferenceFieldConfig &
+  FormulaFieldConfig &
+  RollupFieldConfig &
+  AiFieldConfig;
+
+/** Cast a (FieldType, FieldConfig) pair into the appropriate type-specific
+ *  variant. Use at the point of access to read type-specific keys safely:
+ *
+ *      const cfg = narrowFieldConfig(field.type, field.config);
+ *      if (field.type === 'reference') {
+ *        cfg.targetObject; // ← typed as string | undefined
+ *      }
+ *
+ *  The cast is structural; the schema-level validation happens at write time
+ *  (see Zod schemas in field-config-schemas.ts). */
+export function narrowFieldConfig<T extends FieldType>(
+  _type: T,
+  config: FieldConfig | null | undefined,
+): FieldConfigForType[T] {
+  return (config ?? {}) as FieldConfigForType[T];
+}
 
 /** Salesforce SOAP/Metadata field type → our FieldType. Drives the auto-mapper.
  *  Anything unknown falls back to 'text' and gets flagged for review. */

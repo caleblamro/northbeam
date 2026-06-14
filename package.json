@@ -9,10 +9,12 @@
   "scripts": {
     "dev": "./infra/dev.sh",
     "dev:down": "docker compose -f infra/docker-compose.dev.yml down",
+    "dev:worker": "pnpm --filter @northbeam/api run dev:worker",
     "build": "turbo run build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
+    "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "db:generate": "pnpm --filter @northbeam/db run generate",
     "db:migrate": "pnpm --filter @northbeam/db run migrate",

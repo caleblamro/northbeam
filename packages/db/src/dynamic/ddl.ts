@@ -7,7 +7,7 @@
 // per-field DB constraints can be layered on later.
 
 import { sql } from 'drizzle-orm';
-import type { Database } from '../client.js';
+import type { DbExecutor } from '../client.js';
 import type { FieldRow, ObjectRow } from '../queries/crm.js';
 import { objectTableName, orgSchema, qid, qualified } from './identifiers.js';
 
@@ -27,12 +27,12 @@ function columnDef(field: FieldRow): string {
   return `${qid(field.columnName)} ${field.pgType}`;
 }
 
-export async function ensureSchema(db: Database, orgId: string): Promise<void> {
+export async function ensureSchema(db: DbExecutor, orgId: string): Promise<void> {
   await db.execute(sql.raw(`create schema if not exists ${qid(orgSchema(orgId))}`));
 }
 
 export async function createObjectTable(
-  db: Database,
+  db: DbExecutor,
   orgId: string,
   object: ObjectRow,
   fields: FieldRow[],
@@ -60,7 +60,7 @@ export async function createObjectTable(
 }
 
 export async function addField(
-  db: Database,
+  db: DbExecutor,
   orgId: string,
   object: ObjectRow,
   field: FieldRow,
@@ -74,7 +74,7 @@ export async function addField(
 }
 
 export async function dropField(
-  db: Database,
+  db: DbExecutor,
   orgId: string,
   object: ObjectRow,
   columnName: string,
@@ -87,7 +87,7 @@ export async function dropField(
 }
 
 export async function ensureFieldIndex(
-  db: Database,
+  db: DbExecutor,
   orgId: string,
   object: ObjectRow,
   field: FieldRow,
@@ -101,13 +101,13 @@ export async function ensureFieldIndex(
 }
 
 export async function dropObjectTable(
-  db: Database,
+  db: DbExecutor,
   orgId: string,
   object: ObjectRow,
 ): Promise<void> {
   await db.execute(sql.raw(`drop table if exists ${qualified(orgId, object.tableName)} cascade`));
 }
 
-export async function dropOrgSchema(db: Database, orgId: string): Promise<void> {
+export async function dropOrgSchema(db: DbExecutor, orgId: string): Promise<void> {
   await db.execute(sql.raw(`drop schema if exists ${qid(orgSchema(orgId))} cascade`));
 }

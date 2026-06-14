@@ -1,6 +1,6 @@
 // Resolve an org's stored (encrypted) Salesforce connection into a live client.
 
-import { type Database, getConnection, setConnectionStatus } from '@northbeam/db';
+import { type DbExecutor, getConnection, setConnectionStatus } from '@northbeam/db';
 import { SalesforceClient, SalesforceError } from '@northbeam/salesforce';
 import { decryptSecret } from '../lib/crypto.js';
 
@@ -11,7 +11,7 @@ export class NoConnectionError extends Error {
   }
 }
 
-export async function clientForOrg(db: Database, orgId: string): Promise<SalesforceClient> {
+export async function clientForOrg(db: DbExecutor, orgId: string): Promise<SalesforceClient> {
   const conn = await getConnection(db, orgId);
   if (!conn || conn.status !== 'connected' || !conn.accessTokenEnc) throw new NoConnectionError();
   return new SalesforceClient({
@@ -21,7 +21,7 @@ export async function clientForOrg(db: Database, orgId: string): Promise<Salesfo
 }
 
 /** Mark the connection errored when SF rejects the token (expired CLI token etc.). */
-export async function flagIfAuthError(db: Database, orgId: string, err: unknown): Promise<void> {
+export async function flagIfAuthError(db: DbExecutor, orgId: string, err: unknown): Promise<void> {
   if (err instanceof SalesforceError && err.status === 401) {
     await setConnectionStatus(db, orgId, 'error');
   }

@@ -3,14 +3,14 @@
 // never sees plaintext.
 
 import { and, eq } from 'drizzle-orm';
-import type { Database } from '../client.js';
+import type { DbExecutor } from '../client.js';
 import { salesforceConnection } from '../schema.js';
 
 export type SalesforceConnectionRow = typeof salesforceConnection.$inferSelect;
 export type ConnectionStatus = 'connected' | 'disconnected' | 'error';
 
 export async function getConnection(
-  db: Database,
+  db: DbExecutor,
   orgId: string,
 ): Promise<SalesforceConnectionRow | null> {
   const [row] = await db
@@ -22,7 +22,7 @@ export async function getConnection(
 }
 
 export async function upsertConnection(
-  db: Database,
+  db: DbExecutor,
   opts: {
     orgId: string;
     instanceUrl: string;
@@ -64,7 +64,7 @@ export async function upsertConnection(
 }
 
 export async function setConnectionStatus(
-  db: Database,
+  db: DbExecutor,
   orgId: string,
   status: ConnectionStatus,
 ): Promise<void> {
@@ -74,6 +74,6 @@ export async function setConnectionStatus(
     .where(eq(salesforceConnection.organizationId, orgId));
 }
 
-export async function deleteConnection(db: Database, orgId: string): Promise<void> {
+export async function deleteConnection(db: DbExecutor, orgId: string): Promise<void> {
   await db.delete(salesforceConnection).where(and(eq(salesforceConnection.organizationId, orgId)));
 }

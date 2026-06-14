@@ -3,14 +3,14 @@
 // (the fully-native data model). This module only touches object_def / field_def.
 
 import { and, asc, eq } from 'drizzle-orm';
-import type { Database } from '../client.js';
+import type { DbExecutor } from '../client.js';
 import { fieldDef, objectDef } from '../schema.js';
 
 export type ObjectRow = typeof objectDef.$inferSelect;
 export type FieldRow = typeof fieldDef.$inferSelect;
 export type ObjectWithFields = { object: ObjectRow; fields: FieldRow[] };
 
-export async function listObjects(db: Database, orgId: string): Promise<ObjectRow[]> {
+export async function listObjects(db: DbExecutor, orgId: string): Promise<ObjectRow[]> {
   return db
     .select()
     .from(objectDef)
@@ -18,7 +18,7 @@ export async function listObjects(db: Database, orgId: string): Promise<ObjectRo
     .orderBy(asc(objectDef.label));
 }
 
-async function fieldsFor(db: Database, objectId: string): Promise<FieldRow[]> {
+async function fieldsFor(db: DbExecutor, objectId: string): Promise<FieldRow[]> {
   return db
     .select()
     .from(fieldDef)
@@ -27,7 +27,7 @@ async function fieldsFor(db: Database, objectId: string): Promise<FieldRow[]> {
 }
 
 export async function getObjectByKey(
-  db: Database,
+  db: DbExecutor,
   orgId: string,
   key: string,
 ): Promise<ObjectWithFields | null> {
@@ -41,7 +41,7 @@ export async function getObjectByKey(
 }
 
 export async function getObjectById(
-  db: Database,
+  db: DbExecutor,
   orgId: string,
   objectId: string,
 ): Promise<ObjectWithFields | null> {
@@ -54,8 +54,28 @@ export async function getObjectById(
   return { object, fields: await fieldsFor(db, object.id) };
 }
 
-/** Best-effort human label for a record, from its field values. */
-export function displayName(fields: FieldRow[], data: Record<string, unknown>): string {
+/** Best-effort human label for a record, from its field values.
+ *
+ *  Priority:
+ *    1. `object.nameExpression` if set — first-class metadata pointing at the
+ *       field that holds the human label (e.g. 'subject' for activities,
+ *       'first_name|last_name' for contacts). Pipe-separated keys are joined.
+ *    2. Conventional defaults (`name`, `subject`, `title`, `first_name+last_name`)
+ *    3. The first text field on the object
+ *    4. 'Untitled'
+ */
+export function displayName(
+  fields: FieldRow[],
+  data: Record<string, unknown>,
+  nameExpression?: string | null,
+): string {
+  if (nameExpression) {
+    const parts = nameExpression
+      .split('|')
+      .map((k) => data[k.trim()])
+      .filter((v): v is string | number => v !== undefined && v !== null && v !== '');
+    if (parts.length) return parts.map(String).join(' ').trim();
+  }
   for (const key of ['name', 'subject', 'title']) {
     if (data[key]) return String(data[key]);
   }

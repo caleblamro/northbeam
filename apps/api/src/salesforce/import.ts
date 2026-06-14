@@ -10,6 +10,7 @@
 
 import {
   type Database,
+  type DbExecutor,
   type FieldRow,
   type ImportRow,
   addField,
@@ -21,6 +22,7 @@ import {
   pgTypeFor,
   resolveReferencesBySfid,
   schema,
+  withOrgContext,
 } from '@northbeam/db';
 import type { SalesforceClient } from '@northbeam/salesforce';
 import { eq } from 'drizzle-orm';
@@ -44,24 +46,36 @@ export async function executeRun(
   runId: string,
 ): Promise<void> {
   const stats: Stats = { objects: 0, fields: 0, records: 0, imported: 0, refsResolved: 0 };
+
+  // The mutation that fires `void executeRun(...)` has already committed its
+  // own short transaction. We need a fresh RLS context that lasts as long as
+  // this background work — wrap each phase in `withOrgContext` so the GUC is
+  // re-established for every batch (one transaction per phase keeps lock hold
+  // times short on long imports).
+  const run = <T>(fn: (tx: DbExecutor) => Promise<T>) => withOrgContext(db, orgId, fn);
+
   const writeStats = async (status?: 'running' | 'completed' | 'failed') => {
-    await db
-      .update(schema.migrationRun)
-      .set({
-        stats,
-        ...(status ? { status } : {}),
-        ...(status === 'completed' ? { completedAt: new Date() } : {}),
-      })
-      .where(eq(schema.migrationRun.id, runId));
+    await run((tx) =>
+      tx
+        .update(schema.migrationRun)
+        .set({
+          stats,
+          ...(status ? { status } : {}),
+          ...(status === 'completed' ? { completedAt: new Date() } : {}),
+        })
+        .where(eq(schema.migrationRun.id, runId)),
+    );
   };
 
   try {
-    await db
-      .update(schema.migrationRun)
-      .set({ status: 'running', startedAt: new Date() })
-      .where(eq(schema.migrationRun.id, runId));
+    await run((tx) =>
+      tx
+        .update(schema.migrationRun)
+        .set({ status: 'running', startedAt: new Date() })
+        .where(eq(schema.migrationRun.id, runId)),
+    );
 
-    const plans = await loadPlans(db, runId);
+    const plans = await run((tx) => loadPlans(tx, runId));
     stats.objects = plans.length;
     stats.fields = plans.reduce(
       (n, p) => n + p.fields.filter((f) => f.status === 'mapped').length,
@@ -69,14 +83,15 @@ export async function executeRun(
     );
     await writeStats();
 
-    // 1 — defs + DDL + record types
+    // 1 — defs + DDL + record types. Each ensureDefs is its own transaction so
+    // a single bad plan doesn't poison the whole import.
     const rtMaps = new Map<string, Map<string, string>>(); // targetKey → (sf RT id → our uuid)
     for (const plan of plans) {
-      rtMaps.set(plan.obj.targetKey, await ensureDefs(db, orgId, plan));
+      rtMaps.set(plan.obj.targetKey, await run((tx) => ensureDefs(tx, orgId, plan)));
     }
 
     // 2 — owner map (SF user id → workspace user id, by email)
-    const ownerMap = await buildOwnerMap(db, client, orgId);
+    const ownerMap = await run((tx) => buildOwnerMap(tx, client, orgId));
 
     // 3 — stream + insert per object; collect reference pairs for the final pass
     const refTasks: Array<{
@@ -90,7 +105,7 @@ export async function executeRun(
       stats.currentObject = plan.obj.label;
       await writeStats();
 
-      const loaded = await getObjectByKey(db, orgId, plan.obj.targetKey);
+      const loaded = await run((tx) => getObjectByKey(tx, orgId, plan.obj.targetKey));
       if (!loaded) continue;
       const fieldByKey = new Map(loaded.fields.map((f) => [f.key, f]));
 
@@ -122,12 +137,14 @@ export async function executeRun(
         if (!batch.length) return;
         stats.imported =
           (stats.imported ?? 0) +
-          (await bulkInsertRecords(db, {
-            orgId,
-            object: loaded.object,
-            fields: dataFieldRows,
-            rows: batch,
-          }));
+          (await run((tx) =>
+            bulkInsertRecords(tx, {
+              orgId,
+              object: loaded.object,
+              fields: dataFieldRows,
+              rows: batch,
+            }),
+          ));
         batch = [];
         await writeStats();
       };
@@ -145,7 +162,9 @@ export async function executeRun(
         const nameRaw = plan.obj.nameFieldSf ? raw[plan.obj.nameFieldSf] : null;
         batch.push({
           salesforceId: sfId,
-          name: nameRaw ? String(nameRaw) : displayName(loaded.fields, data),
+          name: nameRaw
+            ? String(nameRaw)
+            : displayName(loaded.fields, data, loaded.object.nameExpression),
           ownerId:
             plan.obj.hasOwner && typeof raw.OwnerId === 'string'
               ? (ownerMap.get(raw.OwnerId) ?? null)
@@ -177,19 +196,20 @@ export async function executeRun(
     stats.currentObject = 'Resolving references';
     await writeStats();
     for (const task of refTasks) {
-      const child = await getObjectByKey(db, orgId, task.objectKey);
-      const target = await getObjectByKey(db, orgId, task.targetKey);
-      const field = child?.fields.find((f) => f.key === task.fieldKey);
-      if (!child || !target || !field) continue;
-      stats.refsResolved =
-        (stats.refsResolved ?? 0) +
-        (await resolveReferencesBySfid(db, {
+      const result = await run(async (tx) => {
+        const child = await getObjectByKey(tx, orgId, task.objectKey);
+        const target = await getObjectByKey(tx, orgId, task.targetKey);
+        const field = child?.fields.find((f) => f.key === task.fieldKey);
+        if (!child || !target || !field) return 0;
+        return resolveReferencesBySfid(tx, {
           orgId,
           object: child.object,
           field,
           targetObject: target.object,
           pairs: task.pairs,
-        }));
+        });
+      });
+      stats.refsResolved = (stats.refsResolved ?? 0) + result;
     }
 
     stats.currentObject = undefined;
@@ -197,13 +217,13 @@ export async function executeRun(
   } catch (err) {
     stats.error = err instanceof Error ? err.message : String(err);
     await writeStats('failed');
-    await flagIfAuthError(db, orgId, err);
+    await run((tx) => flagIfAuthError(tx, orgId, err));
   }
 }
 
 /** Reassemble the reviewed plan from the mapping tables (meta = mapper proposal,
  *  status = post-review user decision). */
-async function loadPlans(db: Database, runId: string): Promise<Plan[]> {
+async function loadPlans(db: DbExecutor, runId: string): Promise<Plan[]> {
   const objects = await db
     .select()
     .from(schema.objectMapping)
@@ -229,7 +249,7 @@ async function loadPlans(db: Database, runId: string): Promise<Plan[]> {
 
 /** Materialize object_def / field_def / record_type rows + the physical table.
  *  Returns the SF-record-type-id → record_type.id map for this object. */
-async function ensureDefs(db: Database, orgId: string, plan: Plan): Promise<Map<string, string>> {
+async function ensureDefs(db: DbExecutor, orgId: string, plan: Plan): Promise<Map<string, string>> {
   const { obj } = plan;
   let existing = await getObjectByKey(db, orgId, obj.targetKey);
 
@@ -312,7 +332,7 @@ async function ensureDefs(db: Database, orgId: string, plan: Plan): Promise<Map<
 }
 
 async function buildOwnerMap(
-  db: Database,
+  db: DbExecutor,
   client: SalesforceClient,
   orgId: string,
 ): Promise<Map<string, string>> {

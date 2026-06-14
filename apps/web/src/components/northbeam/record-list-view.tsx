@@ -31,10 +31,16 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { trpc } from '@/lib/api';
+import {
+  type Filter,
+  readFiltersFromParams,
+  rowPassesFilters,
+  writeFiltersToParams,
+} from '@/lib/filters';
 import type { ObjectLayout } from '@northbeam/db/field-types';
 import { AlertCircle, MoreHorizontal, Pencil, Trash2, Upload, UserPlus } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useMemo, useState } from 'react';
 
 const NUMERIC = new Set(['currency', 'number', 'percent']);
 
@@ -50,11 +56,30 @@ export function RecordListView({
   standalone?: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [q, setQ] = useState('');
   const [savedView, setSavedView] = useState('all');
   const [editing, setEditing] = useState<
     { id: string; data: Record<string, unknown> } | 'new' | null
   >(null);
+
+  // Filters live in the URL so refresh + share-the-link both work. The
+  // searchParams object is reactive — useMemo just avoids re-parsing JSON on
+  // every render.
+  const filters = useMemo(
+    () => readFiltersFromParams(new URLSearchParams(searchParams.toString())),
+    [searchParams],
+  );
+  const setFilters = useCallback(
+    (next: Filter[]) => {
+      const params = new URLSearchParams(searchParams.toString());
+      writeFiltersToParams(params, next);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
 
   const utils = trpc.useUtils();
   const list = trpc.record.list.useQuery({ objectKey, search: q || undefined });
@@ -63,7 +88,15 @@ export function RecordListView({
   });
 
   const fields = (list.data?.fields ?? []) as FieldDefLite[];
-  const rows = list.data?.rows ?? [];
+  const allRows = list.data?.rows ?? [];
+  // Client-side filtering for v0. Server-side filtering on `record.list` is
+  // the next move once the dynamic-records layer grows predicate support — at
+  // that point this `rows` is `allRows` again and the `filters` array is
+  // passed straight into the tRPC query.
+  const rows = useMemo(
+    () => (filters.length === 0 ? allRows : allRows.filter((r) => rowPassesFilters(fields, r.data, filters))),
+    [allRows, fields, filters],
+  );
   const refLabels = list.data?.refLabels ?? {};
   const object = list.data?.object;
   const objectLabel = object?.label ?? '';
@@ -126,6 +159,12 @@ export function RecordListView({
       )}
 
       <FilterBar
+        fields={fields}
+        filters={filters}
+        onChange={setFilters}
+        loadReferenceOptions={(targetObject, query) =>
+          utils.record.searchRefs.fetch({ objectKey: targetObject, q: query })
+        }
         views={
           <SavedViews
             views={[

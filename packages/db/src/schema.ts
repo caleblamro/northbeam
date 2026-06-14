@@ -141,6 +141,11 @@ export const objectDef = pgTable(
     icon: text('icon').notNull().default('cube'),
     color: text('color').notNull().default('#635bff'),
     description: text('description'),
+    // The field key (or pipe-separated keys) whose value renders as a record's
+    // display name. 'name' for accounts/deals, 'subject' for activities,
+    // 'first_name|last_name' for contacts. Consumed by displayName(). NULL falls
+    // back to a conventional heuristic — see queries/crm.ts.
+    nameExpression: text('name_expression'),
     // Drives the record page, sectioned create/edit form, and default list columns.
     // Populated by the standard-object seed and the Salesforce importer.
     layout: jsonb('layout').$type<ObjectLayout>().notNull().default({}),

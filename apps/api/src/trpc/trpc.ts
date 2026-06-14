@@ -1,9 +1,18 @@
 // tRPC init + base procedures.
 //   publicProcedure       — no auth required
-//   protectedProcedure    — caller must have a session + active org membership
+//   protectedProcedure    — caller must have a session + active org membership;
+//                           runs inside a transaction with `app.org_id` set, so
+//                           RLS policies on metadata tables apply automatically.
 //   permissionProcedure   — protectedProcedure + a PERMISSIONS check
 
-import { NorthbeamError, type NorthbeamErrorCode, type Permission, can } from '@northbeam/core';
+import {
+  NorthbeamError,
+  type NorthbeamErrorCode,
+  type Permission,
+  can,
+  logger,
+} from '@northbeam/core';
+import { type Database, type DbExecutor, withOrgContext } from '@northbeam/db';
 import { TRPCError, type TRPC_ERROR_CODE_KEY, initTRPC } from '@trpc/server';
 import superjson from 'superjson';
 import { ZodError } from 'zod';
@@ -47,17 +56,58 @@ const errorMapper = t.middleware(async ({ next }) => {
   }
 });
 
-export const router = t.router;
-export const publicProcedure = t.procedure.use(errorMapper);
+/** Per-procedure structured log. One line per call with userId/orgId/path/
+ *  duration. Hono's requestLogger handles the outer HTTP shell; this surfaces
+ *  the tRPC-specific signal (which procedure, who, how long). */
+const procedureLogger = t.middleware(async ({ ctx, path, type, next }) => {
+  const start = performance.now();
+  const result = await next();
+  const duration_ms = Math.round(performance.now() - start);
+  const base = {
+    path,
+    type,
+    duration_ms,
+    userId: ctx.auth?.userId,
+    organizationId: ctx.auth?.organizationId,
+  };
+  if (result.ok) {
+    logger.info(base, 'trpc');
+  } else {
+    const err = result.error;
+    logger.warn(
+      { ...base, code: err.code, message: err.message, cause: err.cause },
+      'trpc.error',
+    );
+  }
+  return result;
+});
 
-export const protectedProcedure = publicProcedure.use(({ ctx, next }) => {
+export const router = t.router;
+export const publicProcedure = t.procedure.use(errorMapper).use(procedureLogger);
+
+/** Protected = authenticated + active org. The procedure body runs inside a
+ *  short transaction that sets `app.org_id`; RLS policies on metadata tables
+ *  enforce tenant isolation in Postgres, not just in app code.
+ *
+ *  Long-running background work kicked from a protected procedure must NOT
+ *  rely on this — once the procedure returns, the transaction commits and the
+ *  GUC is released. Background work establishes its own `withOrgContext`. */
+export const protectedProcedure = publicProcedure.use(async ({ ctx, next }) => {
   if (!ctx.auth) {
     throw new TRPCError({
       code: 'UNAUTHORIZED',
       message: ctx.session ? 'no_active_org' : 'sign in required',
     });
   }
-  return next({ ctx: { ...ctx, auth: ctx.auth } });
+  // ctx.db at this layer is always the root Database (the publicProcedure path
+  // didn't open a transaction). Cast back so we can call .transaction() on it —
+  // DbExecutor is intentionally narrower in its public API to avoid leaking the
+  // transaction handle to callers as if it could start sub-transactions.
+  const rootDb = ctx.db as Database;
+  const auth = ctx.auth;
+  return withOrgContext(rootDb, auth.organizationId, (tx) =>
+    next({ ctx: { ...ctx, db: tx as DbExecutor, auth } }),
+  );
 });
 
 /** Build a procedure that requires a specific Permission. */

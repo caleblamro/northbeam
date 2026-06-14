@@ -9,10 +9,14 @@
   },
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../../.env.local --env-file-if-exists=.env.local src/index.ts",
+    "dev:worker": "tsx watch --env-file-if-exists=../../.env.local --env-file-if-exists=.env.local src/workers/index.ts",
     "build": "tsup",
     "start": "node --env-file-if-exists=../../.env.local --env-file-if-exists=.env.local dist/index.js",
+    "start:worker": "node --env-file-if-exists=../../.env.local --env-file-if-exists=.env.local dist/workers/index.js",
     "sf:dev-connect": "tsx --env-file-if-exists=../../.env.local --env-file-if-exists=.env.local scripts/sf-dev-connect.ts",
     "sf:dry-run-map": "tsx scripts/sf-dry-run-map.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .turbo dist"
   },
@@ -25,8 +29,10 @@
     "@northbeam/salesforce": "workspace:*",
     "@trpc/server": "11.17.0",
     "better-auth": "1.6.11",
+    "bullmq": "5.34.10",
     "drizzle-orm": "0.45.2",
     "hono": "4.12.22",
+    "ioredis": "5.4.1",
     "resend": "4.0.1",
     "superjson": "2.2.6",
     "zod": "4.4.3"
@@ -34,6 +40,7 @@
   "devDependencies": {
     "@types/node": "22.19.19",
     "tsup": "8.3.5",
-    "tsx": "4.20.6"
+    "tsx": "4.20.6",
+    "vitest": "2.1.9"
   }
 }

@@ -53,7 +53,14 @@ export function toDb(type: FieldType, v: unknown): unknown {
     case 'number':
     case 'currency':
     case 'percent': {
-      const n = typeof v === 'number' ? v : Number(String(v).replace(/[^0-9.-]/g, ''));
+      if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+      // Strip locale formatting (commas, $, %, spaces, …) before parsing. If
+      // nothing numeric is left, treat as null rather than letting Number('')
+      // silently coerce to 0 — a non-numeric input shouldn't become a real
+      // value in the database.
+      const stripped = String(v).replace(/[^0-9.-]/g, '');
+      if (!stripped) return null;
+      const n = Number(stripped);
       return Number.isFinite(n) ? n : null;
     }
     case 'checkbox':

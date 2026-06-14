@@ -12,6 +12,9 @@ const Schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(DEV_API_PORT),
   DATABASE_URL: z.string().url(),
+  /** BullMQ backing store. The Salesforce import queue + any future async work
+   *  push here. Local dev uses the redis service from infra/docker-compose. */
+  REDIS_URL: z.string().url().default('redis://localhost:6379'),
 
   // Better Auth — base URL the auth handler builds callback links against.
   // Defaults to the dev API URL so a fresh / partially-configured .env still
@@ -47,7 +50,14 @@ export function env(): ApiEnv {
   if (cached) return cached;
   const parsed = Schema.safeParse(process.env);
   if (!parsed.success) {
-    throw new Error(`Invalid API environment: ${parsed.error.message}`);
+    // Friendly per-field failure list so the operator sees exactly which env
+    // var is missing or malformed, not just zod's flat message string.
+    const issues = parsed.error.issues
+      .map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
+      .join('\n');
+    throw new Error(
+      `Invalid API environment — fix .env.local or your container env vars:\n${issues}`,
+    );
   }
   cached = parsed.data;
   return cached;

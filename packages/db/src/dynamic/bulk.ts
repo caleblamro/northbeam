@@ -4,7 +4,7 @@
 // salesforce_ids entirely in the database — no in-memory id map.
 
 import { type SQL, sql } from 'drizzle-orm';
-import type { Database } from '../client.js';
+import type { DbExecutor } from '../client.js';
 import type { FieldRow, ObjectRow } from '../queries/crm.js';
 import { SYS, qid, qualified } from './identifiers.js';
 import { toDb } from './pgtypes.js';
@@ -33,7 +33,7 @@ function bind(field: FieldRow, value: unknown): SQL {
  *  (conflicts on salesforce_id are skipped). `fields` must exclude reference
  *  fields — those are resolved afterwards via resolveReferencesBySfid. */
 export async function bulkInsertRecords(
-  db: Database,
+  db: DbExecutor,
   opts: { orgId: string; object: ObjectRow; fields: FieldRow[]; rows: ImportRow[] },
 ): Promise<number> {
   const { orgId, object, fields, rows } = opts;
@@ -72,16 +72,28 @@ export async function bulkInsertRecords(
           do nothing
           returning ${col(SYS.id)}`,
     );
-    inserted += (res as unknown as unknown[]).length;
+    inserted += rowsInResult(res);
   }
   return inserted;
+}
+
+/** postgres-js's RETURNING result is array-like (`.length` works) but not typed
+ *  as such by Drizzle. Centralise the unsafe access here so call sites aren't
+ *  riddled with `as unknown as unknown[]` casts. */
+function rowsInResult(res: unknown): number {
+  if (Array.isArray(res)) return res.length;
+  if (res && typeof res === 'object' && 'length' in res) {
+    const n = (res as { length: unknown }).length;
+    return typeof n === 'number' ? n : 0;
+  }
+  return 0;
 }
 
 /** Resolve a reference column from raw Salesforce ids: for each (sfId, refSfId)
  *  pair, set child.col = target.id where the salesforce_ids match. Pure SQL join —
  *  works across everything ever imported, not just this run. */
 export async function resolveReferencesBySfid(
-  db: Database,
+  db: DbExecutor,
   opts: {
     orgId: string;
     object: ObjectRow;
@@ -107,7 +119,7 @@ export async function resolveReferencesBySfid(
           where ${tbl}.${col(SYS.salesforceId)} = v.sfid
           returning ${tbl}.${col(SYS.id)}`,
     );
-    updated += (res as unknown as unknown[]).length;
+    updated += rowsInResult(res);
   }
   return updated;
 }

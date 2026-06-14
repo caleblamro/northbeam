@@ -6,12 +6,17 @@ import { cors } from 'hono/cors';
 import { handleAuthRequest } from './auth/index.js';
 import { env } from './lib/env.js';
 import { onError } from './middleware/error.js';
+import { requestLogger } from './middleware/logging.js';
 import type { Variables } from './middleware/session.js';
 import { mountSalesforceRoutes } from './salesforce/routes.js';
 import { appRouter, createContext } from './trpc/index.js';
 
 const e = env();
 const app = new Hono<{ Variables: Variables }>();
+
+// Request logging first so every other middleware's errors land in a logged
+// request line. Health probes are filtered out inside the middleware.
+app.use('*', requestLogger);
 
 // CORS:
 //   prod → only PUBLIC_WEB_URL

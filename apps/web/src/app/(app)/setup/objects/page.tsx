@@ -17,7 +17,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { trpc } from '@/lib/api';
-import { Database, Plus } from 'lucide-react';
+import { ChevronRight, Database, Plus } from 'lucide-react';
+import Link from 'next/link';
 
 export default function ObjectManagerPage() {
   const objects = trpc.object.list.useQuery();
@@ -50,13 +51,19 @@ export default function ObjectManagerPage() {
               <TableHead>API name</TableHead>
               <TableHead className="w-24">Type</TableHead>
               <TableHead className="w-32">Source</TableHead>
+              <TableHead className="w-1" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((obj) => (
-              <TableRow key={obj.id}>
+              <TableRow key={obj.id} className="group cursor-pointer hover:bg-muted/40">
                 <TableCell>
-                  <div className="font-semibold text-foreground">{obj.label}</div>
+                  <Link
+                    href={`/setup/objects/${obj.key}`}
+                    className="block font-semibold text-foreground after:absolute after:inset-0"
+                  >
+                    {obj.label}
+                  </Link>
                 </TableCell>
                 <TableCell>
                   <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
@@ -76,6 +83,9 @@ export default function ObjectManagerPage() {
                 </TableCell>
                 <TableCell className="text-muted-foreground text-xs capitalize">
                   {obj.source ?? 'native'}
+                </TableCell>
+                <TableCell>
+                  <ChevronRight className="size-4 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground" />
                 </TableCell>
               </TableRow>
             ))}

@@ -73,6 +73,7 @@ export function FieldInput({
   onChange,
   loadReference,
   referenceValue,
+  onReferenceChange,
 }: {
   field: FieldDefLite;
   value: unknown;
@@ -81,6 +82,10 @@ export function FieldInput({
   loadReference?: (q: string) => Promise<Option[]>;
   /** for `reference` fields: the currently-selected option (id + label) */
   referenceValue?: Option | null;
+  /** for `reference` fields: receives the selected Option (or null) so the
+   *  caller can store the label for re-display alongside the raw id. When
+   *  absent, FieldInput falls back to forwarding the id via `onChange`. */
+  onReferenceChange?: (o: Option | null) => void;
 }) {
   const cfg: FieldConfig = field.config ?? {};
   const str = value == null ? '' : String(value);
@@ -267,7 +272,10 @@ export function FieldInput({
       return (
         <Combobox
           value={referenceValue ?? null}
-          onChange={(o) => onChange(o?.value ?? null)}
+          onChange={(o) => {
+            if (onReferenceChange) onReferenceChange(o);
+            else onChange(o?.value ?? null);
+          }}
           loadOptions={loadReference ?? (async () => [])}
           placeholder={cfg.placeholder ?? `Search ${cfg.targetObject ?? 'records'}…`}
           emptyText="No matches"

@@ -1,22 +1,48 @@
 // Public entrypoint. Apps that need a db client call createDb(); apps that
 // just need the schema (e.g. type imports) can use the schema export.
 export * as schema from './schema.js';
-export { createDb, type Database } from './client.js';
+export {
+  createDb,
+  withOrgContext,
+  type Database,
+  type DbExecutor,
+  type DbTx,
+} from './client.js';
 export { ROLES, type Role, isRole } from './roles.js';
 export {
   FIELD_TYPES,
   FIELD_TYPE_IDS,
+  PICKABLE_FIELD_TYPES,
   fieldTypeMeta,
+  isFieldTypeAvailable,
   mapSalesforceType,
+  narrowFieldConfig,
   SF_TYPE_MAP,
   type FieldType,
   type FieldStorage,
   type FieldConfig,
+  type FieldConfigForType,
+  type BaseFieldConfig,
+  type TextFieldConfig,
+  type NumberFieldConfig,
+  type CurrencyFieldConfig,
+  type DateFieldConfig,
+  type CheckboxFieldConfig,
+  type PicklistFieldConfig,
+  type ReferenceFieldConfig,
+  type FormulaFieldConfig,
+  type RollupFieldConfig,
+  type AiFieldConfig,
   type PicklistOption,
   type RollupFn,
   type ObjectLayout,
   type LayoutSection,
 } from './field-types.js';
+export {
+  FieldConfigSchemas,
+  validateFieldConfig,
+  safeValidateFieldConfig,
+} from './field-config-schemas.js';
 export { STANDARD_OBJECTS, seedStandardObjects } from './seed.js';
 // Metadata (object_def / field_def) queries.
 export {

@@ -1,0 +1,74 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint · typecheck · test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Postgres + Redis match the dev compose so future integration tests can
+    # connect with the same URLs. The unit tests in packages/db don't need
+    # either, but standing them up now keeps the workflow stable as tests grow.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: northbeam
+          POSTGRES_PASSWORD: northbeam
+          POSTGRES_DB: northbeam_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U northbeam -d northbeam_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://northbeam:northbeam@localhost:5432/northbeam_test
+      REDIS_URL: redis://localhost:6379
+      # BetterAuth requires a 16+ char secret at boot; this is CI-only.
+      BETTER_AUTH_SECRET: ci-only-not-a-real-secret-just-for-tests
+      BETTER_AUTH_URL: http://localhost:8000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.14.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test

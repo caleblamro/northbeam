@@ -2,8 +2,9 @@
 
 // Generic create/edit drawer for a record of ANY object — the form is built from
 // the object's field defs, grouped into the object's `layout` sections (multi-
-// column grid). Reference fields use an async combobox that searches the target
-// object's records. Masked inputs come from the shared FieldInput renderer.
+// column grid). All field types (including the async-loaded reference combobox)
+// flow through the single FieldInput switch so the registry stays the complete
+// dispatch table.
 
 import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/api';
@@ -13,7 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { RecordDrawer } from './app-bits';
 import { Field } from './field';
 import { type FieldDefLite, FieldInput } from './field-render';
-import { Combobox, type Option } from './select-legacy';
+import type { Option } from './select-legacy';
 
 const READONLY = new Set(['formula', 'rollup', 'ai', 'autonumber']);
 const FULL_WIDTH = new Set(['textarea', 'multipicklist']);
@@ -126,29 +127,27 @@ export function RecordFormDrawer({
                 helpText={f.config?.helpText}
                 className={g.cols > 1 && FULL_WIDTH.has(f.type) ? 'col-span-full' : undefined}
               >
-                {f.type === 'reference' ? (
-                  <Combobox
-                    value={refSel[f.key] ?? null}
-                    onChange={(o) => {
-                      setRefSel((s) => ({ ...s, [f.key]: o }));
-                      setData((d) => ({ ...d, [f.key]: o?.value ?? null }));
-                    }}
-                    loadOptions={(query) =>
-                      utils.record.searchRefs.fetch({
-                        objectKey: f.config?.targetObject ?? '',
-                        q: query,
-                      })
-                    }
-                    placeholder={`Search ${f.config?.targetObject ?? 'records'}…`}
-                    emptyText="No matches"
-                  />
-                ) : (
-                  <FieldInput
-                    field={f}
-                    value={data[f.key]}
-                    onChange={(v) => setData((d) => ({ ...d, [f.key]: v }))}
-                  />
-                )}
+                <FieldInput
+                  field={f}
+                  value={data[f.key]}
+                  onChange={(v) => {
+                    setData((d) => ({ ...d, [f.key]: v }));
+                  }}
+                  referenceValue={refSel[f.key] ?? null}
+                  onReferenceChange={(o) => {
+                    setRefSel((s) => ({ ...s, [f.key]: o }));
+                    setData((d) => ({ ...d, [f.key]: o?.value ?? null }));
+                  }}
+                  loadReference={
+                    f.type === 'reference'
+                      ? (query) =>
+                          utils.record.searchRefs.fetch({
+                            objectKey: f.config?.targetObject ?? '',
+                            q: query,
+                          })
+                      : undefined
+                  }
+                />
               </Field>
             ))}
           </div>

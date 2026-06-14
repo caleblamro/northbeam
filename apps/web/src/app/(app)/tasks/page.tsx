@@ -2,7 +2,6 @@
 
 import { PageActions } from '@/components/northbeam/app-shell';
 import { EmptyState } from '@/components/northbeam/empty-state';
-import { FilterBar } from '@/components/northbeam/filter-bar';
 import { ListToolbar } from '@/components/northbeam/list-toolbar';
 import { Spinner } from '@/components/northbeam/primitives';
 import { Button } from '@/components/ui/button';
@@ -39,7 +38,6 @@ export default function TasksPage() {
         </Button>
       </PageActions>
 
-      <FilterBar />
       <ListToolbar
         searchValue={q}
         onSearchChange={setQ}
