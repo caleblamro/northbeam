@@ -4,28 +4,39 @@ import { Field } from '@/components/northbeam/field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { trpc } from '@/lib/api';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+
+const Schema = z.object({
+  email: z.string().email("That doesn't look like an email address."),
+});
+type FormValues = z.infer<typeof Schema>;
 
 export default function SignInPage() {
-  const [email, setEmail] = useState('');
-  const requestLink = trpc.auth.requestMagicLink.useMutation();
+  const requestLink = trpc.auth.requestMagicLink.useMutation({ meta: { silent: true } });
+  const form = useForm<FormValues>({
+    resolver: zodResolver(Schema),
+    mode: 'onBlur',
+    defaultValues: { email: '' },
+  });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    requestLink.mutate({
-      email: email.trim(),
+  const onSubmit = form.handleSubmit((values) =>
+    requestLink.mutateAsync({
+      email: values.email.trim(),
       callbackURL: `${window.location.origin}/verify`,
-    });
-  };
+    }),
+  );
 
   if (requestLink.isSuccess) {
     return (
       <div>
         <h1 className="mb-2 font-medium text-2xl tracking-[-0.02em]">Check your inbox</h1>
         <p className="m-0 text-muted-foreground leading-relaxed">
-          We sent a magic link to <span className="font-medium text-foreground">{email}</span>.
-          Click it to finish signing in — it expires in 10 minutes.
+          We sent a magic link to{' '}
+          <span className="font-medium text-foreground">{form.getValues('email')}</span>. Click it
+          to finish signing in — it expires in 10 minutes.
         </p>
         <p className="mt-4 text-muted-foreground text-sm">
           In local dev the link is printed in the API server console.
@@ -36,7 +47,7 @@ export default function SignInPage() {
             className="h-auto p-0"
             onClick={() => {
               requestLink.reset();
-              setEmail('');
+              form.reset({ email: '' });
             }}
           >
             ← Use a different email
@@ -47,28 +58,27 @@ export default function SignInPage() {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={onSubmit}>
       <h1 className="mb-2 font-medium text-2xl tracking-[-0.02em]">Sign in to Northbeam</h1>
       <p className="mb-6 text-muted-foreground leading-relaxed">
         Enter your email and we'll send you a magic link.
       </p>
-      <Field label="Work email" htmlFor="email">
+      <Field
+        label="Work email"
+        htmlFor="email"
+        error={form.formState.errors.email?.message}
+      >
         <Input
           id="email"
           type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
           autoComplete="email"
-          required
+          autoFocus
+          {...form.register('email')}
         />
       </Field>
       <div className="mt-4">
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={!email.trim() || requestLink.isPending}
-        >
+        <Button type="submit" className="w-full" disabled={requestLink.isPending}>
           {requestLink.isPending && <Loader2 className="size-4 animate-spin" />}
           Send magic link
         </Button>

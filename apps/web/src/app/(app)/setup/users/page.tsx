@@ -44,11 +44,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { trpc } from '@/lib/api';
+import { zodResolver } from '@hookform/resolvers/zod';
 // Import from the /roles subpath, not the barrel — the barrel pulls
 // logger.ts (pino) and auth.ts (server-only chokepoints) which Turbopack
 // can't bundle for the browser.
 import { ROLES, ROLE_LABELS, type Role } from '@northbeam/core/roles';
 import { Loader2, Mail, MoreHorizontal, ShieldAlert, UserPlus, Users } from 'lucide-react';
+import { Controller, useForm } from 'react-hook-form';
+import { z } from 'zod';
 // Users icon stays — used by the empty state below.
 import { useState } from 'react';
 
@@ -209,21 +212,39 @@ function RoleSelect({
   );
 }
 
+const InviteSchema = z.object({
+  email: z.string().email("That doesn't look like an email address."),
+  role: z.enum(['admin', 'member', 'viewer'] as const),
+});
+type InviteFormValues = z.infer<typeof InviteSchema>;
+
 function InviteButton({ onInvited }: { onInvited: () => void }) {
   const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<Role>('member');
+  const form = useForm<InviteFormValues>({
+    resolver: zodResolver(InviteSchema),
+    mode: 'onBlur',
+    defaultValues: { email: '', role: 'member' },
+  });
   const invite = trpc.org.invite.useMutation({
+    meta: { context: "Couldn't send invite" },
     onSuccess: () => {
       setOpen(false);
-      setEmail('');
-      setRole('member');
+      form.reset({ email: '', role: 'member' });
       onInvited();
     },
   });
+  const onSubmit = form.handleSubmit((values) =>
+    invite.mutateAsync({ email: values.email.trim(), role: values.role }),
+  );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) form.reset({ email: '', role: 'member' });
+      }}
+    >
       <DialogTrigger asChild>
         <Button>
           <UserPlus />
@@ -234,47 +255,55 @@ function InviteButton({ onInvited }: { onInvited: () => void }) {
         <DialogHeader>
           <DialogTitle>Invite a teammate</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <Field label="Email" required htmlFor="invite-email">
+        <form onSubmit={onSubmit} className="flex flex-col gap-4">
+          <Field
+            label="Email"
+            required
+            htmlFor="invite-email"
+            error={form.formState.errors.email?.message}
+          >
             <Input
               id="invite-email"
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               placeholder="teammate@company.com"
               autoFocus
+              {...form.register('email')}
             />
           </Field>
-          <Field label="Role" htmlFor="invite-role">
-            <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-              <SelectTrigger id="invite-role">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {INVITABLE_ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {ROLE_LABELS[r]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          {invite.isError && (
-            <p className="text-destructive text-sm">{invite.error.message}</p>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!email.trim() || invite.isPending}
-            onClick={() => invite.mutate({ email: email.trim(), role })}
+          <Field
+            label="Role"
+            htmlFor="invite-role"
+            error={form.formState.errors.role?.message}
           >
-            {invite.isPending && <Loader2 className="size-4 animate-spin" />}
-            Send invite
-          </Button>
-        </DialogFooter>
+            <Controller
+              control={form.control}
+              name="role"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger id="invite-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INVITABLE_ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {ROLE_LABELS[r]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </Field>
+          <DialogFooter className="px-0 pb-0">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={invite.isPending}>
+              {invite.isPending && <Loader2 className="size-4 animate-spin" />}
+              Send invite
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

@@ -12,6 +12,7 @@
 import { Field } from '@/components/northbeam/field';
 import { type FieldDefLite } from '@/components/northbeam/field-render';
 import { Combobox, type Option } from '@/components/northbeam/select-legacy';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Command,
@@ -21,6 +22,15 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -40,7 +50,7 @@ import {
   isFilterable,
   opsForType,
 } from '@/lib/filters';
-import { Filter as FilterIcon, Plus, X } from 'lucide-react';
+import { Filter as FilterIcon, Plus, Trash2, X } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 
 type ReferenceLoader = (objectKey: string, query: string) => Promise<Option[]>;
@@ -54,6 +64,8 @@ interface FilterBarProps {
   loadReferenceOptions?: ReferenceLoader;
   /** Optional row above the filter chips (e.g., SavedViews tabs). */
   views?: ReactNode;
+  /** Render flat (no margin/wrapping flex-col) — for embedding inside a toolbar. */
+  inline?: boolean;
   className?: string;
 }
 
@@ -63,6 +75,7 @@ export function FilterBar({
   onChange,
   loadReferenceOptions,
   views,
+  inline,
   className,
 }: FilterBarProps) {
   const byKey = new Map(fields.map((f) => [f.key, f]));
@@ -77,43 +90,55 @@ export function FilterBar({
     onChange(filters.filter((_, i) => i !== index));
   };
 
+  const chips = (
+    <>
+      {filters.map((f, i) => {
+        const field = byKey.get(f.fieldKey);
+        if (!field) return null;
+        return (
+          <FilterChipEditor
+            key={i}
+            fields={fields}
+            field={field}
+            filter={f}
+            loadReferenceOptions={loadReferenceOptions}
+            onApply={(next) => upsertAt(i, next)}
+            onRemove={() => removeAt(i)}
+          />
+        );
+      })}
+      <FilterChipEditor
+        mode="add"
+        fields={fields}
+        loadReferenceOptions={loadReferenceOptions}
+        onApply={(next) => upsertAt(-1, next)}
+      />
+      {filters.length > 0 && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground"
+          onClick={() => onChange([])}
+        >
+          Clear all
+        </Button>
+      )}
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div className={cn('flex flex-wrap items-center gap-1.5', className)}>
+        {chips}
+      </div>
+    );
+  }
+
   return (
     <div className={cn('mb-3 flex flex-col gap-2', className)}>
       {views && <div className="flex items-center gap-2 border-b">{views}</div>}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {filters.map((f, i) => {
-          const field = byKey.get(f.fieldKey);
-          if (!field) return null;
-          return (
-            <FilterChipEditor
-              key={i}
-              fields={fields}
-              field={field}
-              filter={f}
-              loadReferenceOptions={loadReferenceOptions}
-              onApply={(next) => upsertAt(i, next)}
-              onRemove={() => removeAt(i)}
-            />
-          );
-        })}
-        <FilterChipEditor
-          mode="add"
-          fields={fields}
-          loadReferenceOptions={loadReferenceOptions}
-          onApply={(next) => upsertAt(-1, next)}
-        />
-        {filters.length > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => onChange([])}
-          >
-            Clear all
-          </Button>
-        )}
-      </div>
+      <div className="flex flex-wrap items-center gap-1.5">{chips}</div>
     </div>
   );
 }
@@ -419,4 +444,237 @@ function filterCount(fields: FieldDefLite[]): number {
   // array down and we count there. Returning fields.length here is fine — it
   // only drives the icon swap between `Filter` and `+` in the empty-state.
   return fields.length;
+}
+
+/* ── FilterDialog ────────────────────────────────────────────────────────────
+   Single icon button (Filter) that opens a Dialog for managing all filters
+   at once. Each row exposes field, operator and value selection inline; rows
+   can be removed via the trash button and added via the footer "Add filter"
+   button. Apply commits the staged filter list back to the parent; Cancel
+   discards. The trigger button shows a count badge when filters are active.
+   ────────────────────────────────────────────────────────────────────────── */
+
+interface FilterDialogProps {
+  fields: FieldDefLite[];
+  filters: Filter[];
+  onChange: (filters: Filter[]) => void;
+  loadReferenceOptions?: ReferenceLoader;
+}
+
+export function FilterDialog({
+  fields,
+  filters,
+  onChange,
+  loadReferenceOptions,
+}: FilterDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Filter[]>(filters);
+  const filterable = fields.filter(isFilterable);
+  const byKey = new Map(fields.map((f) => [f.key, f]));
+
+  // Reset draft each time the dialog opens.
+  const handleOpen = (next: boolean) => {
+    if (next) setDraft(filters);
+    setOpen(next);
+  };
+
+  const apply = () => {
+    onChange(draft.filter((f) => f.fieldKey));
+    setOpen(false);
+  };
+
+  const addBlank = () => {
+    const first = filterable[0];
+    if (!first) return;
+    const op = opsForType(first.type)[0] ?? 'eq';
+    setDraft((d) => [...d, { fieldKey: first.key, op, value: null }]);
+  };
+
+  const updateAt = (i: number, patch: Partial<Filter>) => {
+    setDraft((d) => d.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
+  };
+
+  const removeAt = (i: number) => {
+    setDraft((d) => d.filter((_, idx) => idx !== i));
+  };
+
+  const clearAll = () => setDraft([]);
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpen}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-label="Filters"
+          className="relative gap-1.5"
+        >
+          <FilterIcon className="size-3.5" />
+          {filters.length > 0 && (
+            <Badge
+              tone="accent"
+              size="sm"
+              dot={false}
+              className="h-4 min-w-4 px-1 tabular-nums"
+            >
+              {filters.length}
+            </Badge>
+          )}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Filters</DialogTitle>
+          <DialogDescription>
+            Narrow the list to records that match every condition below.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-2">
+          {draft.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-border border-dashed py-10 text-center">
+              <FilterIcon className="size-6 text-muted-foreground/60" />
+              <div className="text-muted-foreground text-sm">No filters yet</div>
+              <Button type="button" size="sm" variant="outline" onClick={addBlank}>
+                <Plus />
+                Add filter
+              </Button>
+            </div>
+          ) : (
+            <>
+              {draft.map((row, i) => (
+                <FilterRow
+                  key={i}
+                  index={i}
+                  row={row}
+                  fields={filterable}
+                  byKey={byKey}
+                  loadReferenceOptions={loadReferenceOptions}
+                  onChange={(patch) => updateAt(i, patch)}
+                  onRemove={() => removeAt(i)}
+                />
+              ))}
+              <div className="flex items-center justify-between pt-1">
+                <Button type="button" size="sm" variant="ghost" onClick={addBlank}>
+                  <Plus />
+                  Add filter
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground"
+                  onClick={clearAll}
+                >
+                  Clear all
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={apply}>
+            Apply filters
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* One row inside the FilterDialog: field selector + operator + value + trash. */
+function FilterRow({
+  index,
+  row,
+  fields,
+  byKey,
+  loadReferenceOptions,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  row: Filter;
+  fields: FieldDefLite[];
+  byKey: Map<string, FieldDefLite>;
+  loadReferenceOptions?: ReferenceLoader;
+  onChange: (patch: Partial<Filter>) => void;
+  onRemove: () => void;
+}) {
+  const field = byKey.get(row.fieldKey) ?? fields[0];
+  if (!field) return null;
+  const ops = opsForType(field.type);
+  const isUnary = UNARY_OPS.has(row.op);
+  const fieldId = `filter-field-${index}`;
+  const opId = `filter-op-${index}`;
+  const valueId = `filter-value-${index}`;
+
+  return (
+    <div className="grid grid-cols-[minmax(0,160px)_minmax(0,140px)_minmax(0,1fr)_auto] items-end gap-2 rounded-md bg-muted/30 p-2.5">
+      <Field label="Field" htmlFor={fieldId}>
+        <Select
+          value={row.fieldKey}
+          onValueChange={(k) => {
+            const f = byKey.get(k);
+            const nextOp = f ? opsForType(f.type)[0] ?? row.op : row.op;
+            onChange({ fieldKey: k, op: nextOp, value: null });
+          }}
+        >
+          <SelectTrigger id={fieldId} className="w-full">
+            <SelectValue placeholder="Choose field…" />
+          </SelectTrigger>
+          <SelectContent>
+            {fields.map((f) => (
+              <SelectItem key={f.key} value={f.key}>
+                {f.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Condition" htmlFor={opId}>
+        <Select value={row.op} onValueChange={(v) => onChange({ op: v as FilterOp })}>
+          <SelectTrigger id={opId} className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ops.map((op) => (
+              <SelectItem key={op} value={op}>
+                {OP_LABEL[op]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Value" htmlFor={valueId}>
+        {isUnary || field.type === 'checkbox' ? (
+          <div className="flex h-9 items-center text-muted-foreground text-xs italic">
+            —
+          </div>
+        ) : (
+          <FilterValueInput
+            field={field}
+            op={row.op}
+            value={row.value}
+            onChange={(v) => onChange({ value: v })}
+            loadReferenceOptions={loadReferenceOptions}
+          />
+        )}
+      </Field>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`Remove filter ${index + 1}`}
+        onClick={onRemove}
+        className="self-end"
+      >
+        <Trash2 />
+      </Button>
+    </div>
+  );
 }

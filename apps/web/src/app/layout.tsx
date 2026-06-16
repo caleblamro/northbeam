@@ -16,7 +16,8 @@ const sans = Inter({
 const mono = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-mono',
-  weight: ['400', '500'],
+  // 300 Light for refined hero numbers, 400 for tables, 500 for emphasis.
+  weight: ['300', '400', '500'],
   display: 'swap',
 });
 

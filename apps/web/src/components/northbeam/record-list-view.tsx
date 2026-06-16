@@ -5,31 +5,16 @@
 // Accounts/Deals/Activities on real data.
 
 import { EmptyState } from '@/components/northbeam/empty-state';
-import { FilterBar } from '@/components/northbeam/filter-bar';
+import { FilterDialog } from '@/components/northbeam/filter-bar';
 import { ListToolbar } from '@/components/northbeam/list-toolbar';
+import { RecordDataGrid } from '@/components/northbeam/record-data-grid';
 import { RecordFormDrawer } from '@/components/northbeam/record-form';
-import { SavedViews } from '@/components/northbeam/saved-views';
 import { ObjChip } from '@/components/northbeam/app-bits';
 import { HidePageHead, PageActions } from '@/components/northbeam/app-shell';
-import { type FieldDefLite, FieldValue } from '@/components/northbeam/field-render';
+import { type FieldDefLite } from '@/components/northbeam/field-render';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { LoadingScreen } from '@/components/ui/loading-screen';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { trpc } from '@/lib/api';
 import {
   type Filter,
@@ -38,11 +23,24 @@ import {
   writeFiltersToParams,
 } from '@/lib/filters';
 import type { ObjectLayout } from '@northbeam/db/field-types';
-import { AlertCircle, MoreHorizontal, Pencil, Trash2, Upload, UserPlus } from 'lucide-react';
+import {
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Upload,
+  UserPlus,
+} from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo, useState } from 'react';
-
-const NUMERIC = new Set(['currency', 'number', 'percent']);
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export function RecordListView({
   objectKey,
@@ -56,15 +54,16 @@ export function RecordListView({
   showImport?: boolean;
   standalone?: boolean;
   /** Always-applied filters that aren't user-editable and don't appear in the
-   *  URL. Use to scope a derived list (e.g. /tasks = activities where
-   *  type=task). The user's own filters layer on top via the FilterBar. */
+   *  URL. Use to scope a derived list (e.g. a saved view that pins
+   *  type=customer). The user's own filters layer on top via the FilterBar. */
   staticFilters?: Filter[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [q, setQ] = useState('');
-  const [savedView, setSavedView] = useState('all');
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
   const [editing, setEditing] = useState<
     { id: string; data: Record<string, unknown> } | 'new' | null
   >(null);
@@ -114,6 +113,14 @@ export function RecordListView({
   const objectLabel = object?.label ?? '';
   const objectPlural = object?.labelPlural ?? '';
   const layout = (object?.layout ?? {}) as ObjectLayout;
+
+  // Reset to page 0 when the result set shrinks below the current page.
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePageIndex = Math.min(pageIndex, pageCount - 1);
+  const pagedRows = useMemo(
+    () => rows.slice(safePageIndex * pageSize, safePageIndex * pageSize + pageSize),
+    [rows, safePageIndex, pageSize],
+  );
 
   const colKeys = layout.listColumns?.length
     ? layout.listColumns
@@ -172,29 +179,20 @@ export function RecordListView({
         </PageActions>
       )}
 
-      <FilterBar
-        fields={fields}
-        filters={filters}
-        onChange={setFilters}
-        loadReferenceOptions={(targetObject, query) =>
-          utils.record.searchRefs.fetch({ objectKey: targetObject, q: query })
-        }
-        views={
-          <SavedViews
-            views={[
-              { id: 'all', label: 'All' },
-              { id: 'mine', label: 'My records' },
-              { id: 'recent', label: 'Recent' },
-            ]}
-            activeId={savedView}
-            onSelect={setSavedView}
-          />
-        }
-      />
       <ListToolbar
         searchValue={q}
         onSearchChange={setQ}
         searchPlaceholder={`Search ${objectPlural.toLowerCase() || 'records'}…`}
+        actions={
+          <FilterDialog
+            fields={fields}
+            filters={filters}
+            onChange={setFilters}
+            loadReferenceOptions={(targetObject, query) =>
+              utils.record.searchRefs.fetch({ objectKey: targetObject, q: query })
+            }
+          />
+        }
       />
 
       {list.isLoading ? (
@@ -215,64 +213,26 @@ export function RecordListView({
           />
         </Card>
       ) : (
-        <Card className="overflow-hidden p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                {columns.map((c) => (
-                  <TableHead key={c.key} className={NUMERIC.has(c.type) ? 'text-right' : undefined}>
-                    {c.label}
-                  </TableHead>
-                ))}
-                <TableHead className="w-1" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow
-                  key={r.id}
-                  className="cursor-pointer transition-colors hover:bg-muted/40"
-                  onClick={() => router.push(`/${objectKey}/${r.id}`)}
-                >
-                  <TableCell className="font-medium text-foreground">{r.name}</TableCell>
-                  {columns.map((c) => (
-                    <TableCell key={c.key} className={NUMERIC.has(c.type) ? 'text-right' : undefined}>
-                      <FieldValue
-                        field={c}
-                        value={r.data[c.key]}
-                        referenceLabel={refLabels[String(r.data[c.key])]}
-                      />
-                    </TableCell>
-                  ))}
-                  <TableCell className="w-1" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-sm" aria-label="Row actions">
-                          <MoreHorizontal />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => setEditing({ id: r.id, data: r.data })}>
-                          <Pencil />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onSelect={() => remove.mutate({ objectKey, id: r.id })}
-                        >
-                          <Trash2 />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+        <>
+          <RecordDataGrid
+            columns={columns}
+            rows={pagedRows}
+            refLabels={refLabels}
+            objectKey={objectKey}
+            height={Math.min(560, 44 + pageSize * 36)}
+          />
+          <Pagination
+            pageIndex={safePageIndex}
+            pageSize={pageSize}
+            pageCount={pageCount}
+            totalRows={rows.length}
+            onPageChange={setPageIndex}
+            onPageSizeChange={(n) => {
+              setPageSize(n);
+              setPageIndex(0);
+            }}
+          />
+        </>
       )}
 
       {editing && object && (
@@ -288,5 +248,93 @@ export function RecordListView({
         />
       )}
     </>
+  );
+}
+
+function Pagination({
+  pageIndex,
+  pageSize,
+  pageCount,
+  totalRows,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  pageIndex: number;
+  pageSize: number;
+  pageCount: number;
+  totalRows: number;
+  onPageChange: (i: number) => void;
+  onPageSizeChange: (n: number) => void;
+}) {
+  const firstRow = totalRows === 0 ? 0 : pageIndex * pageSize + 1;
+  const lastRow = Math.min(totalRows, (pageIndex + 1) * pageSize);
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
+      <div className="text-muted-foreground tabular-nums">
+        {firstRow.toLocaleString()}–{lastRow.toLocaleString()} of{' '}
+        {totalRows.toLocaleString()}
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 text-muted-foreground text-xs">
+          <span>Rows per page</span>
+          <Select
+            value={`${pageSize}`}
+            onValueChange={(v) => onPageSizeChange(Number(v))}
+          >
+            <SelectTrigger size="sm" className="h-7 w-16">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[10, 25, 50, 100].map((n) => (
+                <SelectItem key={n} value={`${n}`}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="First page"
+            disabled={pageIndex === 0}
+            onClick={() => onPageChange(0)}
+          >
+            <ChevronsLeft />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Previous page"
+            disabled={pageIndex === 0}
+            onClick={() => onPageChange(pageIndex - 1)}
+          >
+            <ChevronLeft />
+          </Button>
+          <div className="px-2 text-muted-foreground text-xs tabular-nums">
+            {(pageIndex + 1).toLocaleString()} / {pageCount.toLocaleString()}
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Next page"
+            disabled={pageIndex >= pageCount - 1}
+            onClick={() => onPageChange(pageIndex + 1)}
+          >
+            <ChevronRight />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Last page"
+            disabled={pageIndex >= pageCount - 1}
+            onClick={() => onPageChange(pageCount - 1)}
+          >
+            <ChevronsRight />
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -24,8 +24,8 @@ const metricGroupVariants = cva('grid gap-3', {
 });
 
 const trendClass: Record<'up' | 'down' | 'neutral', string> = {
-  up: 'text-green-600 dark:text-green-400',
-  down: 'text-red-600 dark:text-red-400',
+  up: 'text-[var(--success)]',
+  down: 'text-destructive',
   neutral: 'text-muted-foreground',
 };
 
@@ -46,13 +46,20 @@ export function MetricGroup({ items, loading, columns, className }: MetricGroupP
   return (
     <div className={cn(metricGroupVariants({ columns }), className)}>
       {items.map((m, i) => (
-        <Card key={i} className="px-4 py-3.5">
-          <div className="font-medium text-muted-foreground text-sm">{m.label}</div>
-          <div className="mt-1 min-h-8 font-semibold text-2xl tabular-nums tracking-tight text-foreground">
+        <Card key={i} className="px-5 py-4">
+          <div className="font-medium text-[0.6875rem] text-muted-foreground uppercase tracking-[0.14em]">
+            {m.label}
+          </div>
+          <div className="mt-2 min-h-8 font-normal text-foreground text-2xl tabular-nums tracking-[-0.025em]">
             {loading || m.value === undefined ? <Skeleton className="h-7 w-20" /> : m.value}
           </div>
           {m.delta && !loading && (
-            <div className={cn('mt-1 font-medium text-xs', trendClass[m.delta.trend ?? 'neutral'])}>
+            <div
+              className={cn(
+                'mt-1.5 font-medium text-[0.6875rem] tabular-nums',
+                trendClass[m.delta.trend ?? 'neutral'],
+              )}
+            >
               {m.delta.text}
             </div>
           )}

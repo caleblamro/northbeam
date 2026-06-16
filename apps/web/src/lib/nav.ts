@@ -36,7 +36,6 @@ export const LAUNCHER_TILES: NavSection[] = [
       { label: 'Contacts', href: '/contacts', icon: 'users-three' },
       { label: 'Deals', href: '/deals', icon: 'currency-circle-dollar' },
       { label: 'Activities', href: '/activities', icon: 'lightning' },
-      { label: 'Tasks', href: '/tasks', icon: 'check-circle' },
     ],
   },
   {
@@ -82,10 +81,6 @@ export const PAGE_META: Record<string, PageMeta> = {
   '/activities': {
     title: 'Activities',
     subtitle: 'Calls, emails, notes, and stage changes across your records.',
-  },
-  '/tasks': {
-    title: 'Tasks',
-    subtitle: 'Your follow-ups across deals, contacts, and the migration.',
   },
   '/pipeline': { title: 'Pipeline', subtitle: 'Your deal funnel, stage by stage.' },
   '/reports': {

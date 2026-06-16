@@ -218,6 +218,21 @@
   --placeholder: #5f5f66;
 }
 
+/* ─── DataGrid layout fixes ──────────────────────────────────────────────────
+   The DataGrid root is `display: grid` with two row children (header rowgroup,
+   body rowgroup). With its `max-height` inline style and a small dataset, the
+   outer grid was stretching tracks instead of shrinking to content — leaving
+   a visible gap between the sticky header and the first virtualized row.
+   Pinning auto-rows to max-content + align-content: start collapses the tracks
+   to their natural sizes. */
+[data-slot="grid"] {
+  align-content: start;
+  grid-auto-rows: max-content;
+}
+[data-slot="grid-body"] {
+  align-self: start;
+}
+
 /* ─── Theme switch reveal (View Transitions API) ─────────────────────────────
    The circular clip-path animation is applied in lib/theme.ts. Disable the
    default cross-fade and stack the new snapshot on top so the wipe reveals the

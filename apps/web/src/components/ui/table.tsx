@@ -4,8 +4,11 @@ import type * as React from 'react';
 
 import { cn } from '@/lib/cn';
 
-// Handoff-aligned table — slightly more compact rows, subtle muted hover,
-// muted column headers.
+// Soft, rounded table — restored after a too-sharp pass. Muted header band,
+// hairline row dividers, generous padding. Numeric columns opt-in to
+// `tabular-nums` for clean column alignment, but stay in Inter (no mono).
+// The signature indigo left-edge marker on hover stays — it's subtle and
+// communicates focus without screaming.
 
 function Table({ className, ...props }: React.ComponentProps<'table'>) {
   return (
@@ -54,7 +57,12 @@ function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
     <tr
       data-slot="table-row"
       className={cn(
-        'border-b transition-colors hover:bg-muted/40 data-[state=selected]:bg-muted',
+        'group/row relative border-b transition-colors',
+        'hover:bg-muted/40 data-[state=selected]:bg-muted',
+        // Signature: 2px indigo edge marker on hover/selected — scales in
+        // softly so it never feels harsh.
+        'before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:scale-y-0 before:rounded-r before:bg-[var(--accent)] before:transition-transform',
+        'hover:before:scale-y-100 data-[state=selected]:before:scale-y-100',
         className,
       )}
       {...props}

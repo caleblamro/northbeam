@@ -416,13 +416,13 @@ function StatsRow({ stats }: { stats: Record<string, unknown> }) {
     ['References linked', stats.refsResolved],
   ];
   return (
-    <div className="flex flex-wrap gap-x-8 gap-y-4">
+    <div className="flex flex-wrap gap-x-10 gap-y-4">
       {items.map(([label, v]) => (
         <div key={label}>
           <div className="font-medium text-[0.6875rem] text-muted-foreground uppercase tracking-[0.14em]">
             {label}
           </div>
-          <div className="mt-1 font-medium text-foreground text-xl tabular-nums tracking-[-0.02em]">
+          <div className="mt-1.5 font-normal text-foreground text-xl tabular-nums tracking-[-0.025em]">
             {typeof v === 'number' ? v.toLocaleString() : '—'}
           </div>
         </div>

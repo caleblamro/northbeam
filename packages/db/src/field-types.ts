@@ -393,6 +393,129 @@ export function formatDurationMinutes(minutes: number | null | undefined): strin
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
+   Record value schema — emits a Zod schema for the *values* a record can hold
+   from a FieldDef[]. Distinct from the FieldConfigSchemas in
+   field-config-schemas.ts (which validate the *config* of a field
+   definition). This one is what the create/edit form uses on the client +
+   what the API should run on insert/update once server-side write
+   validation moves to a single source of truth.
+
+   Permissive by default — every field is nullable unless `required`. Type
+   checks happen; complex per-config rules (min/max, regex masks) get layered
+   in as the field-editor surface stabilises.
+   ────────────────────────────────────────────────────────────────────────── */
+
+// Re-exported here from a single import site so the web form layer can pull
+// both the schema builder and the field types from `@northbeam/db/field-types`.
+import { z } from 'zod';
+
+type FieldDefForSchema = {
+  key: string;
+  type: FieldType;
+  required?: boolean | null;
+  config?: FieldConfig | null;
+};
+
+const AddressValueSchema = z.object({
+  line1: z.string().optional(),
+  line2: z.string().optional(),
+  city: z.string().optional(),
+  region: z.string().optional(),
+  postal_code: z.string().optional(),
+  country: z.string().length(2).optional(),
+  formatted: z.string().optional(),
+  coordinates: z
+    .object({
+      lat: z.number(),
+      lng: z.number(),
+    })
+    .optional(),
+  mapbox_id: z.string().optional(),
+});
+
+function baseSchemaFor(field: FieldDefForSchema): z.ZodType<unknown> {
+  const cfg = field.config ?? ({} as FieldConfig);
+  switch (field.type) {
+    case 'text':
+    case 'textarea': {
+      let s = z.string();
+      if (typeof cfg.maxLength === 'number') {
+        s = s.max(cfg.maxLength, `Must be ${cfg.maxLength} characters or fewer.`);
+      }
+      return s;
+    }
+    case 'email':
+      return z.string().email("That doesn't look like an email address.");
+    case 'url':
+      return z.string().url("That doesn't look like a valid URL.");
+    case 'phone':
+      // Loose — we accept E.164 and any human-typed variant. Strict format
+      // checks live closer to the input mask.
+      return z.string().min(3, 'Too short for a phone number.');
+    case 'number':
+    case 'percent':
+    case 'autonumber':
+      return z
+        .number({ message: 'Enter a number.' })
+        .refine(Number.isFinite, 'Enter a number.');
+    case 'currency':
+      return z
+        .number({ message: 'Enter an amount.' })
+        .refine(Number.isFinite, 'Enter an amount.');
+    case 'duration':
+      return z.number().int().nonnegative('Duration must be 0 or more.');
+    case 'date':
+      return z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.');
+    case 'datetime':
+      return z.string().refine((v) => !Number.isNaN(new Date(v).getTime()), 'Invalid date.');
+    case 'checkbox':
+      return z.boolean();
+    case 'picklist': {
+      const opts = cfg.options?.map((o) => o.value) ?? [];
+      if (!opts.length) return z.string();
+      return z.enum(opts as [string, ...string[]], { message: 'Pick one of the options.' });
+    }
+    case 'multipicklist': {
+      const opts = cfg.options?.map((o) => o.value) ?? [];
+      const item = opts.length ? z.enum(opts as [string, ...string[]]) : z.string();
+      return z.array(item);
+    }
+    case 'reference':
+      return z.string().uuid('Pick a record from the list.');
+    case 'address':
+      return AddressValueSchema;
+    case 'formula':
+    case 'rollup':
+    case 'ai':
+      // Computed — never enters the form payload, but the schema returns a
+      // permissive shape so a hand-built form that does pass one doesn't blow
+      // up validation.
+      return z.unknown();
+    default:
+      return z.unknown();
+  }
+}
+
+/** Build a Zod object schema for a record's writable fields. Required-ness
+ *  is honored at the field level; everything else is `.nullish()` so partial
+ *  / in-flight forms parse cleanly. */
+export function recordValueSchema(
+  fields: FieldDefForSchema[],
+): z.ZodObject<Record<string, z.ZodType<unknown>>> {
+  const shape: Record<string, z.ZodType<unknown>> = {};
+  for (const f of fields) {
+    if (f.type === 'formula' || f.type === 'rollup' || f.type === 'ai' || f.type === 'autonumber') {
+      continue;
+    }
+    const base = baseSchemaFor(f);
+    shape[f.key] = f.required ? base : base.nullish();
+  }
+  return z.object(shape);
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
    Object layout — drives the record detail page, the sectioned create/edit form,
    and the default list view. Stored as object_def.layout (JSONB). All field
    references are field_def.key values. The Salesforce importer populates this the

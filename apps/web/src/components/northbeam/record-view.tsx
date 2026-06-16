@@ -66,7 +66,7 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
         <span className="font-medium text-foreground">{row.name}</span>
       </nav>
 
-      <header className="flex items-start gap-4 border-border border-b pb-6">
+      <header className="flex items-start gap-4">
         <ObjChip label={object.label} color={object.color} size={44} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-muted-foreground text-xs">
@@ -102,16 +102,16 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
       </header>
 
       {statKeys.length > 0 && (
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-4">
           {statKeys.map((k) => {
             const f = byKey.get(k);
             if (!f) return null;
             return (
               <div key={k} className="bg-card p-4">
-                <div className="font-medium text-[0.6875rem] text-muted-foreground uppercase tracking-wider">
+                <div className="font-medium text-[0.6875rem] text-muted-foreground uppercase tracking-[0.14em]">
                   {f.label}
                 </div>
-                <div className="mt-1.5 font-medium text-foreground text-lg tabular-nums">
+                <div className="mt-2 font-normal text-2xl text-foreground tabular-nums tracking-[-0.025em]">
                   <FieldValue field={f} value={row.data[k]} />
                 </div>
               </div>
