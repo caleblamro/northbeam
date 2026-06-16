@@ -8,8 +8,13 @@ import { EmptyState } from '@/components/northbeam/empty-state';
 import { FilterDialog } from '@/components/northbeam/filter-bar';
 import { ListToolbar } from '@/components/northbeam/list-toolbar';
 import { RecordFormDrawer } from '@/components/northbeam/record-form';
+import { SaveViewDialog } from '@/components/northbeam/save-view-dialog';
+import { ViewPicker } from '@/components/northbeam/view-picker';
+import { ViewTypeToggle } from '@/components/northbeam/view-type-toggle';
 import { getViewRenderer } from '@/lib/views/registry';
-import type { ViewRow } from '@/lib/views/types';
+import type { ViewRow, ViewType } from '@/lib/views/types';
+import { applyTypeSwitchToParams } from '@/lib/views/url-state';
+import type { ShareTarget } from '@northbeam/db/views';
 import { ObjChip } from '@/components/northbeam/app-bits';
 import { HidePageHead, PageActions } from '@/components/northbeam/app-shell';
 import { type FieldDefLite } from '@/components/northbeam/field-render';
@@ -110,13 +115,22 @@ export function RecordListView({
     },
   );
 
+  // Effective type respects the URL `?type=` override (transient cross-type
+  // switch from the toolbar). Filters + sort always carry across switches —
+  // the columns key is dropped so the new renderer falls back to its
+  // defaultColumns.
+  const urlType = searchParams.get('type') as ViewType | null;
+
   const activeView: ViewRow = useMemo(() => {
     const explicit = searchParams.get('view');
     const stored = viewsQ.data ?? [];
     const found = explicit ? stored.find((v) => v.id === explicit) : null;
-    if (found) return found;
-    const def = stored.find((v) => v.isDefault) ?? stored[0];
-    if (def) return def;
+    const base = found ?? stored.find((v) => v.isDefault) ?? stored[0];
+    if (base) {
+      // Honor a URL `?type=` override on top of the saved view — that's how
+      // the type toggle hands off without persisting.
+      return urlType && urlType !== base.type ? { ...base, type: urlType } : base;
+    }
     // Synthetic fallback: a transient "All <object>" list view derived from
     // the object's layout. Used when the view table is empty (pre-seed) or
     // when the schema hasn't been pushed yet. Never written back to the DB.
@@ -129,7 +143,7 @@ export function RecordListView({
       objectId: object?.id ?? '',
       key: 'all',
       label: `All ${objectPlural.toLowerCase() || 'records'}`,
-      type: 'list',
+      type: urlType ?? 'list',
       config: {},
       filters: [],
       sort: [],
@@ -140,7 +154,84 @@ export function RecordListView({
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies ViewRow;
-  }, [searchParams, viewsQ.data, object, objectPlural, layout.listColumns]);
+  }, [searchParams, viewsQ.data, object, objectPlural, layout.listColumns, urlType]);
+
+  // Override detection — the picker uses this to surface "Save as new view…"
+  // when the URL state diverges from what the active view actually stores.
+  const hasOverrides =
+    filters.length > 0 ||
+    (urlType !== null && urlType !== activeView.type) ||
+    false;
+
+  /** Navigate to a saved view, clearing the transient overrides on the URL
+   *  (the view carries them). */
+  const selectView = useCallback(
+    (next: ViewRow) => {
+      const params = new URLSearchParams();
+      if (next.id !== '__synthetic__') params.set('view', next.id);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router],
+  );
+
+  /** Cross-type switch: keep filters + sort, swap `?type=`, drop `?columns=`.
+   *  Per product decision; logic lives in url-state.applyTypeSwitchToParams. */
+  const switchViewType = useCallback(
+    (next: ViewType) => {
+      const current = new URLSearchParams(searchParams.toString());
+      const out = applyTypeSwitchToParams(current, next);
+      const qs = out.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const boot = trpc.me.bootstrap.useQuery();
+  const currentUserId = boot.data?.session?.userId ?? null;
+
+  const createView = trpc.view.create.useMutation({
+    meta: { context: "Couldn't save the view" },
+  });
+  const setDefaultView = trpc.view.setDefault.useMutation({
+    meta: { context: "Couldn't pin that view as default" },
+    onSuccess: () => utils.view.list.invalidate({ objectId: object?.id ?? '' }),
+  });
+  const deleteView = trpc.view.delete.useMutation({
+    meta: { context: "Couldn't delete that view" },
+    onSuccess: () => utils.view.list.invalidate({ objectId: object?.id ?? '' }),
+  });
+
+  // Dialog state for "Save as new view…". Opened from the picker; submits
+  // via SaveViewDialog's RHF form.
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const saveAsNewView = useCallback(() => setSaveDialogOpen(true), []);
+
+  const onSaveDialogSubmit = useCallback(
+    async ({ label, sharedWith }: { label: string; sharedWith: ShareTarget[] }) => {
+      if (!object?.id) return;
+      const slug =
+        label
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .slice(0, 48) || 'view';
+      const created = await createView.mutateAsync({
+        objectId: object.id,
+        key: `${slug}-${Date.now().toString(36)}`,
+        label,
+        type: activeView.type,
+        filters,
+        sort: [],
+        columns: activeView.columns,
+        sharedWith,
+      });
+      await utils.view.list.invalidate({ objectId: object.id });
+      setSaveDialogOpen(false);
+      selectView(created as ViewRow);
+    },
+    [activeView, createView, filters, object?.id, selectView, utils.view.list],
+  );
 
   const createBtn = (
     <Button onClick={() => setEditing('new')}>
@@ -191,6 +282,32 @@ export function RecordListView({
           {createBtn}
         </PageActions>
       )}
+
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <ViewPicker
+          views={viewsQ.data ?? []}
+          activeView={activeView}
+          hasOverrides={hasOverrides}
+          currentUserId={currentUserId}
+          onSelect={selectView}
+          onSaveAsNew={saveAsNewView}
+          onSetDefault={(v) => setDefaultView.mutate({ id: v.id })}
+          onDelete={(v) => {
+            if (window.confirm(`Delete "${v.label}"? This can't be undone.`)) {
+              deleteView.mutate({ id: v.id });
+              if (v.id === activeView.id) {
+                // Clear the URL so the dispatcher falls back to a different view.
+                router.replace(pathname, { scroll: false });
+              }
+            }
+          }}
+        />
+        <ViewTypeToggle
+          activeType={activeView.type}
+          fields={fields}
+          onChange={switchViewType}
+        />
+      </div>
 
       <ListToolbar
         searchValue={q}
@@ -259,6 +376,14 @@ export function RecordListView({
           );
         })()
       )}
+
+      <SaveViewDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        defaultLabel={activeView.label}
+        isSaving={createView.isPending}
+        onSave={onSaveDialogSubmit}
+      />
 
       {editing && object && (
         <RecordFormDrawer

@@ -1,6 +1,7 @@
 // Root tRPC router. The exported `AppRouter` type is imported by apps/web to
 // drive end-to-end-typed client + TanStack Query hooks.
 
+import { aiRouter } from './routers/ai.js';
 import { authRouter } from './routers/auth.js';
 import { homeRouter } from './routers/home.js';
 import { layoutRouter } from './routers/layout.js';
@@ -13,6 +14,7 @@ import { viewRouter } from './routers/view.js';
 import { router } from './trpc.js';
 
 export const appRouter = router({
+  ai: aiRouter,
   auth: authRouter,
   home: homeRouter,
   layout: layoutRouter,

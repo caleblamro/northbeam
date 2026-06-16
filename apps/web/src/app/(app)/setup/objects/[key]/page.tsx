@@ -74,6 +74,14 @@ export default function ObjectDetailPage() {
 
   const { object, fields } = q.data;
 
+  // Default view for this object — silent on failure so a missing view table
+  // never breaks the Object Manager detail page.
+  const viewsQ = trpc.view.list.useQuery(
+    { objectId: object.id },
+    { retry: false, meta: { silent: true } },
+  );
+  const defaultView = viewsQ.data?.find((v) => v.isDefault) ?? null;
+
   return (
     <>
       <Breadcrumb objectLabel={object.label} />
@@ -103,6 +111,19 @@ export default function ObjectDetailPage() {
             {
               label: 'Source',
               value: <span className="capitalize">{object.source ?? 'native'}</span>,
+            },
+            {
+              label: 'Default view',
+              value: defaultView ? (
+                <Link
+                  href={`/${object.key}?view=${defaultView.id}`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  {defaultView.label}
+                </Link>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              ),
             },
           ]}
         />
