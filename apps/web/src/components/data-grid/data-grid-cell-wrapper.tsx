@@ -173,7 +173,10 @@ export function DataGridCellWrapper<TData>({
       {...props}
       ref={composedRef}
       className={cn(
-        "size-full px-2 py-1.5 text-start text-sm outline-none has-data-[slot=checkbox]:pt-2.5",
+        // Flex + items-center vertically centers the cell value inside the
+        // row's box. Without this the content sits at the top of the row,
+        // which looks off when rows are 36px tall.
+        "flex size-full items-center px-2 py-1.5 text-start text-sm outline-none has-data-[slot=checkbox]:items-start has-data-[slot=checkbox]:pt-2.5",
         {
           "ring-1 ring-ring ring-inset": isFocused,
           "bg-yellow-100 dark:bg-yellow-900/30":

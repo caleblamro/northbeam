@@ -242,6 +242,27 @@
   align-self: start;
 }
 
+/* Vertically center text inside every DataGrid header and body cell.
+   Header cells, function-header body cells, and the DataGridCellWrapper all
+   render through `<div class="size-full px-3 py-1.5">` (or `px-2 py-1.5`).
+   Without flex + items-center, text lands at the top (header, Name cell)
+   or wherever the variant placed it (bottom for some). These rules force
+   centering at the layer below the variant components. */
+[data-slot="grid-header-cell"] > div,
+[data-slot="grid-cell"] > div {
+  display: flex !important;
+  align-items: center !important;
+}
+[data-slot="grid-cell-wrapper"] {
+  display: flex !important;
+  align-items: center !important;
+}
+/* The cell variants render an inner `[data-slot="grid-cell-content"]` with
+   `size-full` — overriding height lets the flex parent's centering apply. */
+[data-slot="grid-cell-wrapper"] [data-slot="grid-cell-content"] {
+  height: auto !important;
+}
+
 /* ─── Theme switch reveal (View Transitions API) ─────────────────────────────
    The circular clip-path animation is applied in lib/theme.ts. Disable the
    default cross-fade and stack the new snapshot on top so the wipe reveals the

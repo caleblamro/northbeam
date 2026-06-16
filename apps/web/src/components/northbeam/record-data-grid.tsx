@@ -96,7 +96,7 @@ export function RecordDataGrid({
       cell: (info) => (
         <Link
           href={`/${objectKey}/${info.row.original.id}`}
-          className="block size-full truncate px-3 font-medium text-foreground leading-9 hover:underline"
+          className="flex h-full w-full items-center truncate font-medium text-foreground hover:underline"
         >
           {info.getValue() as string}
         </Link>
