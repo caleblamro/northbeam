@@ -7,7 +7,6 @@
 // fall back to manual-only entry — never crash, never block input.
 
 import { Field } from '@/components/northbeam/field';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
 import type { AddressValue } from '@northbeam/db/field-types';

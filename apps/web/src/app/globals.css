@@ -220,11 +220,20 @@
 
 /* ─── DataGrid layout fixes ──────────────────────────────────────────────────
    The DataGrid root is `display: grid` with two row children (header rowgroup,
-   body rowgroup). With its `max-height` inline style and a small dataset, the
-   outer grid was stretching tracks instead of shrinking to content — leaving
-   a visible gap between the sticky header and the first virtualized row.
-   Pinning auto-rows to max-content + align-content: start collapses the tracks
-   to their natural sizes. */
+   body rowgroup) and the inner rowgroups are themselves `display: grid`.
+   Something upstream (suspected: a default gap rule inheriting through the
+   `*, ::before, ::after` reset) is applying a `row-gap` between the grid
+   tracks — DevTools visualizes it as the diagonal-striped band between the
+   header and the first row. Forcing `gap: 0` collapses it. Pinning auto-rows
+   to max-content + align-content: start prevents the implicit tracks from
+   stretching to fill the container when the dataset is small. */
+[data-slot="grid"],
+[data-slot="grid-header"],
+[data-slot="grid-body"] {
+  gap: 0;
+  row-gap: 0;
+  column-gap: 0;
+}
 [data-slot="grid"] {
   align-content: start;
   grid-auto-rows: max-content;

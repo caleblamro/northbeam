@@ -2446,8 +2446,16 @@
   gap: 4px;
 }
 
-.launcher__tile {
+/* A cell wraps the tile + pin so the pin can sit as a sibling (a button
+   inside another button is invalid HTML and causes hydration warnings).
+   The cell owns the positioning context that the absolutely-positioned
+   pin button anchors to. */
+.launcher__tile-cell {
   position: relative;
+  display: flex;
+}
+.launcher__tile {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2514,7 +2522,7 @@
   opacity: 0;
   transition: opacity 0.12s, background 0.12s, color 0.12s;
 }
-.launcher__tile:hover .launcher__tile-pin,
+.launcher__tile-cell:hover .launcher__tile-pin,
 .launcher__tile-pin[data-pinned="true"] {
   opacity: 1;
 }

@@ -69,7 +69,7 @@ export function parseCellKey(cellKey: string): Required<CellPosition> {
   const rowIndexStr = parts[0];
   const columnId = parts[1];
   if (rowIndexStr && columnId) {
-    const rowIndex = parseInt(rowIndexStr, 10);
+    const rowIndex = Number.parseInt(rowIndexStr, 10);
     if (!Number.isNaN(rowIndex)) {
       return { rowIndex, columnId };
     }

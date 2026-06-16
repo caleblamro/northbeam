@@ -126,17 +126,28 @@ export function AppLauncher() {
                   {section.items.map((item) => {
                     const pinned = isPinned(item.href);
                     return (
-                      <button
-                        type="button"
+                      // Wrapper div replaces the previous `<button>` so the
+                      // pin toggle can live as a sibling instead of a nested
+                      // `<button>` (invalid HTML → React hydration error).
+                      // The wrapper carries the data-accent so the existing
+                      // `.launcher__tile[data-accent="true"] .launcher__tile-ic`
+                      // styling still cascades to the inner tile.
+                      <div
                         key={item.href}
-                        className="launcher__tile"
+                        className="launcher__tile-cell"
                         data-accent={item.accent ? 'true' : undefined}
-                        onClick={() => go(item)}
                       >
-                        <span className="launcher__tile-ic">
-                          <Icon name={item.icon} size={20} />
-                        </span>
-                        <span className="launcher__tile-label">{item.label}</span>
+                        <button
+                          type="button"
+                          className="launcher__tile"
+                          data-accent={item.accent ? 'true' : undefined}
+                          onClick={() => go(item)}
+                        >
+                          <span className="launcher__tile-ic">
+                            <Icon name={item.icon} size={20} />
+                          </span>
+                          <span className="launcher__tile-label">{item.label}</span>
+                        </button>
                         <button
                           type="button"
                           className="launcher__tile-pin"
@@ -146,7 +157,7 @@ export function AppLauncher() {
                         >
                           <Icon name={pinned ? 'pin' : 'pin-off'} size={12} fill={pinned} />
                         </button>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
