@@ -3,7 +3,7 @@
 // text, dates parsed wrong, multipicklist values shoved into a single column.
 
 import { describe, expect, it } from 'vitest';
-import { COMPUTED, TEXT_TYPES, fromDb, pgTypeFor, toDb } from './pgtypes.js';
+import { COMPUTED, TEXT_TYPES, fromDb, pgTypeFor, toDb } from '../../src/dynamic/pgtypes.js';
 
 describe('pgTypeFor', () => {
   it('maps simple scalars correctly', () => {

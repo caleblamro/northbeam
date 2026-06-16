@@ -1,5 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
-  "include": ["src/**/*"]
+  // `tsc --noEmit` covers src + tests; build emit goes through tsup, which is
+  // happy without a strict rootDir. Including tests here is what catches type
+  // regressions in test stubs (e.g. a FieldRow shape change) at `pnpm typecheck`.
+  "compilerOptions": { "outDir": "dist" },
+  "include": ["src/**/*", "tests/**/*"]
 }

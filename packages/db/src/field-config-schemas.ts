@@ -14,6 +14,7 @@
 
 import { z } from 'zod';
 import { FIELD_TYPE_IDS, type FieldConfig, type FieldType } from './field-types.js';
+import { validateFormula } from './formula/index.js';
 
 const PicklistOptionSchema = z.object({
   value: z.string().min(1),
@@ -67,7 +68,18 @@ const ReferenceConfigSchema = BaseConfigSchema.extend({
 });
 
 const FormulaConfigSchema = BaseConfigSchema.extend({
-  formula: z.string().min(1, 'formula requires an expression'),
+  formula: z
+    .string()
+    .min(1, 'formula requires an expression')
+    .superRefine((s, ctx) => {
+      const r = validateFormula(s);
+      if (!r.ok) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Invalid formula: ${r.message}`,
+        });
+      }
+    }),
   returnType: z.enum(FIELD_TYPE_IDS).optional(),
 });
 

@@ -77,19 +77,18 @@ export const FIELD_TYPES = [
   },
   // ── Advanced / derived (read-only) ───────────────────────────────────────
   //
-  // These three are recognised by the data layer (storage/coercion/DDL) but no
-  // compute engine populates them yet. Marking them `unavailable` hides them
-  // from the field-picker so a customer can't create one and see `null`. The
-  // type stays in the union so any already-imported SF formula/rollup field
-  // continues to render its existing value. Once docs/architecture-plan.md §A0
-  // (compute engine) ships, drop the flag.
+  // `formula` is now backed by the engine in src/formula/. `rollup` and `ai`
+  // remain inert until their respective workers ship (rollup needs aggregation
+  // over a child object; ai needs the LLM worker). Marking the inert ones
+  // `unavailable` hides them from the field-picker so a customer can't create
+  // one and see `null`. The types stay in the union so already-imported SF
+  // formula / rollup fields continue to render their existing value.
   {
     id: 'formula',
     label: 'Formula',
     icon: 'function',
     group: 'Advanced',
     storage: 'computed',
-    unavailable: true,
   },
   {
     id: 'rollup',

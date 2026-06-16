@@ -10,31 +10,12 @@
 // not a redesign.
 
 import type { FieldDefLite } from '@/components/northbeam/field-render';
-
-export type FilterOp =
-  | 'eq'
-  | 'neq'
-  | 'contains'
-  | 'startsWith'
-  | 'endsWith'
-  | 'gt'
-  | 'lt'
-  | 'gte'
-  | 'lte'
-  | 'before'
-  | 'after'
-  | 'isTrue'
-  | 'isFalse'
-  | 'isEmpty'
-  | 'isSet';
-
-export type FilterValue = string | number | boolean | null;
-
-export type Filter = {
-  fieldKey: string;
-  op: FilterOp;
-  value?: FilterValue;
-};
+// Filter / FilterOp / FilterValue types live in `@northbeam/db/views` so the
+// schema column and the UI share one source of truth. Helpers (UNARY_OPS,
+// matchesFilter, URL serializers) stay on this file because they're
+// browser-only.
+export type { Filter, FilterOp, FilterValue } from '@northbeam/db/views';
+import type { Filter, FilterOp } from '@northbeam/db/views';
 
 /** Ops that don't need a value (so the popover hides the value editor). */
 export const UNARY_OPS: ReadonlySet<FilterOp> = new Set([

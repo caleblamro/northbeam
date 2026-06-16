@@ -61,6 +61,7 @@ function parseValue(value: string | null | undefined, withTime: boolean): Date |
   if (!value) return undefined;
   // Accept both 'YYYY-MM-DD' and 'YYYY-MM-DDTHH:mm[:ss]' inputs.
   const [d, t = '00:00'] = value.split('T');
+  if (!d) return undefined;
   const [yy, mm, dd] = d.split('-').map((s) => Number(s));
   const [hh, mi] = t.split(':').map((s) => Number(s));
   if (!yy || !mm || !dd) return undefined;

@@ -76,18 +76,43 @@ export async function listRecords(
     search?: string;
     limit?: number;
     offset?: number;
+    /** ACL gate. When provided AND the object's defaultVisibility is 'private',
+     *  rows are restricted to ones the caller owns, has been explicitly shared
+     *  (via recordShare), or any row if the caller is admin+. Public objects
+     *  ignore this filter. */
+    acl?: { userId: string; sharedRecordIds: string[]; isAdminish: boolean };
   },
 ): Promise<RecordRow[]> {
   const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
-  let where = sql``;
+  const clauses: SQL[] = [];
+
+  // Visibility filter — only applies to private objects with non-admin caller.
+  if (
+    opts.acl &&
+    opts.object.defaultVisibility === 'private' &&
+    !opts.acl.isAdminish
+  ) {
+    const visParts: SQL[] = [sql`${col(SYS.ownerId)} = ${opts.acl.userId}`];
+    if (opts.acl.sharedRecordIds.length > 0) {
+      const ids = sql.join(
+        opts.acl.sharedRecordIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      );
+      visParts.push(sql`${col(SYS.id)} in (${ids})`);
+    }
+    clauses.push(sql`(${sql.join(visParts, sql` or `)})`);
+  }
+
   const term = opts.search?.trim();
   if (term) {
     const like = `%${term}%`;
     const cols = opts.fields.filter((f) => TEXT_TYPES.has(f.type)).map((f) => f.columnName);
     cols.push(SYS.name);
     const ors = cols.map((c) => sql`${col(c)} ilike ${like}`);
-    where = sql`where (${sql.join(ors, sql` or `)})`;
+    clauses.push(sql`(${sql.join(ors, sql` or `)})`);
   }
+
+  const where = clauses.length ? sql`where ${sql.join(clauses, sql` and `)}` : sql``;
   const res = await db.execute(
     sql`select * from ${tbl} ${where} order by ${col(SYS.createdAt)} desc limit ${opts.limit ?? 100} offset ${opts.offset ?? 0}`,
   );
@@ -96,14 +121,34 @@ export async function listRecords(
 
 export async function getRecord(
   db: DbExecutor,
-  opts: { orgId: string; object: ObjectRow; fields: FieldRow[]; id: string },
+  opts: {
+    orgId: string;
+    object: ObjectRow;
+    fields: FieldRow[];
+    id: string;
+    /** Same shape as listRecords.acl. When the object is private and the
+     *  caller isn't admin+ / owner / explicitly shared, the function returns
+     *  null (treated as "not found" so we don't leak existence). */
+    acl?: { userId: string; isAdminish: boolean; hasShare: boolean };
+  },
 ): Promise<RecordRow | null> {
   const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
   const res = await db.execute(
     sql`select * from ${tbl} where ${col(SYS.id)} = ${opts.id}::uuid limit 1`,
   );
   const row = asRows(res)[0];
-  return row ? rowToRecord(opts.fields, row) : null;
+  if (!row) return null;
+  const record = rowToRecord(opts.fields, row);
+  if (
+    opts.acl &&
+    opts.object.defaultVisibility === 'private' &&
+    !opts.acl.isAdminish &&
+    record.ownerId !== opts.acl.userId &&
+    !opts.acl.hasShare
+  ) {
+    return null;
+  }
+  return record;
 }
 
 /** count(*) on the object's table — used by home/dashboard summary panels. */
@@ -198,16 +243,21 @@ export async function updateRecord(
     fields: FieldRow[];
     id: string;
     data: Record<string, unknown>;
+    /** Allow writes to COMPUTED-flagged fields (formula/rollup/ai/autonumber).
+     *  Reserved for the compute path; user-driven updates should leave this
+     *  false so user input can't overwrite engine-managed values. */
+    includeComputed?: boolean;
   },
 ): Promise<RecordRow | null> {
-  const { orgId, object, fields, id, data } = opts;
+  const { orgId, object, fields, id, data, includeComputed = false } = opts;
   const tbl = sql.raw(qualified(orgId, object.tableName));
   const sets: SQL[] = [
     sql`${col(SYS.name)} = ${displayName(fields, data, object.nameExpression)}`,
     sql`${col(SYS.updatedAt)} = now()`,
   ];
   for (const f of fields) {
-    if (COMPUTED.has(f.type) || !(f.key in data)) continue;
+    if (!(f.key in data)) continue;
+    if (COMPUTED.has(f.type) && !includeComputed) continue;
     sets.push(sql`${col(f.columnName)} = ${bindValue(f, data[f.key])}`);
   }
   const res = await db.execute(

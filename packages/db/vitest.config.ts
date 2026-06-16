@@ -2,10 +2,11 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['src/**/*.test.ts'],
-    // The dynamic SQL layer is pure helpers; no DB needed for unit tests.
-    // Integration tests (record CRUD against a real Postgres) live in
-    // apps/api and run separately.
+    // Tests live in a top-level `tests/` directory (alongside src/), not
+    // colocated under src/. This keeps tsup's build output clean — the bundler
+    // only sees app code, never .test.ts files — and matches the dominant
+    // convention in TS monorepos with a separate build step.
+    include: ['tests/**/*.test.ts'],
     environment: 'node',
     globals: false,
   },

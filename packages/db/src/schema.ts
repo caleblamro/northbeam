@@ -10,6 +10,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import type { FieldConfig, FieldType, ObjectLayout } from './field-types.js';
 import type { Role } from './roles.js';
+import type { Filter, ShareTarget, ViewSort, ViewType } from './views.js';
 
 type DefSource = 'system' | 'custom' | 'salesforce' | 'ai';
 
@@ -146,7 +147,16 @@ export const objectDef = pgTable(
     // 'first_name|last_name' for contacts. Consumed by displayName(). NULL falls
     // back to a conventional heuristic — see queries/crm.ts.
     nameExpression: text('name_expression'),
-    // Drives the record page, sectioned create/edit form, and default list columns.
+    /** Default record-level visibility for the object. `public` (the v1
+     *  default) means every workspace member can read every record; `private`
+     *  means only the owner + explicit shares (recordShare) + admins+ can
+     *  read. The dynamic-record listRecords/getRecord apply the filter. */
+    defaultVisibility: text('default_visibility')
+      .$type<'public' | 'private'>()
+      .notNull()
+      .default('public'),
+    // The "default-default" layout. Overridden by matching rows in layoutDef
+    // (per record type / per audience) — see resolveLayout in queries/layout.ts.
     // Populated by the standard-object seed and the Salesforce importer.
     layout: jsonb('layout').$type<ObjectLayout>().notNull().default({}),
     // System objects are the standard four — present in every workspace, not deletable.
@@ -221,6 +231,132 @@ export const recordType = pgTable(
   },
   (t) => ({
     objKey: uniqueIndex('record_type_obj_key_uq').on(t.objectId, t.key),
+  }),
+);
+
+// Layout overrides — extracted from objectDef.layout (which becomes the
+// fallback / default-default). One row per (object, optional recordType,
+// optional audience) combination. The resolver picks the most specific match
+// for a request; misses fall back to objectDef.layout. Audience is a free-form
+// scope key — 'owner', 'admin', a role name, or a custom segment — so a future
+// "compact mobile" layout or "sales-team accounts view" slots in without
+// schema changes.
+export const layoutDef = pgTable(
+  'layout_def',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    objectId: uuid('object_id')
+      .notNull()
+      .references(() => objectDef.id, { onDelete: 'cascade' }),
+    /** NULL = applies to every record type on the object. */
+    recordTypeId: uuid('record_type_id').references(() => recordType.id, {
+      onDelete: 'cascade',
+    }),
+    /** NULL = applies to every audience. */
+    audience: text('audience'),
+    name: text('name').notNull(),
+    layout: jsonb('layout').$type<ObjectLayout>().notNull().default({}),
+    /** Marks the row resolveLayout picks within an (object, recordType,
+     *  audience) bucket when multiple rows exist. Most installs have one. */
+    isDefault: boolean('is_default').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    objKey: uniqueIndex('layout_def_obj_rt_audience_name_uq').on(
+      t.objectId,
+      t.recordTypeId,
+      t.audience,
+      t.name,
+    ),
+  }),
+);
+
+/* ────────────────────────────────────────────────────────────────────────────
+   PER-RECORD ACL — minimal sharing-rule surface
+   ────────────────────────────────────────────────────────────────────────── */
+
+/** A grant of access to a specific record for a specific user. The record
+ *  itself lives in the org's dynamic schema (org_<id>.t_<key>), so this row
+ *  carries the soft (object, recordId) pointer instead of a real FK. The
+ *  level is conventional: 'read' | 'edit'. */
+export const recordShare = pgTable(
+  'record_share',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    objectId: uuid('object_id')
+      .notNull()
+      .references(() => objectDef.id, { onDelete: 'cascade' }),
+    recordId: uuid('record_id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    level: text('level').$type<'read' | 'edit'>().notNull().default('read'),
+    grantedBy: text('granted_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    uniq: uniqueIndex('record_share_unique').on(t.objectId, t.recordId, t.userId),
+  }),
+);
+
+/* ────────────────────────────────────────────────────────────────────────────
+   VIEWS — saved view configurations for any object. A view is a row, not URL
+   state: it carries a renderer type ('list' | 'grid' | 'kanban' | ...), the
+   type-specific config, and shared filter / sort / columns slots that every
+   renderer respects so users can flip view types without losing their query.
+
+   Sharing is dynamic — `sharedWith` is an array of ShareTarget so a view can
+   be org-wide, role-scoped, or directly shared with specific users. Owner
+   always sees their own views; null `ownerId` means "system / org-seeded"
+   (the default views every org gets per object).
+   ────────────────────────────────────────────────────────────────────────── */
+export const view = pgTable(
+  'view',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    objectId: uuid('object_id')
+      .notNull()
+      .references(() => objectDef.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(), // slug-style, unique per (org, object)
+    label: text('label').notNull(),
+    type: text('type').$type<ViewType>().notNull().default('list'),
+    // Type-specific config. JSON-encoded so adding a new renderer doesn't
+    // need a schema change. Each renderer ships its own Zod schema and
+    // validates the column at write time.
+    config: jsonb('config').$type<unknown>().notNull().default({}),
+    // Top-level so every renderer shares the same filter / sort / columns
+    // contract — flipping view types carries them across.
+    filters: jsonb('filters').$type<Filter[]>().notNull().default([]),
+    sort: jsonb('sort').$type<ViewSort[]>().notNull().default([]),
+    columns: jsonb('columns').$type<string[]>().notNull().default([]),
+    // Visibility. See ShareTarget in views.ts for the kinds. A user sees a
+    // view when they're the owner OR the array contains {org} OR matches
+    // their role OR includes their user id.
+    sharedWith: jsonb('shared_with').$type<ShareTarget[]>().notNull().default([]),
+    // null = system-seeded default, otherwise the user who created the view.
+    ownerId: text('owner_id').references(() => user.id, { onDelete: 'set null' }),
+    // Default view for (object, type). The dispatcher lands on this when the
+    // URL doesn't specify a `?view=…`.
+    isDefault: boolean('is_default').notNull().default(false),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    orgObjectKey: uniqueIndex('view_org_object_key_uq').on(
+      t.organizationId,
+      t.objectId,
+      t.key,
+    ),
   }),
 );
 

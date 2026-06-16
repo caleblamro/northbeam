@@ -12,7 +12,7 @@ import {
   isFieldTypeAvailable,
   mapSalesforceType,
   narrowFieldConfig,
-} from './field-types.js';
+} from '../src/field-types.js';
 
 describe('FIELD_TYPES registry', () => {
   it('includes every type the dynamic SQL layer knows about', () => {
@@ -48,9 +48,11 @@ describe('FIELD_TYPES registry', () => {
 });
 
 describe('PICKABLE_FIELD_TYPES', () => {
-  it('excludes the inert compute types until the compute engine ships', () => {
+  it('excludes the inert compute types until their engines ship', () => {
+    // formula is now backed by src/formula/, so it IS pickable. rollup, ai,
+    // and autonumber remain unavailable until their engines land.
     const ids = PICKABLE_FIELD_TYPES.map((f) => f.id);
-    expect(ids).not.toContain('formula');
+    expect(ids).toContain('formula');
     expect(ids).not.toContain('rollup');
     expect(ids).not.toContain('ai');
     expect(ids).not.toContain('autonumber');
@@ -65,17 +67,17 @@ describe('PICKABLE_FIELD_TYPES', () => {
 });
 
 describe('isFieldTypeAvailable', () => {
-  it('returns false for the inert compute types', () => {
-    expect(isFieldTypeAvailable('formula')).toBe(false);
+  it('returns false for the still-inert compute types', () => {
     expect(isFieldTypeAvailable('rollup')).toBe(false);
     expect(isFieldTypeAvailable('ai')).toBe(false);
     expect(isFieldTypeAvailable('autonumber')).toBe(false);
   });
 
-  it('returns true for every supported type', () => {
+  it('returns true for every supported type, including formula', () => {
     expect(isFieldTypeAvailable('text')).toBe(true);
     expect(isFieldTypeAvailable('currency')).toBe(true);
     expect(isFieldTypeAvailable('reference')).toBe(true);
+    expect(isFieldTypeAvailable('formula')).toBe(true);
   });
 });
 

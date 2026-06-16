@@ -15,7 +15,7 @@
     "start:worker": "node --env-file-if-exists=../../.env.local --env-file-if-exists=.env.local dist/workers/index.js",
     "sf:dev-connect": "tsx --env-file-if-exists=../../.env.local --env-file-if-exists=.env.local scripts/sf-dev-connect.ts",
     "sf:dry-run-map": "tsx scripts/sf-dry-run-map.ts",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .turbo dist"

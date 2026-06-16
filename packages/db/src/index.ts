@@ -44,6 +44,21 @@ export {
   safeValidateFieldConfig,
 } from './field-config-schemas.js';
 export { STANDARD_OBJECTS, seedStandardObjects } from './seed.js';
+// View types + saved-view queries.
+export {
+  type ViewType,
+  type ShareTarget,
+  type ViewSort,
+  type Filter,
+  type FilterOp,
+  type FilterValue,
+} from './views.js';
+export {
+  listViewsForUser,
+  getView,
+  getDefaultView,
+  type ViewRow,
+} from './queries/views.js';
 // Metadata (object_def / field_def) queries.
 export {
   listObjects,
@@ -55,6 +70,33 @@ export {
   type FieldRow,
   type ObjectWithFields,
 } from './queries/crm.js';
+// Layout resolution (per-object, per-recordType, per-audience overrides).
+export {
+  resolveLayout,
+  listLayouts,
+  type LayoutRow,
+} from './queries/layout.js';
+// Per-record ACL — sharing rules on top of objectDef.defaultVisibility.
+export {
+  canEditRecord,
+  editableRecordIds,
+  grantShare,
+  isAdminish,
+  listSharesForRecord,
+  revokeShare,
+  visibleSharedRecordIds,
+  type AccessLevel,
+  type AclContext,
+} from './queries/record-acl.js';
+// Formula engine — tokenize → parse → evaluate. The compute path also calls
+// validateFormula at write time so a malformed expression can't reach storage.
+export {
+  evaluateFormula,
+  parseFormula,
+  tokenize,
+  validateFormula,
+  type AstNode,
+} from './formula/index.js';
 // Native record CRUD (per-object physical tables).
 export {
   listRecords,

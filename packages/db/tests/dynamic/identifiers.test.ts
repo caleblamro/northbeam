@@ -11,7 +11,7 @@ import {
   orgSchema,
   qid,
   qualified,
-} from './identifiers.js';
+} from '../../src/dynamic/identifiers.js';
 
 describe('sanitize (via the public name helpers)', () => {
   it('lowercases mixed-case input', () => {

@@ -15,7 +15,8 @@ import { fieldColumnName, objectTableName } from './dynamic/identifiers.js';
 import { pgTypeFor } from './dynamic/pgtypes.js';
 import type { FieldConfig, FieldType, ObjectLayout, PicklistOption } from './field-types.js';
 import { getObjectByKey } from './queries/crm.js';
-import { fieldDef, objectDef } from './schema.js';
+import { fieldDef, objectDef, view } from './schema.js';
+import type { ShareTarget } from './views.js';
 
 type SeedField = {
   key: string;
@@ -815,6 +816,29 @@ export async function seedStandardObjects(db: DbExecutor, organizationId: string
 
     // Create the object's physical table from the persisted defs.
     const seeded = await getObjectByKey(db, organizationId, obj.key);
-    if (seeded) await createObjectTable(db, organizationId, seeded.object, seeded.fields);
+    if (seeded) {
+      await createObjectTable(db, organizationId, seeded.object, seeded.fields);
+      // Seed the default "All <objectPlural>" list view. Idempotent — the
+      // (organizationId, objectId, key) unique index makes re-running this
+      // safe. Owner is null because this is system-seeded; everyone in the
+      // org sees it.
+      await db
+        .insert(view)
+        .values({
+          organizationId,
+          objectId: seeded.object.id,
+          key: 'all',
+          label: `All ${obj.labelPlural.toLowerCase()}`,
+          type: 'list',
+          config: {},
+          filters: [],
+          sort: [],
+          columns: [],
+          sharedWith: [{ kind: 'org' }] satisfies ShareTarget[],
+          ownerId: null,
+          isDefault: true,
+        })
+        .onConflictDoNothing();
+    }
   }
 }

@@ -53,6 +53,9 @@ export const PERMISSIONS = {
   // API keys
   'apikey.personal.manage': 'viewer', // anyone can manage their own PATs
   'apikey.service.manage': 'admin', // service accounts are org-wide
+  // Saved views — read for anyone with record access, write for editors.
+  'view.read': 'viewer',
+  'view.write': 'member',
 } as const satisfies Record<string, Role>;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -143,6 +146,22 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         key: 'apikey.service.manage',
         label: 'Manage workspace API keys',
         description: 'Service-account tokens scoped to the workspace.',
+      },
+    ],
+  },
+  {
+    id: 'views',
+    label: 'Saved views',
+    permissions: [
+      {
+        key: 'view.read',
+        label: 'See saved views',
+        description: 'Read the views shared in the workspace.',
+      },
+      {
+        key: 'view.write',
+        label: 'Create / edit saved views',
+        description: 'Save personal views or update shared ones the caller owns.',
       },
     ],
   },

@@ -2,16 +2,24 @@
 // layer. Every operation is org-scoped. Field values live in `data` (JSONB).
 
 import {
+  canEditRecord,
   createRecord,
   deleteRecord,
   displayName,
+  evaluateFormula,
   getObjectByKey,
   getRecord,
+  grantShare,
+  isAdminish,
   listRecords,
   listRelated,
+  listSharesForRecord,
+  narrowFieldConfig,
   resolveRefLabels,
+  revokeShare,
   sanitizeData,
   updateRecord,
+  visibleSharedRecordIds,
 } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -83,6 +91,18 @@ export const recordRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey);
+      // Pre-resolve the caller's explicit-share record ids when the object
+      // is private — listRecords folds them into the WHERE so SQL does the
+      // filtering, not app code reading every row.
+      const aclCtx = {
+        orgId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        role: ctx.auth.role,
+      };
+      const sharedRecordIds =
+        object.defaultVisibility === 'private' && !isAdminish(ctx.auth.role)
+          ? await visibleSharedRecordIds(ctx.db, aclCtx, object.id)
+          : [];
       const rows = await listRecords(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
@@ -90,6 +110,11 @@ export const recordRouter = router({
         search: input.search,
         limit: input.limit,
         offset: input.offset,
+        acl: {
+          userId: ctx.auth.userId,
+          sharedRecordIds,
+          isAdminish: isAdminish(ctx.auth.role),
+        },
       });
       const refLabels = await resolveRefLabels(ctx.db, ctx.auth.organizationId, fields, rows);
       return {
@@ -99,7 +124,7 @@ export const recordRouter = router({
           id: r.id,
           data: r.data,
           ownerId: r.ownerId,
-          name: displayName(fields, r.data),
+          name: displayName(fields, r.data, object.nameExpression),
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
         })),
@@ -111,11 +136,23 @@ export const recordRouter = router({
     .input(z.object({ objectKey: z.string(), id: z.string() }))
     .query(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey);
+      // For a single record we just check whether *this* record has a share
+      // for the caller; cheaper than the bulk visibleSharedRecordIds query.
+      let hasShare = false;
+      if (object.defaultVisibility === 'private' && !isAdminish(ctx.auth.role)) {
+        const shares = await visibleSharedRecordIds(
+          ctx.db,
+          { orgId: ctx.auth.organizationId, userId: ctx.auth.userId, role: ctx.auth.role },
+          object.id,
+        );
+        hasShare = shares.includes(input.id);
+      }
       const row = await getRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
         fields,
         id: input.id,
+        acl: { userId: ctx.auth.userId, isAdminish: isAdminish(ctx.auth.role), hasShare },
       });
       if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
       const refLabels = await resolveRefLabels(ctx.db, ctx.auth.organizationId, fields, [row]);
@@ -126,7 +163,7 @@ export const recordRouter = router({
           id: row.id,
           data: row.data,
           ownerId: row.ownerId,
-          name: displayName(fields, row.data),
+          name: displayName(fields, row.data, object.nameExpression),
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
         },
@@ -175,6 +212,20 @@ export const recordRouter = router({
         id: input.id,
       });
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      // Edit ACL: owner / admin+ always; explicit share with level='edit'
+      // otherwise. Public objects skip the check.
+      if (object.defaultVisibility === 'private') {
+        const allowed = await canEditRecord(
+          ctx.db,
+          { orgId: ctx.auth.organizationId, userId: ctx.auth.userId, role: ctx.auth.role },
+          object.id,
+          input.id,
+          existing.ownerId,
+        );
+        if (!allowed) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'no edit access to this record' });
+        }
+      }
       const merged = { ...existing.data, ...sanitizeData(fields, input.data) };
       const row = await updateRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
@@ -189,9 +240,149 @@ export const recordRouter = router({
   remove: protectedProcedure
     .input(z.object({ objectKey: z.string(), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { object } = await requireObject(ctx, input.objectKey);
+      const { object, fields } = await requireObject(ctx, input.objectKey);
+      // Delete needs the existing row to check the owner.
+      const existing = await getRecord(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        object,
+        fields,
+        id: input.id,
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (object.defaultVisibility === 'private') {
+        const allowed = await canEditRecord(
+          ctx.db,
+          { orgId: ctx.auth.organizationId, userId: ctx.auth.userId, role: ctx.auth.role },
+          object.id,
+          input.id,
+          existing.ownerId,
+        );
+        if (!allowed) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'no delete access to this record' });
+        }
+      }
       await deleteRecord(ctx.db, { orgId: ctx.auth.organizationId, object, id: input.id });
       return { ok: true as const };
+    }),
+
+  /** List who can see this record (owner + explicit shares). Drives the
+   *  Sharing panel on the record detail page. */
+  shares: protectedProcedure
+    .input(z.object({ objectKey: z.string(), id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const { object } = await requireObject(ctx, input.objectKey);
+      const shares = await listSharesForRecord(
+        ctx.db,
+        { orgId: ctx.auth.organizationId, userId: ctx.auth.userId, role: ctx.auth.role },
+        object.id,
+        input.id,
+      );
+      return shares;
+    }),
+
+  /** Grant a user read or edit access to a specific record. */
+  share: protectedProcedure
+    .input(
+      z.object({
+        objectKey: z.string(),
+        id: z.string(),
+        userId: z.string(),
+        level: z.enum(['read', 'edit']),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { object, fields } = await requireObject(ctx, input.objectKey);
+      const existing = await getRecord(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        object,
+        fields,
+        id: input.id,
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      // Only the owner or an admin+ can share.
+      if (!isAdminish(ctx.auth.role) && existing.ownerId !== ctx.auth.userId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'only the owner or an admin can share this record',
+        });
+      }
+      await grantShare(
+        ctx.db,
+        { orgId: ctx.auth.organizationId, userId: ctx.auth.userId, role: ctx.auth.role },
+        { objectId: object.id, recordId: input.id, userId: input.userId, level: input.level },
+      );
+      return { ok: true as const };
+    }),
+
+  /** Remove a share. Same authz as `share`. */
+  unshare: protectedProcedure
+    .input(z.object({ objectKey: z.string(), id: z.string(), userId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { object, fields } = await requireObject(ctx, input.objectKey);
+      const existing = await getRecord(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        object,
+        fields,
+        id: input.id,
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (!isAdminish(ctx.auth.role) && existing.ownerId !== ctx.auth.userId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'only the owner or an admin can unshare this record',
+        });
+      }
+      await revokeShare(
+        ctx.db,
+        { orgId: ctx.auth.organizationId, userId: ctx.auth.userId, role: ctx.auth.role },
+        { objectId: object.id, recordId: input.id, userId: input.userId },
+      );
+      return { ok: true as const };
+    }),
+
+  /** Re-evaluate every formula field on a record from its current data, and
+   *  persist the new values. Pure-engine — no I/O beyond the record itself.
+   *  Triggered by the field-editor "Recalculate now" button and by a future
+   *  cron / change-stream worker; safe to call any time. */
+  recompute: protectedProcedure
+    .input(z.object({ objectKey: z.string(), id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { object, fields } = await requireObject(ctx, input.objectKey);
+      const row = await getRecord(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        object,
+        fields,
+        id: input.id,
+      });
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const formulaFields = fields.filter((f) => f.type === 'formula');
+      if (!formulaFields.length) return { recomputed: 0 };
+
+      const next: Record<string, unknown> = { ...row.data };
+      let recomputed = 0;
+      for (const f of formulaFields) {
+        const cfg = narrowFieldConfig('formula', f.config);
+        if (!cfg.formula) continue;
+        try {
+          next[f.key] = evaluateFormula(cfg.formula, next);
+          recomputed++;
+        } catch (err) {
+          // Skip a single bad formula rather than failing the whole row —
+          // surface in the logger so a misconfigured field is visible.
+          next[f.key] = null;
+        }
+      }
+
+      await updateRecord(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        object,
+        fields,
+        id: input.id,
+        data: next,
+        includeComputed: true, // the compute path is allowed to write formula columns
+      });
+      return { recomputed };
     }),
 
   /** Typeahead for reference (lookup) fields: search a target object's records. */

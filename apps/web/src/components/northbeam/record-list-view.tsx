@@ -7,8 +7,9 @@
 import { EmptyState } from '@/components/northbeam/empty-state';
 import { FilterDialog } from '@/components/northbeam/filter-bar';
 import { ListToolbar } from '@/components/northbeam/list-toolbar';
-import { RecordDataGrid } from '@/components/northbeam/record-data-grid';
 import { RecordFormDrawer } from '@/components/northbeam/record-form';
+import { getViewRenderer } from '@/lib/views/registry';
+import type { ViewRow } from '@/lib/views/types';
 import { ObjChip } from '@/components/northbeam/app-bits';
 import { HidePageHead, PageActions } from '@/components/northbeam/app-shell';
 import { type FieldDefLite } from '@/components/northbeam/field-render';
@@ -23,24 +24,9 @@ import {
   writeFiltersToParams,
 } from '@/lib/filters';
 import type { ObjectLayout } from '@northbeam/db/field-types';
-import {
-  AlertCircle,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  Upload,
-  UserPlus,
-} from 'lucide-react';
+import { AlertCircle, Upload, UserPlus } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo, useState } from 'react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 export function RecordListView({
   objectKey,
@@ -62,8 +48,6 @@ export function RecordListView({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [q, setQ] = useState('');
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(25);
   const [editing, setEditing] = useState<
     { id: string; data: Record<string, unknown> } | 'new' | null
   >(null);
@@ -114,20 +98,49 @@ export function RecordListView({
   const objectPlural = object?.labelPlural ?? '';
   const layout = (object?.layout ?? {}) as ObjectLayout;
 
-  // Reset to page 0 when the result set shrinks below the current page.
-  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
-  const safePageIndex = Math.min(pageIndex, pageCount - 1);
-  const pagedRows = useMemo(
-    () => rows.slice(safePageIndex * pageSize, safePageIndex * pageSize + pageSize),
-    [rows, safePageIndex, pageSize],
+  // Saved views from the API. Defensive `retry: false` + silent meta means
+  // the page renders fine even if the schema hasn't been pushed yet — the
+  // dispatcher just falls back to a synthetic default below.
+  const viewsQ = trpc.view.list.useQuery(
+    { objectId: object?.id ?? '' },
+    {
+      enabled: !!object?.id,
+      retry: false,
+      meta: { silent: true },
+    },
   );
 
-  const colKeys = layout.listColumns?.length
-    ? layout.listColumns
-    : fields.slice(0, 4).map((f) => f.key);
-  const columns = colKeys
-    .map((k) => fields.find((f) => f.key === k))
-    .filter((f): f is FieldDefLite => !!f);
+  const activeView: ViewRow = useMemo(() => {
+    const explicit = searchParams.get('view');
+    const stored = viewsQ.data ?? [];
+    const found = explicit ? stored.find((v) => v.id === explicit) : null;
+    if (found) return found;
+    const def = stored.find((v) => v.isDefault) ?? stored[0];
+    if (def) return def;
+    // Synthetic fallback: a transient "All <object>" list view derived from
+    // the object's layout. Used when the view table is empty (pre-seed) or
+    // when the schema hasn't been pushed yet. Never written back to the DB.
+    return {
+      id: '__synthetic__',
+      // `organizationId` isn't exposed on the record.list object summary
+      // (it lives on the server). The dispatcher never round-trips this row,
+      // so an empty string is fine for the synthetic.
+      organizationId: '',
+      objectId: object?.id ?? '',
+      key: 'all',
+      label: `All ${objectPlural.toLowerCase() || 'records'}`,
+      type: 'list',
+      config: {},
+      filters: [],
+      sort: [],
+      columns: layout.listColumns ?? [],
+      sharedWith: [{ kind: 'org' }],
+      ownerId: null,
+      isDefault: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } satisfies ViewRow;
+  }, [searchParams, viewsQ.data, object, objectPlural, layout.listColumns]);
 
   const createBtn = (
     <Button onClick={() => setEditing('new')}>
@@ -213,26 +226,38 @@ export function RecordListView({
           />
         </Card>
       ) : (
-        <>
-          <RecordDataGrid
-            columns={columns}
-            rows={pagedRows}
-            refLabels={refLabels}
-            objectKey={objectKey}
-            height={Math.min(560, 44 + pageSize * 36)}
-          />
-          <Pagination
-            pageIndex={safePageIndex}
-            pageSize={pageSize}
-            pageCount={pageCount}
-            totalRows={rows.length}
-            onPageChange={setPageIndex}
-            onPageSizeChange={(n) => {
-              setPageSize(n);
-              setPageIndex(0);
-            }}
-          />
-        </>
+        (() => {
+          // Dispatch to the registered renderer for `activeView.type`. The
+          // dispatcher is renderer-agnostic; per-type state (pagination here,
+          // kanban columns later, etc.) lives inside each registration.
+          const renderer = getViewRenderer(activeView.type);
+          if (!renderer) {
+            return (
+              <Card className="p-0">
+                <EmptyState
+                  icon={AlertCircle}
+                  title="Unknown view type"
+                  body={`No renderer registered for type '${activeView.type}'.`}
+                />
+              </Card>
+            );
+          }
+          const Renderer = renderer.Component;
+          return (
+            <Renderer
+              view={activeView}
+              objectKey={objectKey}
+              objectLabel={objectLabel}
+              fields={fields}
+              rows={rows}
+              refLabels={refLabels}
+              isLoading={list.isLoading}
+              onRowOpen={(id) => router.push(`/${objectKey}/${id}`)}
+              onRowEdit={(row) => setEditing(row)}
+              onRowDelete={(id) => remove.mutate({ objectKey, id })}
+            />
+          );
+        })()
       )}
 
       {editing && object && (
@@ -251,90 +276,6 @@ export function RecordListView({
   );
 }
 
-function Pagination({
-  pageIndex,
-  pageSize,
-  pageCount,
-  totalRows,
-  onPageChange,
-  onPageSizeChange,
-}: {
-  pageIndex: number;
-  pageSize: number;
-  pageCount: number;
-  totalRows: number;
-  onPageChange: (i: number) => void;
-  onPageSizeChange: (n: number) => void;
-}) {
-  const firstRow = totalRows === 0 ? 0 : pageIndex * pageSize + 1;
-  const lastRow = Math.min(totalRows, (pageIndex + 1) * pageSize);
-  return (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
-      <div className="text-muted-foreground tabular-nums">
-        {firstRow.toLocaleString()}–{lastRow.toLocaleString()} of{' '}
-        {totalRows.toLocaleString()}
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 text-muted-foreground text-xs">
-          <span>Rows per page</span>
-          <Select
-            value={`${pageSize}`}
-            onValueChange={(v) => onPageSizeChange(Number(v))}
-          >
-            <SelectTrigger size="sm" className="h-7 w-16">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[10, 25, 50, 100].map((n) => (
-                <SelectItem key={n} value={`${n}`}>
-                  {n}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="First page"
-            disabled={pageIndex === 0}
-            onClick={() => onPageChange(0)}
-          >
-            <ChevronsLeft />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Previous page"
-            disabled={pageIndex === 0}
-            onClick={() => onPageChange(pageIndex - 1)}
-          >
-            <ChevronLeft />
-          </Button>
-          <div className="px-2 text-muted-foreground text-xs tabular-nums">
-            {(pageIndex + 1).toLocaleString()} / {pageCount.toLocaleString()}
-          </div>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Next page"
-            disabled={pageIndex >= pageCount - 1}
-            onClick={() => onPageChange(pageIndex + 1)}
-          >
-            <ChevronRight />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Last page"
-            disabled={pageIndex >= pageCount - 1}
-            onClick={() => onPageChange(pageCount - 1)}
-          >
-            <ChevronsRight />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// Pagination + grid moved into components/northbeam/views/list-renderer.tsx
+// when the renderer dispatcher pattern landed. Kept here as a breadcrumb in
+// case anyone greps for it.

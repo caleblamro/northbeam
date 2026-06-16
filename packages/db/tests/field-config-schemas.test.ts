@@ -4,7 +4,7 @@
 // options, references with no target, formulas with no expression).
 
 import { describe, expect, it } from 'vitest';
-import { safeValidateFieldConfig, validateFieldConfig } from './field-config-schemas.js';
+import { safeValidateFieldConfig, validateFieldConfig } from '../src/field-config-schemas.js';
 
 describe('text-family configs', () => {
   it('accepts empty / minimal configs', () => {
@@ -85,11 +85,17 @@ describe('reference config', () => {
 });
 
 describe('computed type configs', () => {
-  it('formula requires an expression', () => {
+  it('formula requires a valid expression that the engine can parse', () => {
     expect(safeValidateFieldConfig('formula', {}).ok).toBe(false);
-    expect(validateFieldConfig('formula', { formula: 'a + b', returnType: 'number' })).toMatchObject(
-      { formula: 'a + b' },
-    );
+    // Bare "a + b" is now rejected — `a` and `b` would be bare identifiers
+    // (the engine requires {a} for a field reference).
+    expect(safeValidateFieldConfig('formula', { formula: 'a + b' }).ok).toBe(false);
+    expect(
+      validateFieldConfig('formula', {
+        formula: '{a} + {b}',
+        returnType: 'number',
+      }),
+    ).toMatchObject({ formula: '{a} + {b}' });
   });
 
   it('rollup requires the descriptor', () => {

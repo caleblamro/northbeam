@@ -5,8 +5,8 @@
 // would write to a column it isn't supposed to.
 
 import { describe, expect, it } from 'vitest';
-import type { FieldRow } from './crm.js';
-import { displayName, sanitizeData } from './crm.js';
+import type { FieldRow } from '../../src/queries/crm.js';
+import { displayName, sanitizeData } from '../../src/queries/crm.js';
 
 function field(overrides: Partial<FieldRow>): FieldRow {
   // Minimal FieldRow stub — only the keys displayName/sanitizeData read.
