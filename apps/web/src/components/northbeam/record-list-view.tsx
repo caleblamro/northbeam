@@ -202,10 +202,18 @@ export function RecordListView({
     onSuccess: () => utils.view.list.invalidate({ objectId: object?.id ?? '' }),
   });
 
-  // Dialog state for "Save as new view…". Opened from the picker; submits
-  // via SaveViewDialog's RHF form.
+  // Dialog state for "Save as new view…". Opened either from the picker
+  // (no overrides) or from a renderer that wants to persist its transient
+  // state along with the new view — currently just AIView, which passes
+  // its in-progress prompt through `config`.
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const saveAsNewView = useCallback(() => setSaveDialogOpen(true), []);
+  const [pendingSaveOverrides, setPendingSaveOverrides] = useState<
+    { config?: unknown } | null
+  >(null);
+  const saveAsNewView = useCallback((overrides?: { config?: unknown }) => {
+    setPendingSaveOverrides(overrides ?? null);
+    setSaveDialogOpen(true);
+  }, []);
 
   const onSaveDialogSubmit = useCallback(
     async ({ label, sharedWith }: { label: string; sharedWith: ShareTarget[] }) => {
@@ -225,12 +233,25 @@ export function RecordListView({
         sort: [],
         columns: activeView.columns,
         sharedWith,
+        // Merge any renderer-provided config (AI carries its prompt this way)
+        // on top of the synthetic config so the persisted view picks up
+        // exactly what the user was working on.
+        config: { ...(activeView.config as object), ...(pendingSaveOverrides?.config ?? {}) },
       });
       await utils.view.list.invalidate({ objectId: object.id });
       setSaveDialogOpen(false);
+      setPendingSaveOverrides(null);
       selectView(created as ViewRow);
     },
-    [activeView, createView, filters, object?.id, selectView, utils.view.list],
+    [
+      activeView,
+      createView,
+      filters,
+      object?.id,
+      pendingSaveOverrides,
+      selectView,
+      utils.view.list,
+    ],
   );
 
   const createBtn = (
@@ -372,6 +393,7 @@ export function RecordListView({
               onRowOpen={(id) => router.push(`/${objectKey}/${id}`)}
               onRowEdit={(row) => setEditing(row)}
               onRowDelete={(id) => remove.mutate({ objectKey, id })}
+              onSaveView={saveAsNewView}
             />
           );
         })()

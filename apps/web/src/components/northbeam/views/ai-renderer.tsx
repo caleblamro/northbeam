@@ -124,7 +124,7 @@ function renderArtifactNode(node: ArtifactNode, index: number): ReactNode {
   return <div key={index}>{factory(node, children)}</div>;
 }
 
-export function AIView({ view }: ViewRendererProps) {
+export function AIView({ view, onSaveView }: ViewRendererProps) {
   const cfg = (view.config ?? {}) as AIConfig;
   const artifact = cfg.artifact;
   const utils = trpc.useUtils();
@@ -142,6 +142,11 @@ export function AIView({ view }: ViewRendererProps) {
   const isSynthetic = view.id === '__synthetic__';
 
   if (editing) {
+    // Synthetic views can't be the target of `ai.generate` because the
+    // mutation writes back to a view row. In that case we redirect the
+    // primary CTA into the save-view flow and carry the typed prompt into
+    // the new view's config so it survives the remount.
+    const saveCta = isSynthetic && onSaveView;
     return (
       <SectionCard icon={Sparkles} title="AI view">
         <div className="flex max-w-2xl flex-col gap-3">
@@ -158,25 +163,37 @@ export function AIView({ view }: ViewRendererProps) {
             rows={5}
             className="resize-y"
           />
-          {isSynthetic && (
+          {isSynthetic && !onSaveView && (
             <p className="text-amber-700 text-xs dark:text-amber-400">
               Save this as a view first — generation needs a persisted view id.
             </p>
           )}
           <div className="flex items-center gap-2">
-            <Button
-              disabled={!prompt.trim() || generate.isPending || isSynthetic}
-              onClick={() =>
-                generate.mutate({ viewId: view.id, prompt: prompt.trim() })
-              }
-            >
-              {generate.isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
+            {saveCta ? (
+              <Button
+                disabled={!prompt.trim()}
+                onClick={() =>
+                  onSaveView({ config: { prompt: prompt.trim() } satisfies AIConfig })
+                }
+              >
                 <Sparkles />
-              )}
-              {artifact ? 'Regenerate' : 'Generate'}
-            </Button>
+                Save view & generate
+              </Button>
+            ) : (
+              <Button
+                disabled={!prompt.trim() || generate.isPending}
+                onClick={() =>
+                  generate.mutate({ viewId: view.id, prompt: prompt.trim() })
+                }
+              >
+                {generate.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Sparkles />
+                )}
+                {artifact ? 'Regenerate' : 'Generate'}
+              </Button>
+            )}
             {artifact && (
               <Button
                 variant="ghost"
@@ -189,6 +206,12 @@ export function AIView({ view }: ViewRendererProps) {
               </Button>
             )}
           </div>
+          {saveCta && (
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Saving creates a real view your prompt can attach to. After save, the AI view
+              opens in the same place and the Generate button kicks off Claude.
+            </p>
+          )}
         </div>
       </SectionCard>
     );

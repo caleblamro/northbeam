@@ -361,6 +361,40 @@ export const view = pgTable(
 );
 
 /* ────────────────────────────────────────────────────────────────────────────
+   AUDIT LOG — append-only trail of every mutating action across the org.
+   Every mutation that changes user-visible state calls writeAuditEvent
+   (see packages/db/src/queries/audit.ts). The Setup → Audit Log page
+   surfaces it; admins answer "who did that and when?" without leaving the app.
+   ────────────────────────────────────────────────────────────────────────── */
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    /** Acting user. Nullable for system / cron events. */
+    userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+    /** Dot-notation action key, e.g. 'record.created', 'view.deleted',
+     *  'object.layout.updated', 'ai.generated'. Stored verbatim — the UI
+     *  knows how to pretty-print known prefixes. */
+    action: text('action').notNull(),
+    /** What the action affected. Combine with targetId for a stable
+     *  primary-key-ish reference back to the affected row. */
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id'),
+    /** Free-form context (record name, diff summary, etc.). */
+    meta: jsonb('meta').$type<Record<string, unknown>>().notNull().default({}),
+    ip: text('ip'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    orgTime: uniqueIndex('audit_log_org_created_idx').on(t.organizationId, t.createdAt),
+  }),
+);
+
+/* ────────────────────────────────────────────────────────────────────────────
    SALESFORCE MIGRATION / MAPPING
    ────────────────────────────────────────────────────────────────────────── */
 

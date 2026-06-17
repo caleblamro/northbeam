@@ -32,6 +32,12 @@ export type ViewRendererProps = {
   onRowEdit(row: { id: string; data: Record<string, unknown> }): void;
   /** Click "Delete" in a row menu → confirm + remove. */
   onRowDelete(id: string): void;
+  /** When the dispatcher is rendering a synthetic / transient overlay (e.g.
+   *  `?type=ai` without a persisted view), a renderer can call this to open
+   *  the save-view dialog so the user can persist their in-progress state.
+   *  `overrides.config` is merged into the new view's `config` JSONB — used
+   *  by the AI renderer to carry the typed prompt across the remount. */
+  onSaveView?: (overrides?: { config?: unknown }) => void;
 };
 
 export type ViewRenderer<TConfig = unknown> = {

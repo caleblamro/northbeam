@@ -7,6 +7,7 @@
 
 import { DescriptionList } from '@/components/northbeam/description-list';
 import { EmptyState } from '@/components/northbeam/empty-state';
+import { LayoutEditor } from '@/components/northbeam/object-layout-editor';
 import { SectionCard } from '@/components/northbeam/section-card';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,10 +22,20 @@ import {
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { trpc } from '@/lib/api';
-import { ArrowLeft, Check, Database, Info, Minus, Pencil } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  Database,
+  Info,
+  LayoutPanelLeft,
+  Minus,
+  Pencil,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
+import type { FieldDefLite } from '@/components/northbeam/field-render';
+import type { ObjectLayout } from '@northbeam/db/field-types';
 
 // Field-type → tone mapping. The tones share a neutral background and only
 // differ in a small color-dot prefix, so the field list reads as a label,
@@ -73,6 +84,7 @@ export default function ObjectDetailPage() {
   }
 
   const { object, fields } = q.data;
+  const utils = trpc.useUtils();
 
   // Default view for this object — silent on failure so a missing view table
   // never breaks the Object Manager detail page.
@@ -81,6 +93,15 @@ export default function ObjectDetailPage() {
     { retry: false, meta: { silent: true } },
   );
   const defaultView = viewsQ.data?.find((v) => v.isDefault) ?? null;
+
+  const [editingLayout, setEditingLayout] = useState(false);
+  const updateLayout = trpc.object.updateLayout.useMutation({
+    meta: { context: "Couldn't save the layout" },
+    onSuccess: () => {
+      utils.object.get.invalidate({ key: object.key });
+      setEditingLayout(false);
+    },
+  });
 
   return (
     <>
@@ -127,6 +148,35 @@ export default function ObjectDetailPage() {
             },
           ]}
         />
+      </SectionCard>
+
+      <SectionCard
+        title="Form layout"
+        action={
+          editingLayout ? (
+            <span className="text-muted-foreground text-xs">Drag fields between sections</span>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => setEditingLayout(true)}>
+              <LayoutPanelLeft />
+              Edit form layout
+            </Button>
+          )
+        }
+      >
+        {editingLayout ? (
+          <LayoutEditor
+            objectId={object.id}
+            fields={fields}
+            layout={object.layout ?? {}}
+            saving={updateLayout.isPending}
+            onCancel={() => setEditingLayout(false)}
+            onSave={(layout) =>
+              updateLayout.mutate({ objectId: object.id, layout })
+            }
+          />
+        ) : (
+          <LayoutSummary layout={object.layout ?? {}} fields={fields} />
+        )}
       </SectionCard>
 
       <SectionCard
@@ -219,6 +269,62 @@ export default function ObjectDetailPage() {
         )}
       </SectionCard>
     </>
+  );
+}
+
+/** Read-only summary of the persisted layout — sections + their fields,
+ *  plus a count of unassigned fields. Replaced by LayoutEditor in edit mode. */
+function LayoutSummary({
+  layout,
+  fields,
+}: {
+  layout: ObjectLayout;
+  fields: FieldDefLite[];
+}) {
+  const sections = layout.sections ?? [];
+  const placed = new Set(sections.flatMap((s) => s.fields));
+  const unassignedCount = fields.filter((f) => !placed.has(f.key)).length;
+  const byKey = new Map(fields.map((f) => [f.key, f]));
+
+  if (sections.length === 0) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        No custom layout yet — every field appears in a single "More" group on the form.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {sections.map((s) => (
+        <div key={s.id} className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2 font-medium text-foreground text-xs">
+            <span>{s.label}</span>
+            <Badge tone="neutral" size="sm" className="font-normal">
+              {s.cols ?? 2} col
+            </Badge>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground">{s.fields.length} fields</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {s.fields.map((key) => {
+              const f = byKey.get(key);
+              return (
+                <Badge key={key} tone="neutral" size="sm" className="font-mono">
+                  {f?.label ?? key}
+                </Badge>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      {unassignedCount > 0 && (
+        <p className="text-muted-foreground text-xs">
+          {unassignedCount} unassigned field{unassignedCount === 1 ? '' : 's'} — will appear in a
+          generic "More" group on the form.
+        </p>
+      )}
+    </div>
   );
 }
 

@@ -11,6 +11,7 @@ import {
   getView,
   listViewsForUser,
   schema,
+  writeAuditEvent,
 } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
 import { and, eq } from 'drizzle-orm';
@@ -139,6 +140,14 @@ export const viewRouter = router({
           isDefault: false,
         })
         .returning();
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'view.created',
+        targetType: 'view',
+        targetId: row?.id ?? null,
+        meta: { label: input.label, type: input.type, objectId: input.objectId },
+      });
       return row;
     }),
 
@@ -164,6 +173,14 @@ export const viewRouter = router({
           and(eq(schema.view.organizationId, ctx.auth.organizationId), eq(schema.view.id, id)),
         )
         .returning();
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'view.updated',
+        targetType: 'view',
+        targetId: id,
+        meta: { label: row?.label, changed: Object.keys(patch) },
+      });
       return row;
     }),
 
@@ -192,6 +209,14 @@ export const viewRouter = router({
         .where(
           and(eq(schema.view.organizationId, ctx.auth.organizationId), eq(schema.view.id, input.id)),
         );
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'view.pinned',
+        targetType: 'view',
+        targetId: input.id,
+        meta: { label: target.label, objectId: target.objectId },
+      });
       return { ok: true as const };
     }),
 
@@ -220,6 +245,14 @@ export const viewRouter = router({
         .where(
           and(eq(schema.view.organizationId, ctx.auth.organizationId), eq(schema.view.id, input.id)),
         );
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'view.deleted',
+        targetType: 'view',
+        targetId: input.id,
+        meta: { label: existing.label, type: existing.type },
+      });
       return { ok: true as const };
     }),
 });

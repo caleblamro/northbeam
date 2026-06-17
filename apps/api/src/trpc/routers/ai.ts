@@ -8,7 +8,7 @@
 
 import { generateArtifact } from '../../ai/artifact-generator.js';
 import { loadEnv } from '@northbeam/config';
-import { getObjectById, schema } from '@northbeam/db';
+import { getObjectById, schema, writeAuditEvent } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -92,6 +92,18 @@ export const aiRouter = router({
           ),
         )
         .returning();
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'ai.generated',
+        targetType: 'view',
+        targetId: input.viewId,
+        meta: {
+          model: env.ANTHROPIC_MODEL,
+          promptLength: input.prompt.length,
+          nodeCount: artifact.components.length,
+        },
+      });
       return updated;
     }),
 });

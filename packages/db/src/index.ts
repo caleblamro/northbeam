@@ -141,3 +141,11 @@ export {
   type SalesforceConnectionRow,
   type ConnectionStatus,
 } from './queries/salesforce.js';
+// Audit log — append-only event trail.
+export {
+  writeAuditEvent,
+  listAuditEvents,
+  type AuditEventRow,
+  type AuditEventWithActor,
+  type WriteAuditEventInput,
+} from './queries/audit.js';
