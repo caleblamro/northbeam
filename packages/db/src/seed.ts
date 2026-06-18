@@ -822,6 +822,18 @@ export async function seedStandardObjects(db: DbExecutor, organizationId: string
       // (organizationId, objectId, key) unique index makes re-running this
       // safe. Owner is null because this is system-seeded; everyone in the
       // org sees it.
+      // Per-object icon for the seeded default view — keeps the picker
+      // visually distinct without the user having to set it manually.
+      const defaultIcon =
+        obj.key === 'account'
+          ? 'building'
+          : obj.key === 'contact'
+            ? 'users'
+            : obj.key === 'deal'
+              ? 'dollar'
+              : obj.key === 'activity'
+                ? 'clock'
+                : 'list';
       await db
         .insert(view)
         .values({
@@ -830,6 +842,7 @@ export async function seedStandardObjects(db: DbExecutor, organizationId: string
           key: 'all',
           label: `All ${obj.labelPlural.toLowerCase()}`,
           type: 'list',
+          icon: defaultIcon,
           config: {},
           filters: [],
           sort: [],

@@ -26,7 +26,26 @@ const ShareTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('user'), userId: z.string().min(1) }),
 ]) satisfies z.ZodType<ShareTarget>;
 
-const ViewTypeSchema = z.enum(['list', 'grid', 'kanban', 'calendar', 'ai']) satisfies z.ZodType<ViewType>;
+const ViewTypeSchema = z.enum(['list']) satisfies z.ZodType<ViewType>;
+
+const ViewIconSchema = z.enum([
+  'list',
+  'pin',
+  'star',
+  'bookmark',
+  'inbox',
+  'folder',
+  'briefcase',
+  'flag',
+  'eye',
+  'heart',
+  'building',
+  'users',
+  'dollar',
+  'chart',
+  'calendar',
+  'clock',
+]);
 
 // Filter / Sort use the same FilterOp / direction enums the web layer does,
 // so the inferred Zod type lines up with the storage column type exactly.
@@ -68,6 +87,7 @@ const CreateInput = z.object({
   key: z.string().regex(KEY_RE, 'lowercase letters, digits, dashes / underscores'),
   label: z.string().min(1).max(80),
   type: ViewTypeSchema,
+  icon: ViewIconSchema.default('list'),
   config: z.unknown().default({}),
   filters: z.array(FilterSchema).default([]),
   sort: z.array(SortSchema).default([]),
@@ -131,6 +151,7 @@ export const viewRouter = router({
           key: input.key,
           label: input.label,
           type: input.type,
+          icon: input.icon,
           config: input.config ?? {},
           filters: input.filters,
           sort: input.sort,

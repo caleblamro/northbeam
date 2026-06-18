@@ -47,6 +47,7 @@ export { STANDARD_OBJECTS, seedStandardObjects } from './seed.js';
 // View types + saved-view queries.
 export {
   type ViewType,
+  type ViewIcon,
   type ShareTarget,
   type ViewSort,
   type Filter,

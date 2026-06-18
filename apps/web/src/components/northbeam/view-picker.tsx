@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/cn';
-import { getViewRenderer } from '@/lib/views/registry';
+import { getViewIcon } from '@/lib/views/icons';
 import type { ViewRow } from '@/lib/views/types';
 import { Check, ChevronDown, MoreHorizontal, Pin, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -73,8 +73,7 @@ export function ViewPicker({
   className,
 }: ViewPickerProps) {
   const [open, setOpen] = useState(false);
-  const activeRenderer = getViewRenderer(activeView.type);
-  const ActiveIcon = activeRenderer?.icon;
+  const ActiveIcon = getViewIcon(activeView.icon);
 
   // Group views by share scope. Synthetic-default views (id === '__synthetic__')
   // never appear in the saved list — they're a runtime fallback.
@@ -102,7 +101,7 @@ export function ViewPicker({
           size="sm"
           className={cn('h-8 gap-1.5 px-2 font-medium', className)}
         >
-          {ActiveIcon && <ActiveIcon className="size-3.5 text-muted-foreground" />}
+          <ActiveIcon className="size-3.5 text-muted-foreground" />
           <span className="max-w-[12rem] truncate">{activeView.label}</span>
           {hasOverrides && (
             <Badge tone="brand" size="sm" className="ml-1">
@@ -123,8 +122,7 @@ export function ViewPicker({
               return (
                 <CommandGroup key={section.kind} heading={section.label}>
                   {items.map((v) => {
-                    const r = getViewRenderer(v.type);
-                    const Icon = r?.icon;
+                    const Icon = getViewIcon(v.icon);
                     const isActive = v.id === activeView.id;
                     const showActions = canManage(v) && (onSetDefault || onDelete);
                     return (
@@ -136,7 +134,7 @@ export function ViewPicker({
                           setOpen(false);
                         }}
                       >
-                        {Icon && <Icon className="size-3.5 text-muted-foreground" />}
+                        <Icon className="size-3.5 text-muted-foreground" />
                         <span className="flex-1 truncate">{v.label}</span>
                         {v.isDefault && (
                           <span className="text-[10px] text-muted-foreground">default</span>

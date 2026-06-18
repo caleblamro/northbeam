@@ -10,7 +10,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import type { FieldConfig, FieldType, ObjectLayout } from './field-types.js';
 import type { Role } from './roles.js';
-import type { Filter, ShareTarget, ViewSort, ViewType } from './views.js';
+import type { Filter, ShareTarget, ViewIcon, ViewSort, ViewType } from './views.js';
 
 type DefSource = 'system' | 'custom' | 'salesforce' | 'ai';
 
@@ -343,6 +343,9 @@ export const view = pgTable(
     // view when they're the owner OR the array contains {org} OR matches
     // their role OR includes their user id.
     sharedWith: jsonb('shared_with').$type<ShareTarget[]>().notNull().default([]),
+    /** Lucide-equivalent icon shown in the view picker. Pick from the
+     *  curated `ViewIcon` set in views.ts so the picker stays cohesive. */
+    icon: text('icon').$type<ViewIcon>().notNull().default('list'),
     // null = system-seeded default, otherwise the user who created the view.
     ownerId: text('owner_id').references(() => user.id, { onDelete: 'set null' }),
     // Default view for (object, type). The dispatcher lands on this when the

@@ -10,11 +10,9 @@ import { ListToolbar } from '@/components/northbeam/list-toolbar';
 import { RecordFormDrawer } from '@/components/northbeam/record-form';
 import { SaveViewDialog } from '@/components/northbeam/save-view-dialog';
 import { ViewPicker } from '@/components/northbeam/view-picker';
-import { ViewTypeToggle } from '@/components/northbeam/view-type-toggle';
 import { getViewRenderer } from '@/lib/views/registry';
-import type { ViewRow, ViewType } from '@/lib/views/types';
-import { applyTypeSwitchToParams } from '@/lib/views/url-state';
-import type { ShareTarget } from '@northbeam/db/views';
+import type { ViewRow } from '@/lib/views/types';
+import type { ShareTarget, ViewIcon } from '@northbeam/db/views';
 import { ObjChip } from '@/components/northbeam/app-bits';
 import { HidePageHead, PageActions } from '@/components/northbeam/app-shell';
 import { type FieldDefLite } from '@/components/northbeam/field-render';
@@ -115,22 +113,12 @@ export function RecordListView({
     },
   );
 
-  // Effective type respects the URL `?type=` override (transient cross-type
-  // switch from the toolbar). Filters + sort always carry across switches —
-  // the columns key is dropped so the new renderer falls back to its
-  // defaultColumns.
-  const urlType = searchParams.get('type') as ViewType | null;
-
   const activeView: ViewRow = useMemo(() => {
     const explicit = searchParams.get('view');
     const stored = viewsQ.data ?? [];
     const found = explicit ? stored.find((v) => v.id === explicit) : null;
     const base = found ?? stored.find((v) => v.isDefault) ?? stored[0];
-    if (base) {
-      // Honor a URL `?type=` override on top of the saved view — that's how
-      // the type toggle hands off without persisting.
-      return urlType && urlType !== base.type ? { ...base, type: urlType } : base;
-    }
+    if (base) return base;
     // Synthetic fallback: a transient "All <object>" list view derived from
     // the object's layout. Used when the view table is empty (pre-seed) or
     // when the schema hasn't been pushed yet. Never written back to the DB.
@@ -143,7 +131,8 @@ export function RecordListView({
       objectId: object?.id ?? '',
       key: 'all',
       label: `All ${objectPlural.toLowerCase() || 'records'}`,
-      type: urlType ?? 'list',
+      type: 'list',
+      icon: 'list' as ViewIcon,
       config: {},
       filters: [],
       sort: [],
@@ -154,14 +143,11 @@ export function RecordListView({
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies ViewRow;
-  }, [searchParams, viewsQ.data, object, objectPlural, layout.listColumns, urlType]);
+  }, [searchParams, viewsQ.data, object, objectPlural, layout.listColumns]);
 
   // Override detection — the picker uses this to surface "Save as new view…"
-  // when the URL state diverges from what the active view actually stores.
-  const hasOverrides =
-    filters.length > 0 ||
-    (urlType !== null && urlType !== activeView.type) ||
-    false;
+  // when the URL filters diverge from what the active view actually stores.
+  const hasOverrides = filters.length > 0;
 
   /** Navigate to a saved view, clearing the transient overrides on the URL
    *  (the view carries them). */
@@ -216,7 +202,11 @@ export function RecordListView({
   }, []);
 
   const onSaveDialogSubmit = useCallback(
-    async ({ label, sharedWith }: { label: string; sharedWith: ShareTarget[] }) => {
+    async ({
+      label,
+      sharedWith,
+      icon,
+    }: { label: string; sharedWith: ShareTarget[]; icon: ViewIcon }) => {
       if (!object?.id) return;
       const slug =
         label
@@ -228,14 +218,14 @@ export function RecordListView({
         objectId: object.id,
         key: `${slug}-${Date.now().toString(36)}`,
         label,
-        type: activeView.type,
+        type: 'list',
+        icon,
         filters,
         sort: [],
         columns: activeView.columns,
         sharedWith,
-        // Merge any renderer-provided config (AI carries its prompt this way)
-        // on top of the synthetic config so the persisted view picks up
-        // exactly what the user was working on.
+        // Merge any renderer-provided config on top of the synthetic config
+        // so the persisted view picks up exactly what the user was working on.
         config: { ...(activeView.config as object), ...(pendingSaveOverrides?.config ?? {}) },
       });
       await utils.view.list.invalidate({ objectId: object.id });
@@ -322,11 +312,6 @@ export function RecordListView({
               }
             }
           }}
-        />
-        <ViewTypeToggle
-          activeType={activeView.type}
-          fields={fields}
-          onChange={switchViewType}
         />
       </div>
 
