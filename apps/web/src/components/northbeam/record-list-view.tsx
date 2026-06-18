@@ -161,18 +161,6 @@ export function RecordListView({
     [pathname, router],
   );
 
-  /** Cross-type switch: keep filters + sort, swap `?type=`, drop `?columns=`.
-   *  Per product decision; logic lives in url-state.applyTypeSwitchToParams. */
-  const switchViewType = useCallback(
-    (next: ViewType) => {
-      const current = new URLSearchParams(searchParams.toString());
-      const out = applyTypeSwitchToParams(current, next);
-      const qs = out.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    },
-    [pathname, router, searchParams],
-  );
-
   const boot = trpc.me.bootstrap.useQuery();
   const currentUserId = boot.data?.session?.userId ?? null;
 

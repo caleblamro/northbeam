@@ -24,9 +24,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { VIEW_ICONS, VIEW_ICON_ORDER } from '@/lib/views/icons';
+import { cn } from '@/lib/cn';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ROLES, ROLE_LABELS, type Role } from '@northbeam/core/roles';
-import type { ShareTarget } from '@northbeam/db/views';
+import type { ShareTarget, ViewIcon } from '@northbeam/db/views';
 import { Loader2 } from 'lucide-react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -42,6 +44,7 @@ const SHAREABLE_ROLES: Role[] = ['admin', 'member', 'viewer'];
 const Schema = z
   .object({
     label: z.string().min(1, 'Name is required.').max(80),
+    icon: z.enum(VIEW_ICON_ORDER as [ViewIcon, ...ViewIcon[]]),
     shareMode: z.enum(SHARE_MODES),
     roles: z.array(z.enum(ROLES)),
   })
@@ -57,14 +60,17 @@ interface SaveViewDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Suggested label (typically the active view's name). */
   defaultLabel?: string;
+  /** Suggested icon — defaults to `list`. */
+  defaultIcon?: ViewIcon;
   isSaving: boolean;
-  onSave(input: { label: string; sharedWith: ShareTarget[] }): void;
+  onSave(input: { label: string; sharedWith: ShareTarget[]; icon: ViewIcon }): void;
 }
 
 export function SaveViewDialog({
   open,
   onOpenChange,
   defaultLabel,
+  defaultIcon,
   isSaving,
   onSave,
 }: SaveViewDialogProps) {
@@ -73,6 +79,7 @@ export function SaveViewDialog({
     mode: 'onBlur',
     defaultValues: {
       label: defaultLabel ?? '',
+      icon: defaultIcon ?? 'list',
       shareMode: 'private',
       roles: [],
     },
@@ -85,7 +92,7 @@ export function SaveViewDialog({
         : values.shareMode === 'role'
           ? values.roles.map((role) => ({ kind: 'role', role }))
           : [];
-    onSave({ label: values.label.trim(), sharedWith });
+    onSave({ label: values.label.trim(), sharedWith, icon: values.icon });
   });
 
   const shareMode = form.watch('shareMode');
@@ -95,7 +102,13 @@ export function SaveViewDialog({
       open={open}
       onOpenChange={(o) => {
         onOpenChange(o);
-        if (!o) form.reset({ label: defaultLabel ?? '', shareMode: 'private', roles: [] });
+        if (!o)
+          form.reset({
+            label: defaultLabel ?? '',
+            icon: defaultIcon ?? 'list',
+            shareMode: 'private',
+            roles: [],
+          });
       }}
     >
       <DialogContent className="sm:max-w-md">
@@ -114,6 +127,40 @@ export function SaveViewDialog({
               autoFocus
               placeholder="Mine, this week"
               {...form.register('label')}
+            />
+          </Field>
+          <Field label="Icon" htmlFor="view-icon">
+            <Controller
+              control={form.control}
+              name="icon"
+              render={({ field }) => (
+                <div
+                  id="view-icon"
+                  className="grid grid-cols-8 gap-1.5 rounded-md border bg-card p-2"
+                >
+                  {VIEW_ICON_ORDER.map((key) => {
+                    const Icon = VIEW_ICONS[key];
+                    const isActive = field.value === key;
+                    return (
+                      <button
+                        type="button"
+                        key={key}
+                        onClick={() => field.onChange(key)}
+                        aria-label={key}
+                        aria-pressed={isActive}
+                        className={cn(
+                          'flex aspect-square items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors',
+                          'hover:border-foreground/30 hover:text-foreground',
+                          isActive &&
+                            'border-primary/60 bg-primary/10 text-primary hover:text-primary',
+                        )}
+                      >
+                        <Icon className="size-3.5" />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             />
           </Field>
           <Field label="Visibility" htmlFor="view-share-mode">
