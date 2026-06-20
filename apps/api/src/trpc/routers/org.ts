@@ -2,7 +2,13 @@
 // Lets the dashboard create, switch, list, update, delete orgs and manage
 // members + pending invitations without a separate client SDK.
 
-import { ROLES, schema, seedStandardObjects, withOrgContext } from '@northbeam/db';
+import {
+  ROLES,
+  schema,
+  seedSampleRecords,
+  seedStandardObjects,
+  withOrgContext,
+} from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';

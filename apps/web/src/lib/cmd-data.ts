@@ -13,9 +13,16 @@ export type CmdItem = {
   href?: string;
 };
 
-export const CMD_GROUP_ORDER = ['Quick actions', 'Go to', 'Records'] as const;
+export const CMD_GROUP_ORDER = ['AI', 'Quick actions', 'Go to', 'Records'] as const;
 
 export const CMD_ITEMS: CmdItem[] = [
+  {
+    id: 'ai-generate',
+    group: 'AI',
+    icon: 'sparkle',
+    label: 'Generate from prompt',
+    sub: 'Compose a dashboard against your live data',
+  },
   {
     id: 'a1',
     group: 'Quick actions',

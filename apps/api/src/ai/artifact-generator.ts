@@ -1,11 +1,17 @@
 // Artifact generator. Takes a natural-language prompt + the object context
-// and asks Claude to produce a structured ArtifactNode tree the web side
-// renders via AIRenderer's whitelist (apps/web/src/components/northbeam/
-// views/ai-renderer.tsx).
+// and asks Claude to produce a structured ArtifactNode tree the ⌘K palette
+// renders inline. Schema is intentionally NON-recursive — Vercel AI SDK's
+// JSON-schema converter can't represent z.lazy self-references, so we
+// flatten to two shapes:
 //
-// Uses Vercel AI SDK's `generateObject` so the model is forced into the
-// schema-validated JSON shape — bad generations get rejected at the SDK
-// boundary instead of surfacing as runtime render failures.
+//   - LeafNode: a single component with no children
+//   - SectionNode: a SectionCard that wraps an array of LeafNodes
+//
+// Top-level is an array of LeafNode | SectionNode. That covers every layout
+// we want without recursion.
+//
+// The renderer (ai-generate-dialog.tsx) walks the same shape; both sides
+// agree on the whitelist.
 
 import { anthropic } from '@ai-sdk/anthropic';
 import { loadEnv } from '@northbeam/config';
@@ -13,25 +19,31 @@ import type { FieldRow, ObjectRow } from '@northbeam/db';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 
-/** Mirrors the v1 artifact format AIRenderer walks. Keep this list in sync
- *  with ARTIFACT_COMPONENTS in ai-renderer.tsx — anything outside the
- *  whitelist surfaces as an "Unsupported component" placeholder. */
-const ALLOWED_COMPONENTS = [
+const LEAF_COMPONENTS = [
   'PageHeader',
-  'SectionCard',
   'MetricGroup',
   'DescriptionList',
   'EmptyState',
   'Text',
 ] as const;
 
-const ArtifactNodeSchema: z.ZodType<unknown> = z.lazy(() =>
-  z.object({
-    component: z.enum(ALLOWED_COMPONENTS),
-    props: z.record(z.string(), z.unknown()).optional(),
-    children: z.array(ArtifactNodeSchema).optional(),
-  }),
-);
+const LeafNodeSchema = z.object({
+  component: z.enum(LEAF_COMPONENTS),
+  props: z.record(z.string(), z.unknown()).optional(),
+});
+
+const SectionNodeSchema = z.object({
+  component: z.literal('SectionCard'),
+  props: z
+    .object({
+      title: z.string().optional(),
+    })
+    .passthrough()
+    .optional(),
+  children: z.array(LeafNodeSchema).optional(),
+});
+
+const ArtifactNodeSchema = z.union([LeafNodeSchema, SectionNodeSchema]);
 
 const ArtifactSchema = z.object({
   version: z.literal('1'),
@@ -39,69 +51,111 @@ const ArtifactSchema = z.object({
 });
 
 export type Artifact = z.infer<typeof ArtifactSchema>;
+export type ArtifactLeafNode = z.infer<typeof LeafNodeSchema>;
+export type ArtifactSectionNode = z.infer<typeof SectionNodeSchema>;
+export type ArtifactNode = z.infer<typeof ArtifactNodeSchema>;
 
-function buildSystemPrompt(object: ObjectRow, fields: FieldRow[]): string {
+/** Compact summary of the data that lives in the target object. Computed
+ *  by the API before the LLM call and baked into the system prompt so the
+ *  artifact's metric values reflect reality (not Claude's training-set
+ *  guesses). Shape is intentionally narrow — `recordCount`, a few
+ *  group-by counts, optional top-N. */
+export type DataSummary = {
+  recordCount: number;
+  /** Group-by counts on the first one or two picklist fields. Empty when
+   *  the object has no picklists. */
+  picklistCounts: { fieldKey: string; fieldLabel: string; counts: { value: string; count: number }[] }[];
+  /** Sum + average for the first currency / number field, if any. */
+  numericSummary: { fieldKey: string; fieldLabel: string; sum: number; avg: number } | null;
+};
+
+function formatDataSummary(summary: DataSummary): string {
+  const parts: string[] = [];
+  parts.push(`- Total records: ${summary.recordCount.toLocaleString()}`);
+  for (const p of summary.picklistCounts) {
+    const top = p.counts.slice(0, 6).map((c) => `${c.value} (${c.count})`).join(', ');
+    parts.push(`- ${p.fieldLabel} breakdown: ${top || 'no values'}`);
+  }
+  if (summary.numericSummary) {
+    const { fieldLabel, sum, avg } = summary.numericSummary;
+    parts.push(
+      `- ${fieldLabel}: total ${sum.toLocaleString()}, average ${avg.toLocaleString()}`,
+    );
+  }
+  return parts.join('\n');
+}
+
+function buildSystemPrompt(
+  object: ObjectRow,
+  fields: FieldRow[],
+  summary: DataSummary,
+): string {
   const fieldLines = fields
-    .filter((f) => !f.isSystem || ['name'].includes(f.key))
+    .filter((f) => !f.isSystem || f.key === 'name')
     .slice(0, 40)
     .map((f) => `- ${f.label} (${f.key}, type: ${f.type})`)
     .join('\n');
 
-  return `You are generating a structured UI artifact for a CRM view inside Northbeam.
+  return `You are generating a structured UI artifact for a CRM dashboard inside Northbeam.
 
-The artifact will be rendered as React components on a user's dashboard.
+The artifact will be rendered as React components in a dialog.
 You must respond with valid JSON matching the requested schema — no commentary, no markdown fences.
 
 # Available components (use ONLY these — anything else is dropped)
 
 - PageHeader: a hero section at the top.
   props: { title: string, subtitle?: string }
-  no children.
 
-- SectionCard: a bordered panel with an optional header.
+- SectionCard: a bordered panel that holds children.
   props: { title?: string }
-  children: any of the above components.
+  children: array of LeafNodes (PageHeader / MetricGroup / DescriptionList / EmptyState / Text).
+  Nest at most one level — children cannot be SectionCards.
 
 - MetricGroup: a row of stat tiles.
   props: { items: { label: string, value?: string, delta?: string }[] }
-  no children. Use small "items" arrays (≤ 4) so the row fits.
+  Use small arrays (≤ 4) so the row fits.
 
 - DescriptionList: a label / value list.
   props: { items: { label: string, value: string }[] }
-  no children.
 
-- EmptyState: a placeholder block for an empty / not-yet-built section.
+- EmptyState: a placeholder block.
   props: { title: string, body?: string }
-  no children.
 
 - Text: a plain paragraph.
   props: { value: string, muted?: boolean }
-  no children.
 
 # Object context
 
-You are generating a view for the **${object.label}** object (key: \`${object.key}\`).
-Available fields the user can reference in their prompt:
+You are generating for the **${object.label}** object (key: \`${object.key}\`).
+
+Fields available to reference:
 ${fieldLines || '- (no fields surfaced)'}
+
+# Live data summary
+
+The following came from a real query against the workspace's data — use
+these numbers (don't invent values for the same metrics):
+
+${formatDataSummary(summary)}
 
 # Output rules
 
-- Top-level "components" array: 1-6 items, in vertical reading order.
-- Wrap content in SectionCard sections when the artifact has more than ~2 nodes.
-- Use realistic placeholder labels / values when the user's prompt asks for data —
-  prefix placeholder values with "—" or note "Sample value" so the user knows it's
-  not live data. The Northbeam team will wire data-source bindings in a follow-up.
-- Never invent components that aren't in the whitelist.
+- Top-level "components" array: 1-6 items in reading order.
+- Wrap multi-block content in SectionCards.
+- Use the live numbers above wherever the user's prompt asks for those
+  metrics. For anything NOT in the summary, you may either (a) note that
+  the value isn't tracked, or (b) write a clearly-marked sample value
+  prefixed with "—" so it's obvious it isn't live.
 - Keep titles ≤ 60 chars, bodies ≤ 280 chars.`;
 }
 
-/** Generate an artifact from a natural-language prompt + object context.
- *  Throws when ANTHROPIC_API_KEY isn't configured (the caller should map
- *  that to a friendly tRPC error). */
+/** Generate an artifact from a natural-language prompt + object context +
+ *  the live data summary. Throws when ANTHROPIC_API_KEY isn't configured. */
 export async function generateArtifact(opts: {
   prompt: string;
   object: ObjectRow;
   fields: FieldRow[];
+  summary: DataSummary;
 }): Promise<Artifact> {
   const env = loadEnv();
   if (!env.ANTHROPIC_API_KEY) {
@@ -109,7 +163,7 @@ export async function generateArtifact(opts: {
   }
   const result = await generateObject({
     model: anthropic(env.ANTHROPIC_MODEL),
-    system: buildSystemPrompt(opts.object, opts.fields),
+    system: buildSystemPrompt(opts.object, opts.fields, opts.summary),
     prompt: opts.prompt,
     schema: ArtifactSchema,
   });

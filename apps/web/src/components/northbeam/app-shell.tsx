@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { AIGenerateDialog } from './ai-generate-dialog';
 import { CommandPalette } from './command-legacy';
 import { AppTopbar } from './app-topbar';
 import { Spinner } from './primitives';
@@ -64,6 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [palette, setPalette] = useState(false);
+  const [aiDialog, setAiDialog] = useState(false);
   const boot = trpc.me.bootstrap.useQuery();
   const [actions, setActions] = useState<ReactNode>(null);
   const [hideHead, setHideHead] = useState(false);
@@ -91,6 +93,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
   const { session, activeOrg } = boot.data;
   const onSelect = (item: CmdItem) => {
+    if (item.id === 'ai-generate') {
+      setAiDialog(true);
+      return;
+    }
     if (item.href) router.push(item.href);
   };
 
@@ -131,6 +137,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <CommandPalette open={palette} onClose={() => setPalette(false)} onSelect={onSelect} />
+        <AIGenerateDialog open={aiDialog} onOpenChange={setAiDialog} />
       </div>
     </MotionConfig>
   );

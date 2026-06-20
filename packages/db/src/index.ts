@@ -44,6 +44,7 @@ export {
   safeValidateFieldConfig,
 } from './field-config-schemas.js';
 export { STANDARD_OBJECTS, seedStandardObjects } from './seed.js';
+export { seedSampleRecords } from './sample-records.js';
 // View types + saved-view queries.
 export {
   type ViewType,
