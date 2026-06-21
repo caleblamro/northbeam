@@ -45,15 +45,57 @@ const SectionNodeSchema = z.object({
 
 const ArtifactNodeSchema = z.union([LeafNodeSchema, SectionNodeSchema]);
 
+// The model also produces a saved-view suggestion that captures the same
+// intent in a form a regular list view can hold: a label, filters, sort,
+// and the columns the user should see. The dialog's "Save as view" button
+// turns this into a real `view` row; the artifact itself is never persisted.
+const FILTER_OPS = [
+  'eq',
+  'neq',
+  'contains',
+  'startsWith',
+  'endsWith',
+  'gt',
+  'lt',
+  'gte',
+  'lte',
+  'before',
+  'after',
+  'isTrue',
+  'isFalse',
+  'isEmpty',
+  'isSet',
+] as const;
+
+const SuggestedFilterSchema = z.object({
+  fieldKey: z.string().min(1),
+  op: z.enum(FILTER_OPS),
+  value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
+});
+
+const SuggestedSortSchema = z.object({
+  fieldKey: z.string().min(1),
+  direction: z.enum(['asc', 'desc']),
+});
+
+const ViewSuggestionSchema = z.object({
+  label: z.string().min(1).max(80),
+  filters: z.array(SuggestedFilterSchema).max(10).default([]),
+  sort: z.array(SuggestedSortSchema).max(3).default([]),
+  columns: z.array(z.string()).max(8).default([]),
+});
+
 const ArtifactSchema = z.object({
   version: z.literal('1'),
   components: z.array(ArtifactNodeSchema).min(1).max(20),
+  view: ViewSuggestionSchema,
 });
 
 export type Artifact = z.infer<typeof ArtifactSchema>;
 export type ArtifactLeafNode = z.infer<typeof LeafNodeSchema>;
 export type ArtifactSectionNode = z.infer<typeof SectionNodeSchema>;
 export type ArtifactNode = z.infer<typeof ArtifactNodeSchema>;
+export type ViewSuggestion = z.infer<typeof ViewSuggestionSchema>;
 
 /** Compact summary of the data that lives in the target object. Computed
  *  by the API before the LLM call and baked into the system prompt so the
@@ -146,7 +188,29 @@ ${formatDataSummary(summary)}
   metrics. For anything NOT in the summary, you may either (a) note that
   the value isn't tracked, or (b) write a clearly-marked sample value
   prefixed with "—" so it's obvious it isn't live.
-- Keep titles ≤ 60 chars, bodies ≤ 280 chars.`;
+- Keep titles ≤ 60 chars, bodies ≤ 280 chars.
+
+# View suggestion (always included)
+
+In addition to the artifact, every response must include a "view" object — the
+equivalent saved-view configuration the user could pin if they liked your
+output. The user will see the artifact in the preview and may click "Save as
+view"; the filters / sort / columns you propose drive the saved list view.
+
+- "label": short name (≤ 60 chars) summarising what the saved list shows.
+- "filters": array of { fieldKey, op, value? }.
+  - fieldKey MUST come from the field list above.
+  - Valid ops: ${FILTER_OPS.join(', ')}.
+  - isEmpty / isSet / isTrue / isFalse take no value; everything else
+    requires a value.
+- "sort": array of { fieldKey, direction } — 0–2 entries.
+- "columns": array of field keys for the saved list's columns, in order.
+  4–6 entries.
+
+The view should reflect the SAME intent as the artifact. If the prompt is
+"top deals at risk", the artifact might show metric tiles for at-risk
+counts, and the view should pre-filter to that stage / probability range
+and sort by amount descending.`;
 }
 
 /** Generate an artifact from a natural-language prompt + object context +

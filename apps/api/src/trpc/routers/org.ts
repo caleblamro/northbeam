@@ -56,7 +56,19 @@ export const orgRouter = router({
         // — open one explicitly for the seed so the object_def / field_def
         // INSERTs pass the RLS policy. We also get atomicity: if the seed
         // fails halfway through, none of the partial metadata sticks around.
-        await withOrgContext(rootDb(), result.id, (tx) => seedStandardObjects(tx, result.id));
+        await withOrgContext(rootDb(), result.id, async (tx) => {
+          await seedStandardObjects(tx, result.id);
+          // Sample records — accounts + contacts + deals + activities with
+          // real references between them so dashboards / list views aren't
+          // empty out of the gate. Best-effort: a failure here doesn't
+          // un-create the org, since the metadata is already in place.
+          try {
+            await seedSampleRecords(tx, result.id);
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn('[org.create] sample records seed failed', err);
+          }
+        });
         await setActiveOrganization(result.id, ctx.req.headers);
         return result;
       } catch (err) {

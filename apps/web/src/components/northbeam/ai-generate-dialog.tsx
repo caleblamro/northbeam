@@ -15,6 +15,7 @@ import { DescriptionList } from '@/components/northbeam/description-list';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import { MetricGroup } from '@/components/northbeam/metric-group';
 import { PageHeader } from '@/components/northbeam/page-header';
+import { SaveViewDialog } from '@/components/northbeam/save-view-dialog';
 import { SectionCard } from '@/components/northbeam/section-card';
 import { Button } from '@/components/ui/button';
 import {
@@ -34,7 +35,9 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { trpc } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { AlertTriangle, Loader2, Sparkles } from 'lucide-react';
+import type { Filter, ShareTarget, ViewIcon, ViewSort } from '@northbeam/db/views';
+import { AlertTriangle, BookmarkPlus, Loader2, Sparkles } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
 
 type Leaf = { component: string; props?: Record<string, unknown> };
@@ -44,7 +47,17 @@ type Section = {
   children?: Leaf[];
 };
 type ArtifactNode = Leaf | Section;
-type Artifact = { version: '1'; components: ArtifactNode[] };
+type ViewSuggestion = {
+  label: string;
+  filters: Filter[];
+  sort: ViewSort[];
+  columns: string[];
+};
+type Artifact = {
+  version: '1';
+  components: ArtifactNode[];
+  view: ViewSuggestion;
+};
 
 const PLACEHOLDER_PROMPTS = [
   'A snapshot dashboard with total record count, top 4 industries, and an empty state for follow-ups due this week.',
@@ -58,10 +71,15 @@ interface AIGenerateDialogProps {
 }
 
 export function AIGenerateDialog({ open, onOpenChange }: AIGenerateDialogProps) {
+  const router = useRouter();
+  const utils = trpc.useUtils();
   const objects = trpc.object.list.useQuery(undefined, { enabled: open });
   const [objectKey, setObjectKey] = useState<string>('');
   const [prompt, setPrompt] = useState('');
   const [artifact, setArtifact] = useState<Artifact | null>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const objectId =
+    objects.data?.find((o) => o.key === objectKey)?.id ?? null;
 
   // Pick the first object once data lands. Doesn't override an existing
   // selection so the user can switch and keep their prompt.
@@ -83,6 +101,41 @@ export function AIGenerateDialog({ open, onOpenChange }: AIGenerateDialogProps) 
     meta: { context: "Couldn't generate" },
     onSuccess: (data) => setArtifact(data.artifact as Artifact),
   });
+
+  const createView = trpc.view.create.useMutation({
+    meta: { context: "Couldn't save the view" },
+  });
+
+  const onSaveDialogSubmit = async ({
+    label,
+    sharedWith,
+    icon,
+  }: { label: string; sharedWith: ShareTarget[]; icon: ViewIcon }) => {
+    if (!objectId || !artifact) return;
+    const slug =
+      label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 48) || 'ai-view';
+    const created = await createView.mutateAsync({
+      objectId,
+      key: `${slug}-${Date.now().toString(36)}`,
+      label,
+      type: 'list',
+      icon,
+      filters: artifact.view.filters,
+      sort: artifact.view.sort,
+      columns: artifact.view.columns,
+      sharedWith,
+    });
+    await utils.view.list.invalidate({ objectId });
+    setSaveDialogOpen(false);
+    onOpenChange(false);
+    // Navigate the user to the list view they just saved so the result is
+    // immediately visible — the AI dialog is gone after this point.
+    router.push(`/${objectKey}?view=${created?.id ?? ''}`);
+  };
 
   const placeholder = PLACEHOLDER_PROMPTS[0];
 
@@ -150,25 +203,93 @@ export function AIGenerateDialog({ open, onOpenChange }: AIGenerateDialogProps) 
         </div>
 
         {artifact && (
-          <div className="-mx-6 max-h-[60vh] overflow-y-auto border-t bg-muted/20 px-6 py-4">
-            <div className="flex flex-col gap-3">
-              {artifact.components.map((node, i) => (
-                <RenderNode key={i} node={node} index={i} />
-              ))}
+          <>
+            <div className="-mx-6 max-h-[60vh] overflow-y-auto border-t bg-muted/20 px-6 py-4">
+              <div className="flex flex-col gap-3">
+                {artifact.components.map((node, i) => (
+                  <RenderNode key={i} node={node} index={i} />
+                ))}
+              </div>
             </div>
-          </div>
+            <ViewSuggestionSummary suggestion={artifact.view} />
+          </>
         )}
 
         <DialogFooter className="border-t px-0 pt-3">
           <span className="mr-auto text-[10px] text-muted-foreground">
-            AI output is ephemeral — closing the dialog discards it.
+            Preview is ephemeral. Save persists the equivalent list view; the
+            generated layout is not kept.
           </span>
+          {artifact && (
+            <Button
+              onClick={() => setSaveDialogOpen(true)}
+              disabled={createView.isPending}
+            >
+              <BookmarkPlus />
+              Save as list view
+            </Button>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
         </DialogFooter>
+
+        <SaveViewDialog
+          open={saveDialogOpen}
+          onOpenChange={setSaveDialogOpen}
+          defaultLabel={artifact?.view.label ?? ''}
+          defaultIcon="star"
+          isSaving={createView.isPending}
+          onSave={onSaveDialogSubmit}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Compact read-only summary of the filter / sort / column config Claude
+ *  proposed. Shows the user exactly what saving will persist, so it's not
+ *  a surprise when the list view loads with those filters pre-applied. */
+function ViewSuggestionSummary({ suggestion }: { suggestion: ViewSuggestion }) {
+  const hasFilters = suggestion.filters.length > 0;
+  const hasSort = suggestion.sort.length > 0;
+  const hasColumns = suggestion.columns.length > 0;
+  if (!hasFilters && !hasSort && !hasColumns) {
+    return (
+      <p className="px-6 pt-3 text-muted-foreground text-xs">
+        No filters or columns proposed — saving keeps the object's default list
+        view configuration.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1 px-6 pt-3 text-xs">
+      <span className="font-medium text-foreground">Save would persist</span>
+      {hasFilters && (
+        <div className="text-muted-foreground">
+          <span>Filters: </span>
+          <span className="font-mono">
+            {suggestion.filters
+              .map((f) => `${f.fieldKey} ${f.op}${f.value != null ? ` ${f.value}` : ''}`)
+              .join(' · ')}
+          </span>
+        </div>
+      )}
+      {hasSort && (
+        <div className="text-muted-foreground">
+          <span>Sort: </span>
+          <span className="font-mono">
+            {suggestion.sort.map((s) => `${s.fieldKey} ${s.direction}`).join(' · ')}
+          </span>
+        </div>
+      )}
+      {hasColumns && (
+        <div className="text-muted-foreground">
+          <span>Columns: </span>
+          <span className="font-mono">{suggestion.columns.join(' · ')}</span>
+        </div>
+      )}
+    </div>
   );
 }
 

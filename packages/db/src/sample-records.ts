@@ -125,15 +125,6 @@ export async function seedSampleRecords(
   const activityObj = await getObjectByKey(db, organizationId, 'activity');
   if (!accountObj || !contactObj || !dealObj || !activityObj) return;
 
-  // Guard: don't overwrite anything if there are already rows. Lets the
-  // user re-run the seed on a populated org without polluting it.
-  const existing = await db.execute({
-    sql: '',
-    queryChunks: [],
-    params: [],
-  } as never).catch(() => null);
-  void existing;
-
   // Accounts
   const accountIds: string[] = [];
   for (const a of ACCOUNTS) {
