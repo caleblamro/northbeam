@@ -8,6 +8,7 @@ import {
   seedSampleRecords,
   seedStandardObjects,
   withOrgContext,
+  writeAuditEvent,
 } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
 import { and, desc, eq } from 'drizzle-orm';
@@ -27,6 +28,11 @@ import { permissionProcedure, protectedProcedure, publicProcedure, router } from
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 const InvitableRoleEnum = z.enum(ROLES);
+// `setMemberRole` deliberately excludes 'owner' — that role is mutable only
+// through `transferOwnership`, which atomically demotes the current owner.
+// Letting admins promote anyone to 'owner' via setMemberRole would silently
+// create a second owner or fail mid-flight in Better Auth.
+const AssignableRoleEnum = z.enum(['admin', 'member', 'viewer'] as const);
 
 export const orgRouter = router({
   /** Create a new org. Caller becomes the owner and it's made active. */
@@ -174,14 +180,70 @@ export const orgRouter = router({
       return { ok: true as const };
     }),
 
-  /** Change a member's role. Admin+. */
+  /** Change a member's role. Admin+. The 'owner' role can't be assigned
+   *  here — use transferOwnership for that. */
   setMemberRole: permissionProcedure('org.members.role')
-    .input(z.object({ memberId: z.string(), role: InvitableRoleEnum }))
+    .input(z.object({ memberId: z.string(), role: AssignableRoleEnum }))
     .mutation(async ({ ctx, input }) => {
       await updateMemberRole(
         { organizationId: ctx.auth.organizationId, memberId: input.memberId, role: input.role },
         ctx.req.headers,
       );
+      return { ok: true as const };
+    }),
+
+  /** Transfer ownership of the workspace to another member. Atomic-ish:
+   *  promotes the target to 'owner' first, then demotes the previous
+   *  owner to 'admin'. If the demotion fails after promotion succeeds,
+   *  the workspace temporarily has two owners — surfaces as a friendly
+   *  error and the user can retry. Only the current owner can call this. */
+  transferOwnership: permissionProcedure('org.transfer')
+    .input(z.object({ memberId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const members = await ctx.db
+        .select({
+          id: schema.member.id,
+          userId: schema.member.userId,
+          role: schema.member.role,
+        })
+        .from(schema.member)
+        .where(eq(schema.member.organizationId, ctx.auth.organizationId));
+      const target = members.find((m) => m.id === input.memberId);
+      const currentOwner = members.find((m) => m.userId === ctx.auth.userId);
+      if (!target) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'target member not in workspace' });
+      }
+      if (!currentOwner) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'caller is not a workspace member' });
+      }
+      if (target.id === currentOwner.id) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'you already own this workspace',
+        });
+      }
+
+      // Promote first so there's always at least one owner in flight; if the
+      // demote fails the workspace ends up with two owners (recoverable by
+      // re-running transferOwnership) rather than zero (which would lock
+      // out admin-protected actions).
+      await updateMemberRole(
+        { organizationId: ctx.auth.organizationId, memberId: target.id, role: 'owner' },
+        ctx.req.headers,
+      );
+      await updateMemberRole(
+        { organizationId: ctx.auth.organizationId, memberId: currentOwner.id, role: 'admin' },
+        ctx.req.headers,
+      );
+
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'org.ownership.transferred',
+        targetType: 'member',
+        targetId: target.id,
+        meta: { newOwnerUserId: target.userId, previousOwnerUserId: ctx.auth.userId },
+      });
       return { ok: true as const };
     }),
 
