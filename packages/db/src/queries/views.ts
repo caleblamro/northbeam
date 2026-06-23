@@ -16,14 +16,16 @@ export type ViewRow = typeof view.$inferSelect;
  *    - sharedWith contains {kind:'role', role: u.role}, OR
  *    - sharedWith contains {kind:'user', userId: u.id}
  *  Org isolation is enforced by the caller (always pair this with
- *  `view.organizationId = :orgId`). */
+ *  `view.organizationId = :orgId`).
+ *
+ *  Uses the `@>` jsonb containment operator instead of jsonb_path_exists —
+ *  it's the standard "this jsonb array contains this object" predicate, far
+ *  more forgiving about quoting + escaping than JSONPath. */
 function visibleToUser(userId: string, role: Role): SQL {
-  // jsonb_path_exists is the cleanest "array contains object that matches"
-  // predicate Postgres has. The path is a JSONPath against the column.
   const ownerMatch = sql`${view.ownerId} = ${userId}`;
-  const orgShared = sql`jsonb_path_exists(${view.sharedWith}, '$[*] ? (@.kind == "org")')`;
-  const roleShared = sql`jsonb_path_exists(${view.sharedWith}, ${`$[*] ? (@.kind == "role" && @.role == "${role}")`})`;
-  const userShared = sql`jsonb_path_exists(${view.sharedWith}, ${`$[*] ? (@.kind == "user" && @.userId == "${userId}")`})`;
+  const orgShared = sql`${view.sharedWith} @> ${JSON.stringify([{ kind: 'org' }])}::jsonb`;
+  const roleShared = sql`${view.sharedWith} @> ${JSON.stringify([{ kind: 'role', role }])}::jsonb`;
+  const userShared = sql`${view.sharedWith} @> ${JSON.stringify([{ kind: 'user', userId }])}::jsonb`;
   return or(ownerMatch, orgShared, roleShared, userShared) as SQL;
 }
 

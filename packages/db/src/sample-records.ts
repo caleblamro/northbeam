@@ -7,6 +7,10 @@
 // Called after seedStandardObjects in the same withOrgContext transaction
 // the org.create handler opens, so RLS is satisfied and partial inserts
 // roll back together.
+//
+// Medium scale: ~250 records (12 accounts × 5 contacts × 3 deals × ~3
+// activities). Big enough to stress filters / sort / pagination; small
+// enough that org.create stays ~2s on a fresh DB.
 
 import type { DbExecutor } from './client.js';
 import { createRecord } from './dynamic/records.js';
@@ -89,32 +93,169 @@ const ACCOUNTS: Array<{
     phone: '+1 (310) 555-0188',
     description: 'Customer since 2024. Champion: VP RevOps. Renewal locked in 18 months.',
   },
+  {
+    name: 'Hooli',
+    website: 'https://hooli.example',
+    type: 'prospect',
+    industry: 'technology',
+    rating: 'warm',
+    employees: 14_000,
+    annual_revenue: 1_650_000_000,
+    phone: '+1 (415) 555-0223',
+    description: 'Late-stage prospect. Multi-product evaluation; competing against incumbent.',
+  },
+  {
+    name: 'Pied Piper',
+    website: 'https://piedpiper.example',
+    type: 'customer',
+    industry: 'technology',
+    rating: 'hot',
+    employees: 75,
+    annual_revenue: 6_500_000,
+    phone: '+1 (650) 555-0156',
+    description: 'Series B startup. Engineering-led adoption. High product velocity.',
+  },
+  {
+    name: 'Vandelay Industries',
+    website: 'https://vandelay.example',
+    type: 'customer',
+    industry: 'apparel',
+    rating: 'cold',
+    employees: 360,
+    annual_revenue: 22_500_000,
+    phone: '+1 (212) 555-0297',
+    description: 'Importing/exporting — at-risk. Low product usage, no champion.',
+  },
+  {
+    name: 'Sterling Cooper',
+    website: 'https://sterlingcooper.example',
+    type: 'prospect',
+    industry: 'communications',
+    rating: 'warm',
+    employees: 480,
+    annual_revenue: 38_000_000,
+    phone: '+1 (212) 555-0388',
+    description: 'Advertising agency. Mid-funnel; waiting on creative director sign-off.',
+  },
+  {
+    name: 'Umbrella Corp',
+    website: 'https://umbrella.example',
+    type: 'customer',
+    industry: 'biotechnology',
+    rating: 'warm',
+    employees: 3_400,
+    annual_revenue: 410_000_000,
+    phone: '+1 (215) 555-0411',
+    description: 'Biotech customer. Compliance-heavy; long procurement cycles.',
+  },
+  {
+    name: 'Massive Dynamic',
+    website: 'https://massivedynamic.example',
+    type: 'prospect',
+    industry: 'engineering',
+    rating: 'hot',
+    employees: 22_000,
+    annual_revenue: 2_300_000_000,
+    phone: '+1 (212) 555-0455',
+    description: 'Fortune 500 R&D division. Standardization push across business units.',
+  },
 ];
 
-const CONTACT_TEMPLATES: Array<{
+type ContactTemplate = {
   first_name: string;
   last_name: string;
   title: string;
   department: string;
-  email_domain_offset: number;
-  rating?: undefined;
   lead_source: string;
-}> = [
-  { first_name: 'Alex', last_name: 'Rivera', title: 'VP RevOps', department: 'Revenue', email_domain_offset: 0, lead_source: 'web' },
-  { first_name: 'Sam', last_name: 'Chen', title: 'Director, Sales Ops', department: 'Revenue', email_domain_offset: 0, lead_source: 'referral' },
-  { first_name: 'Jordan', last_name: 'Patel', title: 'Buyer', department: 'Procurement', email_domain_offset: 0, lead_source: 'phone_inquiry' },
+};
+
+const CONTACT_TEMPLATES: ContactTemplate[] = [
+  {
+    first_name: 'Alex',
+    last_name: 'Rivera',
+    title: 'VP RevOps',
+    department: 'Revenue',
+    lead_source: 'web',
+  },
+  {
+    first_name: 'Sam',
+    last_name: 'Chen',
+    title: 'Director, Sales Ops',
+    department: 'Revenue',
+    lead_source: 'referral',
+  },
+  {
+    first_name: 'Jordan',
+    last_name: 'Patel',
+    title: 'Procurement Manager',
+    department: 'Finance',
+    lead_source: 'phone_inquiry',
+  },
+  {
+    first_name: 'Morgan',
+    last_name: 'Khan',
+    title: 'Head of Customer Success',
+    department: 'Customer Success',
+    lead_source: 'partner',
+  },
+  {
+    first_name: 'Riley',
+    last_name: 'Nguyen',
+    title: 'Solutions Architect',
+    department: 'Engineering',
+    lead_source: 'trade_show',
+  },
 ];
 
-const STAGES = ['prospecting', 'qualification', 'proposal', 'negotiation', 'closed_won'] as const;
+const STAGES = [
+  'prospecting',
+  'qualification',
+  'needs_analysis',
+  'proposal',
+  'negotiation',
+  'closed_won',
+  'closed_lost',
+] as const;
 
-function isoDateOffset(days: number): string {
+const ACTIVITY_TYPES = ['call', 'email', 'meeting', 'task'] as const;
+const PRIORITIES = ['high', 'normal', 'normal', 'low'] as const;
+const ACTIVITY_SUBJECTS: Record<(typeof ACTIVITY_TYPES)[number], string[]> = {
+  call: [
+    'Discovery call — qualify renewal scope',
+    'Pricing follow-up',
+    'Champion sync — internal alignment',
+    'Procurement cadence call',
+  ],
+  email: [
+    'Send pricing deck + ROI summary',
+    'Recap of last week — proposed next steps',
+    'Renewal terms draft',
+    'Intro to Solutions Engineer',
+  ],
+  meeting: [
+    'Quarterly business review',
+    'Live demo — admin console + reporting',
+    'Mutual action plan workshop',
+    'Executive sponsor sync',
+  ],
+  task: [
+    'Send champion intro to CS',
+    'Update opportunity stage in CRM',
+    'Confirm legal review status',
+    'Draft renewal forecast',
+  ],
+};
+
+function isoOffsetDate(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
-/** Insert a small, realistic record set into the per-org schema. Idempotent
- *  guard: skips the seed when the account table already has rows. */
+function isoOffsetDatetime(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString();
+}
+
 export async function seedSampleRecords(
   db: DbExecutor,
   organizationId: string,
@@ -147,7 +288,7 @@ export async function seedSampleRecords(
     accountIds.push(created.id);
   }
 
-  // Contacts (3 per account)
+  // Contacts (5 per account = 60 total)
   const contactIds: Array<{ id: string; accountId: string }> = [];
   for (let i = 0; i < accountIds.length; i++) {
     const accountId = accountIds[i];
@@ -176,74 +317,84 @@ export async function seedSampleRecords(
     }
   }
 
-  // Deals (2 per account) — one earlier-stage and one closed-won so the
-  // pipeline + revenue numbers feel realistic immediately.
+  // Deals (3 per account = 36 total)
+  // Mix: 1 closed_won (renewal), 1 in-flight, 1 early-stage. Stages rotate so
+  // the pipeline picklist breakdown has spread.
   for (let i = 0; i < accountIds.length; i++) {
     const accountId = accountIds[i];
     if (!accountId) continue;
     const accountName = ACCOUNTS[i]?.name ?? 'Account';
-    const primaryContact = contactIds.find((c) => c.accountId === accountId);
-    for (let j = 0; j < 2; j++) {
-      const stage = STAGES[(i + j) % STAGES.length] ?? 'prospecting';
-      const closed = stage === 'closed_won';
-      const amount = 25_000 + ((i * 7 + j * 11) % 9) * 10_000;
-      const probability = closed ? 100 : Math.min(80, 20 + j * 20 + i * 4);
-      const dueDays = closed ? -15 - i * 3 : 14 + j * 21;
+    const accountContacts = contactIds.filter((c) => c.accountId === accountId);
+    for (let j = 0; j < 3; j++) {
+      const stage =
+        j === 0
+          ? 'closed_won'
+          : STAGES[(i + j) % (STAGES.length - 2)] ?? 'prospecting';
+      const closed = stage === 'closed_won' || stage === 'closed_lost';
+      const won = stage === 'closed_won';
+      const amount = 15_000 + ((i * 5 + j * 13) % 12) * 12_500;
+      const probability = won ? 100 : stage === 'closed_lost' ? 0 : Math.min(85, 15 + j * 25 + i * 3);
+      const dueDays = closed ? -30 - i * 4 - j * 7 : 14 + j * 30;
+      const primary = accountContacts[j % accountContacts.length];
       await createRecord(db, {
         orgId: organizationId,
         object: dealObj.object,
         fields: dealObj.fields,
         data: {
-          name: `${accountName} — ${closed ? 'Scale renewal' : 'Expansion'} ${2026 - j}`,
+          name: `${accountName} — ${won ? 'Scale renewal' : j === 1 ? 'Expansion' : 'Pilot'} ${2026 - j}`,
           account: accountId,
-          primary_contact: primaryContact?.id ?? null,
+          primary_contact: primary?.id ?? null,
           stage,
           amount,
           probability,
-          close_date: isoDateOffset(dueDays),
-          type: closed ? 'renewal' : 'new_business',
-          lead_source: 'web',
-          forecast_category: closed ? 'closed' : 'best_case',
-          next_step: closed ? 'PO received' : 'Send pricing breakdown',
-          description: closed
+          close_date: isoOffsetDate(dueDays),
+          type: won ? 'renewal' : 'new_business',
+          lead_source: j === 0 ? 'referral' : 'web',
+          forecast_category: won ? 'closed' : j === 1 ? 'commit' : 'best_case',
+          next_step: won
+            ? 'PO received'
+            : j === 1
+              ? 'Send pricing breakdown'
+              : 'Schedule technical deep-dive',
+          description: won
             ? 'Renewal closed-won — auto-converts at renewal date.'
-            : 'Expansion into adjacent business unit. Buyer wants ROI deck.',
+            : j === 1
+              ? 'Expansion into adjacent BU. Buyer wants ROI deck + reference call.'
+              : 'Early-stage pilot. Discovery in flight; sizing the seat count.',
         },
       });
     }
   }
 
-  // Activities (1 per contact) — a mix of types, due in the next two weeks.
-  const ACTIVITY_TYPES = ['call', 'email', 'meeting', 'task'];
-  const PRIORITIES = ['high', 'normal', 'normal', 'low'];
+  // Activities (~3 per contact × 60 contacts = ~180 total)
+  // Mix of types/priorities/status to drive pipeline + activity dashboards.
   for (let i = 0; i < contactIds.length; i++) {
     const c = contactIds[i];
     if (!c) continue;
-    const type = ACTIVITY_TYPES[i % ACTIVITY_TYPES.length] ?? 'task';
-    const priority = PRIORITIES[i % PRIORITIES.length] ?? 'normal';
-    const dueOffset = i % 14;
-    await createRecord(db, {
-      orgId: organizationId,
-      object: activityObj.object,
-      fields: activityObj.fields,
-      data: {
-        subject:
-          type === 'call'
-            ? 'Discovery call — qualify renewal scope'
-            : type === 'email'
-              ? 'Send pricing deck + ROI summary'
-              : type === 'meeting'
-                ? 'Quarterly business review'
-                : 'Follow up on champion intro',
-        type,
-        status: i % 3 === 0 ? 'completed' : 'open',
-        priority,
-        contact: c.id,
-        related_account: c.accountId,
-        due_date: new Date(Date.now() + dueOffset * 86_400_000).toISOString(),
-        duration: type === 'call' ? 30 : type === 'meeting' ? 60 : 15,
-        notes: 'Auto-seeded sample activity. Replace or delete freely.',
-      },
-    });
+    for (let j = 0; j < 3; j++) {
+      const type = ACTIVITY_TYPES[(i + j) % ACTIVITY_TYPES.length] ?? 'task';
+      const priority = PRIORITIES[(i + j * 2) % PRIORITIES.length] ?? 'normal';
+      const subjects = ACTIVITY_SUBJECTS[type];
+      const subject = subjects[(i + j) % subjects.length] ?? `${type} follow-up`;
+      const dueOffsetDays = ((i * 3 + j * 5) % 21) - 7; // -7 to +13 days
+      const status = dueOffsetDays < -2 ? 'completed' : j === 0 ? 'open' : 'open';
+      await createRecord(db, {
+        orgId: organizationId,
+        object: activityObj.object,
+        fields: activityObj.fields,
+        data: {
+          subject,
+          type,
+          status,
+          priority,
+          contact: c.id,
+          related_account: c.accountId,
+          due_date: isoOffsetDatetime(dueOffsetDays),
+          duration:
+            type === 'call' ? 30 : type === 'meeting' ? 60 : type === 'email' ? 10 : 20,
+          notes: 'Auto-seeded sample activity. Replace or delete freely.',
+        },
+      });
+    }
   }
 }

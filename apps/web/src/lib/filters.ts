@@ -195,6 +195,69 @@ export function writeFiltersToParams(params: URLSearchParams, filters: Filter[])
  *  "Email contains acme". `valueLabel` lets the caller pretty-print typed
  *  values (e.g., picklist label, currency format) without this lib needing to
  *  know how. */
+/** Sort an array of records by the given sort instructions, in order.
+ *  Numeric-typed fields compare as numbers; date/datetime as Date; everything
+ *  else as locale-sensitive strings. Multi-sort: earlier sort entries take
+ *  precedence; later entries break ties. */
+export function sortRows<T extends { data: Record<string, unknown> }>(
+  fields: FieldDefLite[],
+  rows: T[],
+  sort: Array<{ fieldKey: string; direction: 'asc' | 'desc' }>,
+): T[] {
+  if (!sort.length) return rows;
+  const byKey = new Map(fields.map((f) => [f.key, f]));
+  const out = [...rows];
+  out.sort((a, b) => {
+    for (const s of sort) {
+      const field = byKey.get(s.fieldKey);
+      if (!field) continue;
+      const av = a.data[s.fieldKey];
+      const bv = b.data[s.fieldKey];
+      const cmp = compareValues(field.type, av, bv);
+      if (cmp !== 0) return s.direction === 'asc' ? cmp : -cmp;
+    }
+    return 0;
+  });
+  return out;
+}
+
+function compareValues(type: string, a: unknown, b: unknown): number {
+  // Nulls always sort to the end regardless of direction (Postgres
+  // NULLS LAST default). Direction inversion is applied by the caller.
+  const aEmpty = a == null || a === '';
+  const bEmpty = b == null || b === '';
+  if (aEmpty && bEmpty) return 0;
+  if (aEmpty) return 1;
+  if (bEmpty) return -1;
+  switch (type) {
+    case 'number':
+    case 'currency':
+    case 'percent':
+    case 'autonumber':
+    case 'duration': {
+      const an = Number(a);
+      const bn = Number(b);
+      if (!Number.isFinite(an) && !Number.isFinite(bn)) return 0;
+      if (!Number.isFinite(an)) return 1;
+      if (!Number.isFinite(bn)) return -1;
+      return an - bn;
+    }
+    case 'date':
+    case 'datetime': {
+      const at = new Date(String(a)).getTime();
+      const bt = new Date(String(b)).getTime();
+      if (Number.isNaN(at) && Number.isNaN(bt)) return 0;
+      if (Number.isNaN(at)) return 1;
+      if (Number.isNaN(bt)) return -1;
+      return at - bt;
+    }
+    case 'checkbox':
+      return Number(Boolean(a)) - Number(Boolean(b));
+    default:
+      return String(a).localeCompare(String(b));
+  }
+}
+
 export function chipLabel(filter: Filter, fieldLabel: string, valueLabel?: string): string {
   const op = OP_LABEL[filter.op];
   if (UNARY_OPS.has(filter.op)) return `${fieldLabel} ${op}`;

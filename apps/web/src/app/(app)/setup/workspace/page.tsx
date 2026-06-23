@@ -5,6 +5,7 @@ import { SectionCard } from '@/components/northbeam/section-card';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { trpc } from '@/lib/api';
+import { useCan } from '@/lib/can';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Building2, Loader2, Settings as SettingsIcon } from 'lucide-react';
 import { useEffect } from 'react';
@@ -25,6 +26,7 @@ type FormValues = z.infer<typeof Schema>;
 export default function WorkspaceSetupPage() {
   const utils = trpc.useUtils();
   const boot = trpc.me.bootstrap.useQuery();
+  const canEdit = useCan('org.settings.update');
 
   const form = useForm<FormValues>({
     resolver: zodResolver(Schema),
@@ -55,6 +57,11 @@ export default function WorkspaceSetupPage() {
       action={<span className="text-muted-foreground text-xs">Identity & branding</span>}
     >
       <form onSubmit={onSubmit} className="flex max-w-md flex-col gap-4">
+        {!canEdit && (
+          <p className="text-muted-foreground text-xs">
+            You have view-only access. Workspace settings can be changed by an admin.
+          </p>
+        )}
         <Field
           label="Workspace name"
           required
@@ -82,7 +89,8 @@ export default function WorkspaceSetupPage() {
         <div>
           <Button
             type="submit"
-            disabled={!form.formState.isDirty || update.isPending}
+            disabled={!form.formState.isDirty || update.isPending || !canEdit}
+            title={canEdit ? undefined : 'Admin role required to edit workspace settings.'}
           >
             {update.isPending && <Loader2 className="size-4 animate-spin" />}
             Save changes

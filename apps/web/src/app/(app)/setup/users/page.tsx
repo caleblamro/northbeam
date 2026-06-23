@@ -44,12 +44,21 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { trpc } from '@/lib/api';
+import { useCan } from '@/lib/can';
 import { zodResolver } from '@hookform/resolvers/zod';
 // Import from the /roles subpath, not the barrel — the barrel pulls
 // logger.ts (pino) and auth.ts (server-only chokepoints) which Turbopack
 // can't bundle for the browser.
 import { ROLES, ROLE_LABELS, type Role } from '@northbeam/core/roles';
-import { Loader2, Mail, MoreHorizontal, ShieldAlert, UserPlus, Users } from 'lucide-react';
+import {
+  Crown,
+  Loader2,
+  Mail,
+  MoreHorizontal,
+  ShieldAlert,
+  UserPlus,
+  Users,
+} from 'lucide-react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 // Users icon stays — used by the empty state below.
@@ -62,6 +71,11 @@ export default function UsersSetupPage() {
   const members = trpc.org.members.useQuery();
   const data = members.data;
 
+  const canInvite = useCan('org.members.invite');
+  const canSetRole = useCan('org.members.role');
+  const canRemove = useCan('org.members.remove');
+  const canTransfer = useCan('org.transfer');
+
   const setRole = trpc.org.setMemberRole.useMutation({
     onSuccess: () => utils.org.members.invalidate(),
   });
@@ -71,14 +85,25 @@ export default function UsersSetupPage() {
   const cancelInvite = trpc.org.cancelInvite.useMutation({
     onSuccess: () => utils.org.members.invalidate(),
   });
+  const transferOwnership = trpc.org.transferOwnership.useMutation({
+    meta: { context: "Couldn't transfer ownership" },
+    onSuccess: () => utils.org.members.invalidate(),
+  });
 
   const [pendingRemove, setPendingRemove] = useState<{ id: string; label: string } | null>(null);
+  const [pendingTransfer, setPendingTransfer] = useState<{ id: string; label: string } | null>(
+    null,
+  );
 
   return (
     <>
       <SectionCard
         title="Members"
-        action={<InviteButton onInvited={() => utils.org.members.invalidate()} />}
+        action={
+          canInvite ? (
+            <InviteButton onInvited={() => utils.org.members.invalidate()} />
+          ) : null
+        }
         padding="none"
       >
         {data && data.members.length === 0 ? (
@@ -112,31 +137,44 @@ export default function UsersSetupPage() {
                   <TableCell>
                     <RoleSelect
                       value={m.role as Role}
-                      disabled={m.role === 'owner' || setRole.isPending}
+                      disabled={m.role === 'owner' || setRole.isPending || !canSetRole}
                       onChange={(role) => setRole.mutate({ memberId: m.id, role })}
                     />
                   </TableCell>
                   <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-sm" aria-label="Member actions">
-                          <MoreHorizontal />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuLabel>{m.email}</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          disabled={m.role === 'owner'}
-                          onSelect={() =>
-                            setPendingRemove({ id: m.id, label: m.name || m.email })
-                          }
-                          className="text-destructive focus:text-destructive"
-                        >
-                          Remove from workspace
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {(canRemove || canTransfer) && m.role !== 'owner' ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon-sm" aria-label="Member actions">
+                            <MoreHorizontal />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuLabel>{m.email}</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          {canTransfer && (
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                setPendingTransfer({ id: m.id, label: m.name || m.email })
+                              }
+                            >
+                              <Crown className="size-3.5 text-muted-foreground" />
+                              Transfer ownership…
+                            </DropdownMenuItem>
+                          )}
+                          {canRemove && (
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                setPendingRemove({ id: m.id, label: m.name || m.email })
+                              }
+                              className="text-destructive focus:text-destructive"
+                            >
+                              Remove from workspace
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ))}
@@ -183,9 +221,65 @@ export default function UsersSetupPage() {
           setPendingRemove(null);
         }}
       />
+      <TransferOwnershipDialog
+        target={pendingTransfer}
+        pending={transferOwnership.isPending}
+        onCancel={() => setPendingTransfer(null)}
+        onConfirm={async () => {
+          if (!pendingTransfer) return;
+          await transferOwnership.mutateAsync({ memberId: pendingTransfer.id });
+          setPendingTransfer(null);
+        }}
+      />
     </>
   );
 }
+
+function TransferOwnershipDialog({
+  target,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  target: { id: string; label: string } | null;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={!!target} onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Crown className="size-4 text-amber-600 dark:text-amber-400" />
+            Transfer ownership
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          <span className="font-medium text-foreground">{target?.label}</span> will become the
+          new owner of this workspace. You'll be demoted to an admin and will keep the ability
+          to manage members and settings, but you will{' '}
+          <span className="font-medium text-foreground">no longer be able to</span> delete the
+          workspace, manage billing, or transfer ownership again.
+        </p>
+        <p className="text-muted-foreground text-xs">
+          The change is immediate and recorded in the audit log.
+        </p>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button disabled={pending} onClick={onConfirm}>
+            {pending && <Loader2 className="size-4 animate-spin" />}
+            Make them the owner
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type AssignableRole = Exclude<Role, 'owner'>;
 
 function RoleSelect({
   value,
@@ -193,11 +287,18 @@ function RoleSelect({
   disabled,
 }: {
   value: Role;
-  onChange: (role: Role) => void;
+  onChange: (role: AssignableRole) => void;
   disabled?: boolean;
 }) {
   return (
-    <Select value={value} disabled={disabled} onValueChange={(v) => onChange(v as Role)}>
+    <Select
+      value={value}
+      disabled={disabled}
+      onValueChange={(v) => {
+        if (v === 'owner') return; // unreachable — owner option is disabled
+        onChange(v as AssignableRole);
+      }}
+    >
       <SelectTrigger className="h-8 w-36">
         <SelectValue />
       </SelectTrigger>

@@ -24,6 +24,7 @@ import {
   type Filter,
   readFiltersFromParams,
   rowPassesFilters,
+  sortRows,
   writeFiltersToParams,
 } from '@/lib/filters';
 import type { ObjectLayout } from '@northbeam/db/field-types';
@@ -80,21 +81,6 @@ export function RecordListView({
 
   const fields = (list.data?.fields ?? []) as FieldDefLite[];
   const allRows = list.data?.rows ?? [];
-  // Client-side filtering for v0. Server-side filtering on `record.list` is
-  // the next move once the dynamic-records layer grows predicate support — at
-  // that point this `rows` is `allRows` again and the `filters` array is
-  // passed straight into the tRPC query.
-  const effectiveFilters = useMemo(
-    () => (staticFilters ? [...staticFilters, ...filters] : filters),
-    [staticFilters, filters],
-  );
-  const rows = useMemo(
-    () =>
-      effectiveFilters.length === 0
-        ? allRows
-        : allRows.filter((r) => rowPassesFilters(fields, r.data, effectiveFilters)),
-    [allRows, fields, effectiveFilters],
-  );
   const refLabels = list.data?.refLabels ?? {};
   const object = list.data?.object;
   const objectLabel = object?.label ?? '';
@@ -144,6 +130,30 @@ export function RecordListView({
       updatedAt: new Date(),
     } satisfies ViewRow;
   }, [searchParams, viewsQ.data, object, objectPlural, layout.listColumns]);
+
+  // Effective filter set = static (caller-pinned) + view's stored filters
+  // + transient URL overrides. Client-side filtering for v0; the matcher
+  // mirrors Postgres semantics so server-side pushdown is a swap, not a
+  // redesign.
+  const effectiveFilters = useMemo(
+    () => [
+      ...(staticFilters ?? []),
+      ...(activeView.filters ?? []),
+      ...filters,
+    ],
+    [staticFilters, activeView.filters, filters],
+  );
+  const effectiveSort = useMemo(
+    () => activeView.sort ?? [],
+    [activeView.sort],
+  );
+  const rows = useMemo(() => {
+    const filtered =
+      effectiveFilters.length === 0
+        ? allRows
+        : allRows.filter((r) => rowPassesFilters(fields, r.data, effectiveFilters));
+    return sortRows(fields, filtered, effectiveSort);
+  }, [allRows, fields, effectiveFilters, effectiveSort]);
 
   // Override detection — the picker uses this to surface "Save as new view…"
   // when the URL filters diverge from what the active view actually stores.
@@ -208,8 +218,11 @@ export function RecordListView({
         label,
         type: 'list',
         icon,
-        filters,
-        sort: [],
+        // Capture the visible state: the active view's persisted filters
+        // PLUS the user's transient URL overrides on top. Save means "pin
+        // what I'm looking at right now."
+        filters: [...(activeView.filters ?? []), ...filters],
+        sort: activeView.sort ?? [],
         columns: activeView.columns,
         sharedWith,
         // Merge any renderer-provided config on top of the synthetic config

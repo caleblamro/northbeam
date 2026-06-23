@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { trpc } from '@/lib/api';
+import { useCan } from '@/lib/can';
 import {
   ArrowLeft,
   Check,
@@ -94,6 +95,7 @@ export default function ObjectDetailPage() {
   );
   const defaultView = viewsQ.data?.find((v) => v.isDefault) ?? null;
 
+  const canEditLayout = useCan('org.settings.update');
   const [editingLayout, setEditingLayout] = useState(false);
   const updateLayout = trpc.object.updateLayout.useMutation({
     meta: { context: "Couldn't save the layout" },
@@ -155,11 +157,13 @@ export default function ObjectDetailPage() {
         action={
           editingLayout ? (
             <span className="text-muted-foreground text-xs">Drag fields between sections</span>
-          ) : (
+          ) : canEditLayout ? (
             <Button variant="outline" size="sm" onClick={() => setEditingLayout(true)}>
               <LayoutPanelLeft />
               Edit form layout
             </Button>
+          ) : (
+            <span className="text-muted-foreground text-xs">View-only</span>
           )
         }
       >
