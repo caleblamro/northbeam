@@ -161,7 +161,14 @@ export function RecordDataGrid({
     getRowId: (r) => r.id,
     initialState: { sorting: initialSorting },
     onSortingChange: onSortChange
-      ? (next) => onSortChange(fromTanStackSorting(next))
+      ? (updater) => {
+          // useDataGrid's typing exposes TanStack's Updater shape, but its
+          // internal wrapper (use-data-grid.ts:1890) resolves the updater
+          // before calling out — narrow defensively and forward the
+          // resolved state.
+          const next = typeof updater === 'function' ? updater([]) : updater;
+          onSortChange(fromTanStackSorting(next));
+        }
       : undefined,
   });
 

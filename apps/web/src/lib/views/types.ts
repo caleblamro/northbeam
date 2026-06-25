@@ -38,6 +38,12 @@ export type ViewRendererProps = {
    *  `overrides.config` is merged into the new view's `config` JSONB — used
    *  by the AI renderer to carry the typed prompt across the remount. */
   onSaveView?: (overrides?: { config?: unknown }) => void;
+  /** Current effective sort. Renderers that display columns wire this into
+   *  their column header so clicks reflect the active sort instructions. */
+  sort: ViewSort[];
+  /** Header-click callback — renderer reports the new sort and the
+   *  dispatcher decides whether to write it to URL state. */
+  onSortChange?: (sort: ViewSort[]) => void;
 };
 
 export type ViewRenderer<TConfig = unknown> = {

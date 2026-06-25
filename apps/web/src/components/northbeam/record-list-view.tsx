@@ -27,6 +27,11 @@ import {
   sortRows,
   writeFiltersToParams,
 } from '@/lib/filters';
+import {
+  readSortFromParams,
+  writeSortToParams,
+} from '@/lib/views/url-state';
+import type { ViewSort } from '@northbeam/db/views';
 import type { ObjectLayout } from '@northbeam/db/field-types';
 import { AlertCircle, Upload, UserPlus } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -143,9 +148,24 @@ export function RecordListView({
     ],
     [staticFilters, activeView.filters, filters],
   );
-  const effectiveSort = useMemo(
-    () => activeView.sort ?? [],
-    [activeView.sort],
+  // Sort: URL takes precedence (header click writes there), otherwise fall
+  // back to the saved view's sort. Empty URL + empty view = unsorted.
+  const urlSort = useMemo(
+    () => readSortFromParams(new URLSearchParams(searchParams.toString())),
+    [searchParams],
+  );
+  const effectiveSort = useMemo<ViewSort[]>(
+    () => (urlSort.length > 0 ? urlSort : activeView.sort ?? []),
+    [urlSort, activeView.sort],
+  );
+  const setSort = useCallback(
+    (next: ViewSort[]) => {
+      const params = new URLSearchParams(searchParams.toString());
+      writeSortToParams(params, next);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
   );
   const rows = useMemo(() => {
     const filtered =
@@ -222,7 +242,7 @@ export function RecordListView({
         // PLUS the user's transient URL overrides on top. Save means "pin
         // what I'm looking at right now."
         filters: [...(activeView.filters ?? []), ...filters],
-        sort: activeView.sort ?? [],
+        sort: effectiveSort,
         columns: activeView.columns,
         sharedWith,
         // Merge any renderer-provided config on top of the synthetic config
@@ -380,6 +400,8 @@ export function RecordListView({
               onRowEdit={(row) => setEditing(row)}
               onRowDelete={(id) => remove.mutate({ objectKey, id })}
               onSaveView={saveAsNewView}
+              sort={effectiveSort}
+              onSortChange={setSort}
             />
           );
         })()

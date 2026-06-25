@@ -17,6 +17,8 @@ export function ListView({
   fields,
   rows,
   refLabels,
+  sort,
+  onSortChange,
 }: ViewRendererProps) {
   const columnKeys =
     view.columns.length > 0 ? view.columns : fields.slice(0, 4).map((f) => f.key);
@@ -24,11 +26,18 @@ export function ListView({
     .map((k) => fields.find((f) => f.key === k))
     .filter((f): f is FieldDefLite => !!f);
   return (
+    // Key the table by view.id so switching views remounts the grid (and
+    // re-initialises TanStack's sort from the new view). Sort changes from
+    // a header click stay in TanStack's internal store, so changing sort
+    // does NOT remount — pagination + scroll position survive.
     <RecordTable
+      key={view.id}
       columns={columns}
       rows={rows}
       refLabels={refLabels}
       objectKey={objectKey}
+      sort={sort}
+      onSortChange={onSortChange}
     />
   );
 }
