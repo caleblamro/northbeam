@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import type { ViewSort } from '@northbeam/db/views';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -30,6 +31,8 @@ interface RecordTableProps {
   defaultPageSize?: number;
   /** Optional row-height override; passed through to the data grid. */
   rowHeight?: number;
+  sort?: ViewSort[];
+  onSortChange?: (sort: ViewSort[]) => void;
 }
 
 export function RecordTable({
@@ -39,6 +42,8 @@ export function RecordTable({
   objectKey,
   defaultPageSize = 25,
   rowHeight = 36,
+  sort,
+  onSortChange,
 }: RecordTableProps) {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(defaultPageSize);
@@ -58,6 +63,8 @@ export function RecordTable({
         refLabels={refLabels}
         objectKey={objectKey}
         height={Math.min(560, 44 + pageSize * rowHeight)}
+        sort={sort}
+        onSortChange={onSortChange}
       />
       <TablePagination
         pageIndex={safePageIndex}

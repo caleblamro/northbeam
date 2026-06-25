@@ -7,7 +7,7 @@
 
 import type { FieldDefLite } from '@/components/northbeam/field-render';
 import type { RouterOutputs } from '@/lib/api';
-import type { ViewType } from '@northbeam/db/views';
+import type { ViewSort, ViewType } from '@northbeam/db/views';
 import type { LucideIcon } from 'lucide-react';
 import type { FC } from 'react';
 import type { ZodTypeAny } from 'zod';

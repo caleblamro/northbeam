@@ -21,7 +21,8 @@ import { useDataGrid } from '@/hooks/use-data-grid';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
 import { FieldValue } from '@/components/northbeam/field-render';
 import type { CellOpts } from '@/types/data-grid';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef, SortingState } from '@tanstack/react-table';
+import type { ViewSort } from '@northbeam/db/views';
 import Link from 'next/link';
 import { useMemo } from 'react';
 
@@ -37,6 +38,22 @@ interface RecordDataGridProps {
   refLabels: Record<string, string>;
   objectKey: string;
   height?: number;
+  /** Optional controlled sort state. When provided, the grid initialises
+   *  TanStack's sort to match and reports column-header clicks back via
+   *  `onSortChange`. Without these, the grid runs uncontrolled (sort is
+   *  in-memory and lost on refresh). */
+  sort?: ViewSort[];
+  onSortChange?: (sort: ViewSort[]) => void;
+}
+
+function toTanStackSorting(sort: ViewSort[]): SortingState {
+  // Special-case the synthetic "name" column key so a saved sort on the
+  // record's display name still works.
+  return sort.map((s) => ({ id: s.fieldKey, desc: s.direction === 'desc' }));
+}
+
+function fromTanStackSorting(state: SortingState): ViewSort[] {
+  return state.map((s) => ({ fieldKey: s.id, direction: s.desc ? 'desc' : 'asc' }));
 }
 
 function fieldToCellOpts(f: FieldDefLite): CellOpts {
@@ -80,6 +97,8 @@ export function RecordDataGrid({
   refLabels,
   objectKey,
   height = 560,
+  sort,
+  onSortChange,
 }: RecordDataGridProps) {
   const gridColumns = useMemo<ColumnDef<RecordRow>[]>(() => {
     const nameCol: ColumnDef<RecordRow> = {
@@ -128,6 +147,11 @@ export function RecordDataGrid({
     return [nameCol, ...dataCols];
   }, [columnFields, refLabels, objectKey]);
 
+  const initialSorting = useMemo<SortingState>(
+    () => (sort ? toTanStackSorting(sort) : []),
+    [sort],
+  );
+
   const grid = useDataGrid<RecordRow>({
     data: rows,
     columns: gridColumns,
@@ -135,6 +159,10 @@ export function RecordDataGrid({
     enableSearch: false,
     enablePaste: false,
     getRowId: (r) => r.id,
+    initialState: { sorting: initialSorting },
+    onSortingChange: onSortChange
+      ? (next) => onSortChange(fromTanStackSorting(next))
+      : undefined,
   });
 
   return <DataGrid<RecordRow> {...grid} height={height} stretchColumns />;
