@@ -26,7 +26,7 @@ const ShareTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('user'), userId: z.string().min(1) }),
 ]) satisfies z.ZodType<ShareTarget>;
 
-const ViewTypeSchema = z.enum(['list']) satisfies z.ZodType<ViewType>;
+const ViewTypeSchema = z.enum(['list', 'dashboard']) satisfies z.ZodType<ViewType>;
 
 const ViewIconSchema = z.enum([
   'list',

@@ -43,6 +43,13 @@
       "when": 1781120000000,
       "tag": "0005_rls_and_name_expression",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781720000000,
+      "tag": "0006_rls_layout_share_audit_view",
+      "breakpoints": true
     }
   ]
 }

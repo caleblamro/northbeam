@@ -9,6 +9,7 @@
 
 import { type SQL, and, desc, eq } from 'drizzle-orm';
 import type { DbExecutor } from '../client.js';
+import { logger } from '../logger.js';
 import { auditLog, user } from '../schema.js';
 
 export type AuditEventRow = typeof auditLog.$inferSelect;
@@ -43,8 +44,14 @@ export async function writeAuditEvent(
       userAgent: input.userAgent ?? null,
     });
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('[audit] write failed', { action: input.action, err });
+    // Audit writes are best-effort: the underlying mutation has already
+    // succeeded; a failed log row is not worth bubbling. Route through the
+    // structured logger so aggregation pipelines can alert on a spike instead
+    // of relying on console output.
+    logger.warn(
+      { action: input.action, organizationId: input.organizationId, err },
+      'audit.write_failed',
+    );
   }
 }
 

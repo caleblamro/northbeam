@@ -3,10 +3,14 @@
 
 import type { Role } from './roles.js';
 
-/** Built-in view types. Only `list` is rendered today — kanban / calendar /
- *  grid / ai renderers were removed by request. AI generation is reachable
- *  via the ⌘K palette and never registers as a view type. */
-export type ViewType = 'list';
+/** Built-in view types:
+ *    - `list`: filter/sort/column variant on a table. Most saved views.
+ *    - `dashboard`: composed layout (PageHeader / SectionCard / MetricGroup
+ *      / DescriptionList / RecordTable / RecordGrid / Text). Hand-authorable
+ *      and AI-authorable; the artifact lives in `view.config.artifact`.
+ *  AI generation itself is reachable only via the ⌘K palette — there is no
+ *  separate `ai` view type. */
+export type ViewType = 'list' | 'dashboard';
 
 /** Where a view can be shared. `shared_with` on the view row is an array of
  *  these — dynamic enough for org-wide, role-scoped, or direct-to-user shares

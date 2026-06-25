@@ -16,7 +16,7 @@ import { env } from '../../lib/env.js';
 import { enqueueImport } from '../../queue/sf-import.js';
 import { NoConnectionError, clientForOrg, flagIfAuthError } from '../../salesforce/client.js';
 import { STANDARD_TARGETS, mapSObject } from '../../salesforce/mapper.js';
-import { protectedProcedure, router } from '../trpc.js';
+import { permissionProcedure, protectedProcedure, router } from '../trpc.js';
 
 const SAMPLE_SIZE = 200;
 
@@ -222,8 +222,9 @@ export const salesforceRouter = router({
 
   /** Kick the import. Enqueues a BullMQ job; the sf-import worker consumes it
    *  off-thread. Poll getRun for progress (the worker writes to
-   *  migration_run.stats as it goes). */
-  execute: protectedProcedure
+   *  migration_run.stats as it goes). Admin+ only — imports rewrite the
+   *  workspace's data plane and shouldn't be triggerable by a regular member. */
+  execute: permissionProcedure('migration.run')
     .input(z.object({ runId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const orgId = ctx.auth.organizationId;

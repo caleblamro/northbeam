@@ -1,17 +1,17 @@
 // Artifact generator. Takes a natural-language prompt + the object context
-// and asks Claude to produce a structured ArtifactNode tree the ⌘K palette
-// renders inline. Schema is intentionally NON-recursive — Vercel AI SDK's
-// JSON-schema converter can't represent z.lazy self-references, so we
-// flatten to two shapes:
+// + a live data summary and asks Claude to produce a structured ArtifactNode
+// tree. The same tree shape powers:
+//   - The ⌘K palette dialog's preview
+//   - Persisted `dashboard` views (config.artifact)
+// so a dashboard authored by the LLM and saved via the dialog renders
+// identically to one authored by hand.
 //
-//   - LeafNode: a single component with no children
+// Schema is intentionally NON-recursive — Vercel AI SDK's JSON-schema
+// converter can't represent z.lazy self-references. We model the tree as
+// two flat shapes:
+//   - LeafNode: a single component with no children (most of them)
 //   - SectionNode: a SectionCard that wraps an array of LeafNodes
-//
-// Top-level is an array of LeafNode | SectionNode. That covers every layout
-// we want without recursion.
-//
-// The renderer (ai-generate-dialog.tsx) walks the same shape; both sides
-// agree on the whitelist.
+// One level of nesting only.
 
 import { anthropic } from '@ai-sdk/anthropic';
 import { loadEnv } from '@northbeam/config';
@@ -19,36 +19,6 @@ import type { FieldRow, ObjectRow } from '@northbeam/db';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 
-const LEAF_COMPONENTS = [
-  'PageHeader',
-  'MetricGroup',
-  'DescriptionList',
-  'EmptyState',
-  'Text',
-] as const;
-
-const LeafNodeSchema = z.object({
-  component: z.enum(LEAF_COMPONENTS),
-  props: z.record(z.string(), z.unknown()).optional(),
-});
-
-const SectionNodeSchema = z.object({
-  component: z.literal('SectionCard'),
-  props: z
-    .object({
-      title: z.string().optional(),
-    })
-    .passthrough()
-    .optional(),
-  children: z.array(LeafNodeSchema).optional(),
-});
-
-const ArtifactNodeSchema = z.union([LeafNodeSchema, SectionNodeSchema]);
-
-// The model also produces a saved-view suggestion that captures the same
-// intent in a form a regular list view can hold: a label, filters, sort,
-// and the columns the user should see. The dialog's "Save as view" button
-// turns this into a real `view` row; the artifact itself is never persisted.
 const FILTER_OPS = [
   'eq',
   'neq',
@@ -67,47 +37,70 @@ const FILTER_OPS = [
   'isSet',
 ] as const;
 
-const SuggestedFilterSchema = z.object({
+const FilterSchema = z.object({
   fieldKey: z.string().min(1),
   op: z.enum(FILTER_OPS),
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
 });
 
-const SuggestedSortSchema = z.object({
+const SortSchema = z.object({
   fieldKey: z.string().min(1),
   direction: z.enum(['asc', 'desc']),
 });
 
-const ViewSuggestionSchema = z.object({
-  label: z.string().min(1).max(80),
-  filters: z.array(SuggestedFilterSchema).max(10).default([]),
-  sort: z.array(SuggestedSortSchema).max(3).default([]),
-  columns: z.array(z.string()).max(8).default([]),
+/* ── Leaf nodes ─────────────────────────────────────────────────────────── */
+
+const LEAF_COMPONENTS = [
+  'PageHeader',
+  'MetricGroup',
+  'DescriptionList',
+  'EmptyState',
+  'Text',
+  'RecordTable',
+  'RecordGrid',
+] as const;
+
+const LeafNodeSchema = z.object({
+  component: z.enum(LEAF_COMPONENTS),
+  props: z.record(z.string(), z.unknown()).optional(),
 });
+
+/* ── Section node (one level of nesting) ────────────────────────────────── */
+
+const SectionNodeSchema = z.object({
+  component: z.literal('SectionCard'),
+  props: z
+    .object({
+      title: z.string().optional(),
+    })
+    .passthrough()
+    .optional(),
+  children: z.array(LeafNodeSchema).optional(),
+});
+
+const ArtifactNodeSchema = z.union([LeafNodeSchema, SectionNodeSchema]);
 
 const ArtifactSchema = z.object({
   version: z.literal('1'),
   components: z.array(ArtifactNodeSchema).min(1).max(20),
-  view: ViewSuggestionSchema,
 });
 
 export type Artifact = z.infer<typeof ArtifactSchema>;
 export type ArtifactLeafNode = z.infer<typeof LeafNodeSchema>;
 export type ArtifactSectionNode = z.infer<typeof SectionNodeSchema>;
 export type ArtifactNode = z.infer<typeof ArtifactNodeSchema>;
-export type ViewSuggestion = z.infer<typeof ViewSuggestionSchema>;
+export type ArtifactFilter = z.infer<typeof FilterSchema>;
+export type ArtifactSort = z.infer<typeof SortSchema>;
 
-/** Compact summary of the data that lives in the target object. Computed
- *  by the API before the LLM call and baked into the system prompt so the
- *  artifact's metric values reflect reality (not Claude's training-set
- *  guesses). Shape is intentionally narrow — `recordCount`, a few
- *  group-by counts, optional top-N. */
+/* ── Preflight summary ──────────────────────────────────────────────────── */
+
 export type DataSummary = {
   recordCount: number;
-  /** Group-by counts on the first one or two picklist fields. Empty when
-   *  the object has no picklists. */
-  picklistCounts: { fieldKey: string; fieldLabel: string; counts: { value: string; count: number }[] }[];
-  /** Sum + average for the first currency / number field, if any. */
+  picklistCounts: {
+    fieldKey: string;
+    fieldLabel: string;
+    counts: { value: string; count: number }[];
+  }[];
   numericSummary: { fieldKey: string; fieldLabel: string; sum: number; avg: number } | null;
 };
 
@@ -115,17 +108,20 @@ function formatDataSummary(summary: DataSummary): string {
   const parts: string[] = [];
   parts.push(`- Total records: ${summary.recordCount.toLocaleString()}`);
   for (const p of summary.picklistCounts) {
-    const top = p.counts.slice(0, 6).map((c) => `${c.value} (${c.count})`).join(', ');
+    const top = p.counts
+      .slice(0, 6)
+      .map((c) => `${c.value} (${c.count})`)
+      .join(', ');
     parts.push(`- ${p.fieldLabel} breakdown: ${top || 'no values'}`);
   }
   if (summary.numericSummary) {
     const { fieldLabel, sum, avg } = summary.numericSummary;
-    parts.push(
-      `- ${fieldLabel}: total ${sum.toLocaleString()}, average ${avg.toLocaleString()}`,
-    );
+    parts.push(`- ${fieldLabel}: total ${sum.toLocaleString()}, average ${avg.toLocaleString()}`);
   }
   return parts.join('\n');
 }
+
+/* ── System prompt ──────────────────────────────────────────────────────── */
 
 function buildSystemPrompt(
   object: ObjectRow,
@@ -138,26 +134,28 @@ function buildSystemPrompt(
     .map((f) => `- ${f.label} (${f.key}, type: ${f.type})`)
     .join('\n');
 
-  return `You are generating a structured UI artifact for a CRM dashboard inside Northbeam.
+  return `You are composing a structured dashboard artifact for a CRM workspace inside Northbeam.
 
-The artifact will be rendered as React components in a dialog.
-You must respond with valid JSON matching the requested schema — no commentary, no markdown fences.
+The artifact will be rendered as React components on the user's screen.
+Respond with valid JSON matching the requested schema — no commentary, no markdown fences.
 
-# Available components (use ONLY these — anything else is dropped)
+# Available components
 
-- PageHeader: a hero section at the top.
+## Static (use ONLY these — anything else is dropped)
+
+- PageHeader: hero at the top of the dashboard.
   props: { title: string, subtitle?: string }
 
 - SectionCard: a bordered panel that holds children.
   props: { title?: string }
-  children: array of LeafNodes (PageHeader / MetricGroup / DescriptionList / EmptyState / Text).
-  Nest at most one level — children cannot be SectionCards.
+  children: array of leaf nodes (any component below except SectionCard itself).
+  Nest at most one level deep.
 
-- MetricGroup: a row of stat tiles.
+- MetricGroup: a row of stat tiles. Use for top-line numbers.
   props: { items: { label: string, value?: string, delta?: string }[] }
-  Use small arrays (≤ 4) so the row fits.
+  Keep items ≤ 4 so the row fits.
 
-- DescriptionList: a label / value list.
+- DescriptionList: a compact label / value list.
   props: { items: { label: string, value: string }[] }
 
 - EmptyState: a placeholder block.
@@ -166,51 +164,58 @@ You must respond with valid JSON matching the requested schema — no commentary
 - Text: a plain paragraph.
   props: { value: string, muted?: boolean }
 
+## Data-querying (these load LIVE records at render time)
+
+- RecordTable: an embedded table of real records. The user can click any
+  row to open the record. Use when the dashboard wants to show "the top N
+  X" or "X matching criteria".
+  props: {
+    objectKey: string,                 // 'account' | 'contact' | 'deal' | 'activity' | another seeded object key
+    filters?: ArtifactFilter[],        // see Filter schema below
+    sort?: ArtifactSort[],             // see Sort schema below
+    columns?: string[],                // field keys to display, 2-5 entries
+    limit?: number                     // default 10, max 50
+  }
+
+- RecordGrid: card / tile presentation of real records.
+  props: same as RecordTable, plus optional { columnsCount?: 1|2|3|4 }
+
+# Filter / Sort schema
+
+ArtifactFilter = { fieldKey: string, op: Op, value?: string | number | boolean | null }
+  - fieldKey MUST come from the field list below for the matching objectKey.
+  - Op is one of: ${FILTER_OPS.join(', ')}
+  - The unary ops (isEmpty, isSet, isTrue, isFalse) take no value.
+
+ArtifactSort = { fieldKey: string, direction: 'asc' | 'desc' }
+
 # Object context
 
-You are generating for the **${object.label}** object (key: \`${object.key}\`).
+You are composing for the **${object.label}** object (key: \`${object.key}\`).
 
 Fields available to reference:
 ${fieldLines || '- (no fields surfaced)'}
 
 # Live data summary
 
-The following came from a real query against the workspace's data — use
-these numbers (don't invent values for the same metrics):
+Came from a real query against the workspace's data — use these numbers
+for matching metrics; don't invent values for the same metrics.
 
 ${formatDataSummary(summary)}
 
 # Output rules
 
-- Top-level "components" array: 1-6 items in reading order.
-- Wrap multi-block content in SectionCards.
-- Use the live numbers above wherever the user's prompt asks for those
-  metrics. For anything NOT in the summary, you may either (a) note that
-  the value isn't tracked, or (b) write a clearly-marked sample value
-  prefixed with "—" so it's obvious it isn't live.
-- Keep titles ≤ 60 chars, bodies ≤ 280 chars.
-
-# View suggestion (always included)
-
-In addition to the artifact, every response must include a "view" object — the
-equivalent saved-view configuration the user could pin if they liked your
-output. The user will see the artifact in the preview and may click "Save as
-view"; the filters / sort / columns you propose drive the saved list view.
-
-- "label": short name (≤ 60 chars) summarising what the saved list shows.
-- "filters": array of { fieldKey, op, value? }.
-  - fieldKey MUST come from the field list above.
-  - Valid ops: ${FILTER_OPS.join(', ')}.
-  - isEmpty / isSet / isTrue / isFalse take no value; everything else
-    requires a value.
-- "sort": array of { fieldKey, direction } — 0–2 entries.
-- "columns": array of field keys for the saved list's columns, in order.
-  4–6 entries.
-
-The view should reflect the SAME intent as the artifact. If the prompt is
-"top deals at risk", the artifact might show metric tiles for at-risk
-counts, and the view should pre-filter to that stage / probability range
-and sort by amount descending.`;
+- Top-level "components" array: 1-6 items in vertical reading order.
+- Lead with a PageHeader. Follow with 1-4 SectionCards.
+- Wrap related blocks (a row of metrics + an explanatory Text + a
+  RecordTable about the same theme) inside one SectionCard.
+- Use RecordTable / RecordGrid wherever the user's prompt implies "show
+  me X" — they load real data and the user can click into rows. Avoid
+  faking a table with DescriptionList items if you mean "show me records".
+- Use the live numbers above for MetricGroup values. For anything not in
+  the summary, either note that the value isn't tracked, or write a
+  clearly-marked sample value prefixed with "—".
+- Keep titles ≤ 60 chars, bodies ≤ 280 chars.`;
 }
 
 /** Generate an artifact from a natural-language prompt + object context +

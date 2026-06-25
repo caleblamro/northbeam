@@ -122,27 +122,34 @@ export function RecordDataGrid({
       ),
     };
 
-    const dataCols = columnFields.map<ColumnDef<RecordRow>>((f) => ({
-      id: f.key,
-      accessorFn: (r) => r.data[f.key],
-      header: f.label,
-      size: 180,
-      enableSorting: true,
-      meta: {
-        label: f.label,
-        cell: fieldToCellOpts(f),
-      },
-      cell: (info) => {
-        const v = info.getValue();
-        return (
-          <FieldValue
-            field={f}
-            value={v}
-            referenceLabel={f.type === 'reference' ? refLabels[String(v)] : undefined}
-          />
-        );
-      },
-    }));
+    // Drop any caller-supplied `name` field — we always prepend a synthetic
+    // Name column (the one that links to the record detail). Without this,
+    // a view whose columns include 'name' (or the layout-listColumns fallback
+    // for an object whose first field IS 'name') produces two columns with
+    // the same id and React fires duplicate-key warnings.
+    const dataCols = columnFields
+      .filter((f) => f.key !== 'name')
+      .map<ColumnDef<RecordRow>>((f) => ({
+        id: f.key,
+        accessorFn: (r) => r.data[f.key],
+        header: f.label,
+        size: 180,
+        enableSorting: true,
+        meta: {
+          label: f.label,
+          cell: fieldToCellOpts(f),
+        },
+        cell: (info) => {
+          const v = info.getValue();
+          return (
+            <FieldValue
+              field={f}
+              value={v}
+              referenceLabel={f.type === 'reference' ? refLabels[String(v)] : undefined}
+            />
+          );
+        },
+      }));
 
     return [nameCol, ...dataCols];
   }, [columnFields, refLabels, objectKey]);

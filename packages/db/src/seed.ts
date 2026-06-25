@@ -16,7 +16,339 @@ import { pgTypeFor } from './dynamic/pgtypes.js';
 import type { FieldConfig, FieldType, ObjectLayout, PicklistOption } from './field-types.js';
 import { getObjectByKey } from './queries/crm.js';
 import { fieldDef, objectDef, view } from './schema.js';
-import type { ShareTarget } from './views.js';
+import type { Filter, ShareTarget, ViewIcon, ViewSort } from './views.js';
+
+type SeedView = {
+  key: string;
+  label: string;
+  icon: ViewIcon;
+  type?: 'list' | 'dashboard';
+  filters?: Filter[];
+  sort?: ViewSort[];
+  columns?: string[];
+  /** For type='dashboard' — the artifact tree the dashboard renderer walks.
+   *  Loose JSON shape; the walker is resilient to unknown component names. */
+  config?: Record<string, unknown>;
+  isDefault?: boolean;
+};
+
+/** Per-object view sets. The first entry is the seeded default; the rest are
+ *  org-shared views the picker surfaces so the user can flip between common
+ *  filter / sort / column combinations without having to build them. Dates
+ *  are computed at seed time (`makeStandardViews(today)`) so "Due this week"
+ *  and friends reflect the moment the org was created. They don't roll
+ *  forward automatically — that's a relative-date filter feature, deferred. */
+function makeStandardViews(now: Date): Record<string, SeedView[]> {
+  const iso = (offsetDays: number): string => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + offsetDays);
+    return d.toISOString().slice(0, 10);
+  };
+  const isoDt = (offsetDays: number): string => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + offsetDays);
+    return d.toISOString();
+  };
+
+  return {
+    account: [
+      { key: 'all', label: 'All accounts', icon: 'building', isDefault: true },
+      {
+        key: 'overview',
+        label: 'Accounts overview',
+        icon: 'chart',
+        type: 'dashboard',
+        config: {
+          artifact: {
+            version: '1',
+            components: [
+              {
+                component: 'PageHeader',
+                props: {
+                  title: 'Accounts overview',
+                  subtitle: 'Hand-seeded dashboard — proves the artifact format. Edit `view.config.artifact` to change it.',
+                },
+              },
+              {
+                component: 'SectionCard',
+                props: { title: 'Top accounts by revenue' },
+                children: [
+                  {
+                    component: 'RecordTable',
+                    props: {
+                      objectKey: 'account',
+                      sort: [{ fieldKey: 'annual_revenue', direction: 'desc' }],
+                      columns: ['industry', 'type', 'employees', 'annual_revenue'],
+                      limit: 5,
+                    },
+                  },
+                ],
+              },
+              {
+                component: 'SectionCard',
+                props: { title: 'Hot accounts' },
+                children: [
+                  {
+                    component: 'Text',
+                    props: {
+                      value: 'Accounts your team flagged hot — usually the ones with expansion or renewal motion in flight.',
+                      muted: true,
+                    },
+                  },
+                  {
+                    component: 'RecordTable',
+                    props: {
+                      objectKey: 'account',
+                      filters: [{ fieldKey: 'rating', op: 'eq', value: 'hot' }],
+                      sort: [{ fieldKey: 'annual_revenue', direction: 'desc' }],
+                      columns: ['industry', 'employees', 'annual_revenue'],
+                      limit: 5,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+      {
+        key: 'hot',
+        label: 'Hot accounts',
+        icon: 'flag',
+        filters: [{ fieldKey: 'rating', op: 'eq', value: 'hot' }],
+      },
+      {
+        key: 'customers',
+        label: 'Customers',
+        icon: 'star',
+        filters: [{ fieldKey: 'type', op: 'eq', value: 'customer' }],
+      },
+      {
+        key: 'prospects',
+        label: 'Prospects',
+        icon: 'eye',
+        filters: [{ fieldKey: 'type', op: 'eq', value: 'prospect' }],
+      },
+      {
+        key: 'top-revenue',
+        label: 'Top revenue',
+        icon: 'chart',
+        sort: [{ fieldKey: 'annual_revenue', direction: 'desc' }],
+        columns: ['industry', 'annual_revenue', 'employees', 'rating'],
+      },
+      {
+        key: 'at-risk',
+        label: 'At risk',
+        icon: 'heart',
+        filters: [{ fieldKey: 'rating', op: 'eq', value: 'cold' }],
+        sort: [{ fieldKey: 'annual_revenue', direction: 'desc' }],
+      },
+    ],
+    contact: [
+      { key: 'all', label: 'All contacts', icon: 'users', isDefault: true },
+      {
+        key: 'revenue-team',
+        label: 'Revenue team',
+        icon: 'briefcase',
+        filters: [{ fieldKey: 'department', op: 'eq', value: 'Revenue' }],
+      },
+      {
+        key: 'engineering',
+        label: 'Engineering',
+        icon: 'folder',
+        filters: [{ fieldKey: 'department', op: 'eq', value: 'Engineering' }],
+      },
+      {
+        key: 'customer-success',
+        label: 'Customer success',
+        icon: 'heart',
+        filters: [{ fieldKey: 'department', op: 'eq', value: 'Customer Success' }],
+      },
+      {
+        key: 'by-name',
+        label: 'A → Z',
+        icon: 'bookmark',
+        sort: [{ fieldKey: 'name', direction: 'asc' }],
+      },
+    ],
+    deal: [
+      { key: 'all', label: 'All deals', icon: 'dollar', isDefault: true },
+      {
+        key: 'pipeline-snapshot',
+        label: 'Pipeline snapshot',
+        icon: 'chart',
+        type: 'dashboard',
+        config: {
+          artifact: {
+            version: '1',
+            components: [
+              {
+                component: 'PageHeader',
+                props: {
+                  title: 'Pipeline snapshot',
+                  subtitle: 'Open pipeline + recent wins + at-risk deals on one page.',
+                },
+              },
+              {
+                component: 'SectionCard',
+                props: { title: 'Open pipeline — largest deals' },
+                children: [
+                  {
+                    component: 'RecordTable',
+                    props: {
+                      objectKey: 'deal',
+                      filters: [
+                        { fieldKey: 'stage', op: 'neq', value: 'closed_won' },
+                        { fieldKey: 'stage', op: 'neq', value: 'closed_lost' },
+                      ],
+                      sort: [{ fieldKey: 'amount', direction: 'desc' }],
+                      columns: ['account', 'stage', 'amount', 'close_date', 'probability'],
+                      limit: 8,
+                    },
+                  },
+                ],
+              },
+              {
+                component: 'SectionCard',
+                props: { title: 'Recently closed-won' },
+                children: [
+                  {
+                    component: 'RecordTable',
+                    props: {
+                      objectKey: 'deal',
+                      filters: [{ fieldKey: 'stage', op: 'eq', value: 'closed_won' }],
+                      sort: [{ fieldKey: 'close_date', direction: 'desc' }],
+                      columns: ['account', 'amount', 'close_date'],
+                      limit: 5,
+                    },
+                  },
+                ],
+              },
+              {
+                component: 'SectionCard',
+                props: { title: 'At risk — probability below 50%' },
+                children: [
+                  {
+                    component: 'Text',
+                    props: {
+                      value: 'Open deals where the rep set probability below 50%. Usually the ones to slip if no action is taken.',
+                      muted: true,
+                    },
+                  },
+                  {
+                    component: 'RecordTable',
+                    props: {
+                      objectKey: 'deal',
+                      filters: [
+                        { fieldKey: 'probability', op: 'lt', value: 50 },
+                        { fieldKey: 'stage', op: 'neq', value: 'closed_won' },
+                        { fieldKey: 'stage', op: 'neq', value: 'closed_lost' },
+                      ],
+                      sort: [{ fieldKey: 'amount', direction: 'desc' }],
+                      columns: ['account', 'stage', 'amount', 'probability', 'next_step'],
+                      limit: 6,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+      {
+        key: 'open',
+        label: 'Open pipeline',
+        icon: 'chart',
+        // Two neq filters — we don't have an `in/notIn` op, but filters are
+        // AND-combined so "stage != won AND stage != lost" works.
+        filters: [
+          { fieldKey: 'stage', op: 'neq', value: 'closed_won' },
+          { fieldKey: 'stage', op: 'neq', value: 'closed_lost' },
+        ],
+        sort: [{ fieldKey: 'amount', direction: 'desc' }],
+      },
+      {
+        key: 'closed-won',
+        label: 'Closed won',
+        icon: 'star',
+        filters: [{ fieldKey: 'stage', op: 'eq', value: 'closed_won' }],
+        sort: [{ fieldKey: 'close_date', direction: 'desc' }],
+      },
+      {
+        key: 'at-risk',
+        label: 'At risk',
+        icon: 'flag',
+        filters: [
+          { fieldKey: 'probability', op: 'lt', value: 50 },
+          { fieldKey: 'stage', op: 'neq', value: 'closed_won' },
+          { fieldKey: 'stage', op: 'neq', value: 'closed_lost' },
+        ],
+        sort: [{ fieldKey: 'amount', direction: 'desc' }],
+      },
+      {
+        key: 'commit',
+        label: 'Forecast: commit',
+        icon: 'pin',
+        filters: [{ fieldKey: 'forecast_category', op: 'eq', value: 'commit' }],
+        sort: [{ fieldKey: 'amount', direction: 'desc' }],
+      },
+      {
+        key: 'closing-soon',
+        label: 'Closing in 30 days',
+        icon: 'calendar',
+        filters: [
+          { fieldKey: 'close_date', op: 'before', value: iso(30) },
+          { fieldKey: 'stage', op: 'neq', value: 'closed_won' },
+          { fieldKey: 'stage', op: 'neq', value: 'closed_lost' },
+        ],
+        sort: [{ fieldKey: 'close_date', direction: 'asc' }],
+      },
+    ],
+    activity: [
+      { key: 'all', label: 'All activities', icon: 'clock', isDefault: true },
+      {
+        key: 'tasks',
+        label: 'Tasks',
+        icon: 'inbox',
+        filters: [{ fieldKey: 'type', op: 'eq', value: 'task' }],
+      },
+      {
+        key: 'open',
+        label: 'Open',
+        icon: 'eye',
+        filters: [{ fieldKey: 'status', op: 'eq', value: 'open' }],
+        sort: [{ fieldKey: 'due_date', direction: 'asc' }],
+      },
+      {
+        key: 'high-priority',
+        label: 'High priority',
+        icon: 'flag',
+        filters: [
+          { fieldKey: 'priority', op: 'eq', value: 'high' },
+          { fieldKey: 'status', op: 'eq', value: 'open' },
+        ],
+        sort: [{ fieldKey: 'due_date', direction: 'asc' }],
+      },
+      {
+        key: 'due-this-week',
+        label: 'Due this week',
+        icon: 'calendar',
+        filters: [
+          { fieldKey: 'due_date', op: 'before', value: isoDt(7) },
+          { fieldKey: 'status', op: 'eq', value: 'open' },
+        ],
+        sort: [{ fieldKey: 'due_date', direction: 'asc' }],
+      },
+      {
+        key: 'completed',
+        label: 'Completed',
+        icon: 'star',
+        filters: [{ fieldKey: 'status', op: 'eq', value: 'completed' }],
+        sort: [{ fieldKey: 'due_date', direction: 'desc' }],
+      },
+    ],
+  };
+}
 
 type SeedField = {
   key: string;
@@ -752,6 +1084,9 @@ export const STANDARD_OBJECTS: SeedObject[] = [
  *  publicProcedure (no GUC yet) immediately after creating the org. */
 export async function seedStandardObjects(db: DbExecutor, organizationId: string): Promise<void> {
   await ensureSchema(db, organizationId);
+  // Build the view set fresh per call so date-bearing filters reflect the
+  // actual seed-time clock.
+  const STANDARD_VIEWS = makeStandardViews(new Date());
   for (const obj of STANDARD_OBJECTS) {
     const [existing] = await db
       .select({ id: objectDef.id })
@@ -818,40 +1153,33 @@ export async function seedStandardObjects(db: DbExecutor, organizationId: string
     const seeded = await getObjectByKey(db, organizationId, obj.key);
     if (seeded) {
       await createObjectTable(db, organizationId, seeded.object, seeded.fields);
-      // Seed the default "All <objectPlural>" list view. Idempotent — the
-      // (organizationId, objectId, key) unique index makes re-running this
-      // safe. Owner is null because this is system-seeded; everyone in the
-      // org sees it.
-      // Per-object icon for the seeded default view — keeps the picker
-      // visually distinct without the user having to set it manually.
-      const defaultIcon =
-        obj.key === 'account'
-          ? 'building'
-          : obj.key === 'contact'
-            ? 'users'
-            : obj.key === 'deal'
-              ? 'dollar'
-              : obj.key === 'activity'
-                ? 'clock'
-                : 'list';
-      await db
-        .insert(view)
-        .values({
-          organizationId,
-          objectId: seeded.object.id,
-          key: 'all',
-          label: `All ${obj.labelPlural.toLowerCase()}`,
-          type: 'list',
-          icon: defaultIcon,
-          config: {},
-          filters: [],
-          sort: [],
-          columns: [],
-          sharedWith: [{ kind: 'org' }] satisfies ShareTarget[],
-          ownerId: null,
-          isDefault: true,
-        })
-        .onConflictDoNothing();
+      // Seed the standard view set for this object — one default ("All X")
+      // plus a handful of org-shared filter/sort/column combinations the
+      // picker surfaces immediately. Idempotent via the (orgId, objectId,
+      // key) unique index; safe to re-run.
+      const viewsForObj = STANDARD_VIEWS[obj.key];
+      if (viewsForObj) {
+        for (const v of viewsForObj) {
+          await db
+            .insert(view)
+            .values({
+              organizationId,
+              objectId: seeded.object.id,
+              key: v.key,
+              label: v.label,
+              type: v.type ?? 'list',
+              icon: v.icon,
+              config: v.config ?? {},
+              filters: v.filters ?? [],
+              sort: v.sort ?? [],
+              columns: v.columns ?? [],
+              sharedWith: [{ kind: 'org' }] satisfies ShareTarget[],
+              ownerId: null,
+              isDefault: v.isDefault ?? false,
+            })
+            .onConflictDoNothing();
+        }
+      }
     }
   }
 }
