@@ -4,7 +4,7 @@ import { SectionCard } from '@/components/northbeam/section-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/api';
-import { ArrowRight, CloudUpload, Plug } from 'lucide-react';
+import { ArrowRight, CloudUpload, type Plug } from 'lucide-react';
 import Link from 'next/link';
 
 export default function IntegrationsSetupPage() {

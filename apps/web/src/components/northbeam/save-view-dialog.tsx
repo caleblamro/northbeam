@@ -24,8 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { VIEW_ICONS, VIEW_ICON_ORDER } from '@/lib/views/icons';
 import { cn } from '@/lib/cn';
+import { VIEW_ICONS, VIEW_ICON_ORDER } from '@/lib/views/icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ROLES, ROLE_LABELS, type Role } from '@northbeam/core/roles';
 import type { ShareTarget, ViewIcon } from '@northbeam/db/views';
@@ -168,10 +168,7 @@ export function SaveViewDialog({
               control={form.control}
               name="shareMode"
               render={({ field }) => (
-                <Select
-                  value={field.value}
-                  onValueChange={(v) => field.onChange(v as ShareMode)}
-                >
+                <Select value={field.value} onValueChange={(v) => field.onChange(v as ShareMode)}>
                   <SelectTrigger id="view-share-mode">
                     <SelectValue />
                   </SelectTrigger>

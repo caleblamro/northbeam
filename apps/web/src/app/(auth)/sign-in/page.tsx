@@ -63,11 +63,7 @@ export default function SignInPage() {
       <p className="mb-6 text-muted-foreground leading-relaxed">
         Enter your email and we'll send you a magic link.
       </p>
-      <Field
-        label="Work email"
-        htmlFor="email"
-        error={form.formState.errors.email?.message}
-      >
+      <Field label="Work email" htmlFor="email" error={form.formState.errors.email?.message}>
         <Input
           id="email"
           type="email"

@@ -15,10 +15,7 @@
 // like any other view in the picker.
 
 import { SaveViewDialog } from '@/components/northbeam/save-view-dialog';
-import {
-  type Artifact,
-  ArtifactView,
-} from '@/components/northbeam/views/artifact-walker';
+import { type Artifact, ArtifactView } from '@/components/northbeam/views/artifact-walker';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -60,8 +57,7 @@ export function AIGenerateDialog({ open, onOpenChange }: AIGenerateDialogProps) 
   const [prompt, setPrompt] = useState('');
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const objectId =
-    objects.data?.find((o) => o.key === objectKey)?.id ?? null;
+  const objectId = objects.data?.find((o) => o.key === objectKey)?.id ?? null;
 
   useEffect(() => {
     if (!open) return;
@@ -167,15 +163,9 @@ export function AIGenerateDialog({ open, onOpenChange }: AIGenerateDialogProps) 
           <div className="flex items-center gap-2">
             <Button
               disabled={!prompt.trim() || !objectKey || generate.isPending}
-              onClick={() =>
-                generate.mutate({ objectKey, prompt: prompt.trim() })
-              }
+              onClick={() => generate.mutate({ objectKey, prompt: prompt.trim() })}
             >
-              {generate.isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Sparkles />
-              )}
+              {generate.isPending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles />}
               {artifact ? 'Regenerate' : 'Generate'}
             </Button>
             {artifact && (
@@ -197,10 +187,7 @@ export function AIGenerateDialog({ open, onOpenChange }: AIGenerateDialogProps) 
             Preview is ephemeral. Save persists the exact layout as a dashboard view.
           </span>
           {artifact && (
-            <Button
-              onClick={() => setSaveDialogOpen(true)}
-              disabled={createView.isPending}
-            >
+            <Button onClick={() => setSaveDialogOpen(true)} disabled={createView.isPending}>
               <BookmarkPlus />
               Save as view
             </Button>

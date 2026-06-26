@@ -42,11 +42,7 @@ export async function listViewsForUser(
   const where = objectId
     ? and(eq(view.organizationId, orgId), eq(view.objectId, objectId), visibleToUser(userId, role))
     : and(eq(view.organizationId, orgId), visibleToUser(userId, role));
-  return db
-    .select()
-    .from(view)
-    .where(where)
-    .orderBy(desc(view.isDefault), asc(view.label));
+  return db.select().from(view).where(where).orderBy(desc(view.isDefault), asc(view.label));
 }
 
 /** One view by id, scoped to the org. Visibility check is the caller's job —

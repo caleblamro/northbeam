@@ -1,27 +1,23 @@
-"use client";
+'use client';
 
-import { Plus } from "lucide-react";
-import * as React from "react";
-import { DataGridColumnHeader } from "@/components/data-grid/data-grid-column-header";
-import { DataGridContextMenu } from "@/components/data-grid/data-grid-context-menu";
-import { DataGridPasteDialog } from "@/components/data-grid/data-grid-paste-dialog";
-import { DataGridRow } from "@/components/data-grid/data-grid-row";
-import { DataGridSearch } from "@/components/data-grid/data-grid-search";
-import { useAsRef } from "@/hooks/use-as-ref";
-import type { useDataGrid } from "@/hooks/use-data-grid";
-import {
-  flexRender,
-  getColumnBorderVisibility,
-  getColumnPinningStyle,
-} from "@/lib/data-grid";
-import { cn } from "@/lib/cn";
-import type { Direction } from "@/types/data-grid";
+import { DataGridColumnHeader } from '@/components/data-grid/data-grid-column-header';
+import { DataGridContextMenu } from '@/components/data-grid/data-grid-context-menu';
+import { DataGridPasteDialog } from '@/components/data-grid/data-grid-paste-dialog';
+import { DataGridRow } from '@/components/data-grid/data-grid-row';
+import { DataGridSearch } from '@/components/data-grid/data-grid-search';
+import { useAsRef } from '@/hooks/use-as-ref';
+import type { useDataGrid } from '@/hooks/use-data-grid';
+import { cn } from '@/lib/cn';
+import { flexRender, getColumnBorderVisibility, getColumnPinningStyle } from '@/lib/data-grid';
+import type { Direction } from '@/types/data-grid';
+import { Plus } from 'lucide-react';
+import * as React from 'react';
 
 const EMPTY_CELL_SELECTION_SET = new Set<string>();
 
 interface DataGridProps<TData>
-  extends Omit<ReturnType<typeof useDataGrid<TData>>, "dir">,
-    Omit<React.ComponentProps<"div">, "contextMenu"> {
+  extends Omit<ReturnType<typeof useDataGrid<TData>>, 'dir'>,
+    Omit<React.ComponentProps<'div'>, 'contextMenu'> {
   dir?: Direction;
   height?: number;
   stretchColumns?: boolean;
@@ -32,7 +28,7 @@ export function DataGrid<TData>({
   headerRef,
   rowMapRef,
   footerRef,
-  dir = "ltr",
+  dir = 'ltr',
   table,
   tableMeta,
   virtualTotalSize,
@@ -70,18 +66,15 @@ export function DataGrid<TData>({
     [onRowAddRef],
   );
 
-  const onDataGridContextMenu = React.useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      event.preventDefault();
-    },
-    [],
-  );
+  const onDataGridContextMenu = React.useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+  }, []);
 
   const onFooterCellKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (!onRowAddRef.current) return;
 
-      if (event.key === "Enter" || event.key === " ") {
+      if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         onRowAddRef.current();
       }
@@ -94,14 +87,10 @@ export function DataGrid<TData>({
       data-slot="grid-wrapper"
       dir={dir}
       {...props}
-      className={cn("relative flex w-full flex-col", className)}
+      className={cn('relative flex w-full flex-col', className)}
     >
       {searchState && <DataGridSearch {...searchState} />}
-      <DataGridContextMenu
-        tableMeta={tableMeta}
-        columns={columns}
-        contextMenu={contextMenu}
-      />
+      <DataGridContextMenu tableMeta={tableMeta} columns={columns} contextMenu={contextMenu} />
       <DataGridPasteDialog tableMeta={tableMeta} pasteDialog={pasteDialog} />
       <div
         role="grid"
@@ -135,21 +124,17 @@ export function DataGrid<TData>({
             >
               {headerGroup.headers.map((header, colIndex) => {
                 const sorting = table.getState().sorting;
-                const currentSort = sorting.find(
-                  (sort) => sort.id === header.column.id,
-                );
+                const currentSort = sorting.find((sort) => sort.id === header.column.id);
                 const isSortable = header.column.getCanSort();
 
                 const nextHeader = headerGroup.headers[colIndex + 1];
-                const isLastColumn =
-                  colIndex === headerGroup.headers.length - 1;
+                const isLastColumn = colIndex === headerGroup.headers.length - 1;
 
-                const { showEndBorder, showStartBorder } =
-                  getColumnBorderVisibility({
-                    column: header.column,
-                    nextColumn: nextHeader?.column,
-                    isLastColumn,
-                  });
+                const { showEndBorder, showStartBorder } = getColumnBorderVisibility({
+                  column: header.column,
+                  nextColumn: nextHeader?.column,
+                  isLastColumn,
+                });
 
                 return (
                   <div
@@ -158,34 +143,29 @@ export function DataGrid<TData>({
                     aria-colindex={colIndex + 1}
                     aria-sort={
                       currentSort?.desc === false
-                        ? "ascending"
+                        ? 'ascending'
                         : currentSort?.desc === true
-                          ? "descending"
+                          ? 'descending'
                           : isSortable
-                            ? "none"
+                            ? 'none'
                             : undefined
                     }
                     data-slot="grid-header-cell"
                     tabIndex={-1}
-                    className={cn("relative", {
-                      grow: stretchColumns && header.column.id !== "select",
-                      "border-e":
-                        showEndBorder && header.column.id !== "select",
-                      "border-s":
-                        showStartBorder && header.column.id !== "select",
+                    className={cn('relative', {
+                      grow: stretchColumns && header.column.id !== 'select',
+                      'border-e': showEndBorder && header.column.id !== 'select',
+                      'border-s': showStartBorder && header.column.id !== 'select',
                     })}
                     style={{
                       ...getColumnPinningStyle({ column: header.column, dir }),
                       width: `calc(var(--header-${header.id}-size) * 1px)`,
                     }}
                   >
-                    {header.isPlaceholder ? null : typeof header.column
-                        .columnDef.header === "function" ? (
+                    {header.isPlaceholder ? null : typeof header.column.columnDef.header ===
+                      'function' ? (
                       <div className="size-full px-3 py-1.5">
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
+                        {flexRender(header.column.columnDef.header, header.getContext())}
                       </div>
                     ) : (
                       <DataGridColumnHeader header={header} table={table} />
@@ -202,7 +182,7 @@ export function DataGrid<TData>({
           className="relative grid"
           style={{
             height: `${virtualTotalSize}px`,
-            contain: adjustLayout ? "layout paint" : "strict",
+            contain: adjustLayout ? 'layout paint' : 'strict',
           }}
         >
           {virtualItems.map((virtualItem) => {
@@ -210,13 +190,10 @@ export function DataGrid<TData>({
             if (!row) return null;
 
             const cellSelectionKeys =
-              cellSelectionMap?.get(virtualItem.index) ??
-              EMPTY_CELL_SELECTION_SET;
+              cellSelectionMap?.get(virtualItem.index) ?? EMPTY_CELL_SELECTION_SET;
 
-            const searchMatchColumns =
-              searchMatchesByRow?.get(virtualItem.index) ?? null;
-            const isActiveSearchRow =
-              activeSearchMatch?.rowIndex === virtualItem.index;
+            const searchMatchColumns = searchMatchesByRow?.get(virtualItem.index) ?? null;
+            const isActiveSearchRow = activeSearchMatch?.rowIndex === virtualItem.index;
 
             return (
               <DataGridRow

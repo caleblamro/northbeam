@@ -18,9 +18,9 @@ import { TokenizeError } from './tokenize.js';
 
 /** True if the formula parses cleanly. Use at write time to reject bad
  *  expressions before they reach the compute worker. */
-export function validateFormula(formula: string):
-  | { ok: true }
-  | { ok: false; message: string; pos: number } {
+export function validateFormula(
+  formula: string,
+): { ok: true } | { ok: false; message: string; pos: number } {
   try {
     parseFormula(formula);
     return { ok: true };

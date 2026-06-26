@@ -4,6 +4,8 @@
 // design_handoff_northbeam/app.jsx — TOC, scrollspy, topbar (theme + tweaks +
 // ⌘K), and the stacked component sections.
 
+import { Button, type ButtonVariant } from '@/components/northbeam/button-legacy';
+import { CommandPalette } from '@/components/northbeam/command-legacy';
 import { Icon, type IconName } from '@/components/northbeam/icons';
 import { BrandChip } from '@/components/northbeam/primitives';
 import {
@@ -20,8 +22,6 @@ import {
   TypeSection,
 } from '@/components/northbeam/sections';
 import { ThemeToggle, TweaksButton } from '@/components/northbeam/theme-switcher';
-import { Button, type ButtonVariant } from '@/components/northbeam/button-legacy';
-import { CommandPalette } from '@/components/northbeam/command-legacy';
 import { useTheme } from '@/lib/theme';
 import { useEffect, useState } from 'react';
 

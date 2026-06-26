@@ -43,10 +43,7 @@ export function startSfImportWorker(): Worker<SfImportJobData> {
   );
 
   worker.on('failed', (job, err) => {
-    logger.error(
-      { orgId: job?.data.orgId, runId: job?.data.runId, err },
-      'sf-import.failed',
-    );
+    logger.error({ orgId: job?.data.orgId, runId: job?.data.runId, err }, 'sf-import.failed');
   });
 
   return worker;

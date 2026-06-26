@@ -10,14 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Sparkline, fakeSeries } from '@/components/ui/sparkline';
 import { trpc } from '@/lib/api';
 import { fmtMoney } from '@/lib/mock-crm';
-import {
-  ArrowRight,
-  Building2,
-  CircleDollarSign,
-  RefreshCw,
-  UserPlus,
-  Zap,
-} from 'lucide-react';
+import { ArrowRight, Building2, CircleDollarSign, RefreshCw, UserPlus, Zap } from 'lucide-react';
 import Link from 'next/link';
 
 // Home — refined trading-terminal aesthetic. Hero pipeline number in
@@ -77,9 +70,7 @@ export default function HomePage() {
               </div>
             )}
             <div className="mt-3 flex items-center gap-2 text-muted-foreground text-sm">
-              <span className="tabular-nums text-foreground">
-                {dealCount.toLocaleString()}
-              </span>
+              <span className="tabular-nums text-foreground">{dealCount.toLocaleString()}</span>
               <span>{dealCount === 1 ? 'open deal' : 'open deals'}</span>
               <span className="text-muted-foreground/40">·</span>
               <span className="text-[0.6875rem] tabular-nums uppercase tracking-[0.14em]">
@@ -119,13 +110,7 @@ export default function HomePage() {
           href="/contacts"
           seed={2}
         />
-        <MetricCell
-          label="Deals"
-          value={counts?.deals}
-          loading={loading}
-          href="/deals"
-          seed={3}
-        />
+        <MetricCell label="Deals" value={counts?.deals} loading={loading} href="/deals" seed={3} />
       </section>
 
       {/* Activity + Quick start */}

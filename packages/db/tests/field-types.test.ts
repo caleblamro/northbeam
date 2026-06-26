@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 import {
   FIELD_TYPES,
   FIELD_TYPE_IDS,
-  PICKABLE_FIELD_TYPES,
   type FieldType,
+  PICKABLE_FIELD_TYPES,
   fieldTypeMeta,
   isFieldTypeAvailable,
   mapSalesforceType,

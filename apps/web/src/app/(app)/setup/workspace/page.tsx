@@ -62,12 +62,7 @@ export default function WorkspaceSetupPage() {
             You have view-only access. Workspace settings can be changed by an admin.
           </p>
         )}
-        <Field
-          label="Workspace name"
-          required
-          htmlFor="ws-name"
-          error={errors.name?.message}
-        >
+        <Field label="Workspace name" required htmlFor="ws-name" error={errors.name?.message}>
           <InputGroup>
             <InputGroupAddon>
               <Building2 />

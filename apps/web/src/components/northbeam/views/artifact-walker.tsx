@@ -79,9 +79,9 @@ function RenderLeaf({ node }: { node: ArtifactNode }): ReactNode {
         />
       );
     case 'MetricGroup': {
-      const items = ((props.items as
-        | { label: string; value?: string; delta?: string }[]
-        | undefined) ?? []).map((it) => ({
+      const items = (
+        (props.items as { label: string; value?: string; delta?: string }[] | undefined) ?? []
+      ).map((it) => ({
         label: it.label,
         value: it.value,
         delta: it.delta ? { text: it.delta } : undefined,
@@ -154,16 +154,12 @@ function RecordTableNode({ props }: { props: Record<string, unknown> }) {
     const all = query.data?.rows ?? [];
     const filters = p.filters ?? [];
     const filtered =
-      filters.length === 0
-        ? all
-        : all.filter((r) => rowPassesFilters(fields, r.data, filters));
+      filters.length === 0 ? all : all.filter((r) => rowPassesFilters(fields, r.data, filters));
     return sortRows(fields, filtered, p.sort ?? []).slice(0, limit);
   }, [query.data, fields, p.filters, p.sort, limit]);
 
   const columnKeys =
-    p.columns && p.columns.length > 0
-      ? p.columns
-      : fields.slice(0, 4).map((f) => f.key);
+    p.columns && p.columns.length > 0 ? p.columns : fields.slice(0, 4).map((f) => f.key);
   const columns = columnKeys
     .map((k) => fields.find((f) => f.key === k))
     .filter((f): f is FieldDefLite => !!f);
@@ -218,25 +214,17 @@ function RecordGridNode({ props }: { props: Record<string, unknown> }) {
     const all = query.data?.rows ?? [];
     const filters = p.filters ?? [];
     const filtered =
-      filters.length === 0
-        ? all
-        : all.filter((r) => rowPassesFilters(fields, r.data, filters));
+      filters.length === 0 ? all : all.filter((r) => rowPassesFilters(fields, r.data, filters));
     return sortRows(fields, filtered, p.sort ?? []).slice(0, limit);
   }, [query.data, fields, p.filters, p.sort, limit]);
 
   const fieldKeys =
-    p.columns && p.columns.length > 0
-      ? p.columns
-      : fields.slice(0, 3).map((f) => f.key);
+    p.columns && p.columns.length > 0 ? p.columns : fields.slice(0, 3).map((f) => f.key);
   const cardFields = fieldKeys
     .map((k) => fields.find((f) => f.key === k))
     .filter((f): f is FieldDefLite => !!f);
 
-  const columnsCount = (p.columnsCount ? String(p.columnsCount) : '3') as
-    | '1'
-    | '2'
-    | '3'
-    | '4';
+  const columnsCount = (p.columnsCount ? String(p.columnsCount) : '3') as '1' | '2' | '3' | '4';
 
   if (!objectKey) {
     return <UnsupportedNodeNote message="RecordGrid: missing objectKey." />;

@@ -20,8 +20,7 @@ export function ListView({
   sort,
   onSortChange,
 }: ViewRendererProps) {
-  const columnKeys =
-    view.columns.length > 0 ? view.columns : fields.slice(0, 4).map((f) => f.key);
+  const columnKeys = view.columns.length > 0 ? view.columns : fields.slice(0, 4).map((f) => f.key);
   const columns = columnKeys
     .map((k) => fields.find((f) => f.key === k))
     .filter((f): f is FieldDefLite => !!f);

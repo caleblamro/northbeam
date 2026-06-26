@@ -21,20 +21,7 @@ export type AstNode =
   | { kind: 'Unary'; op: '-' | 'NOT'; expr: AstNode }
   | {
       kind: 'Binary';
-      op:
-        | '+'
-        | '-'
-        | '*'
-        | '/'
-        | '&'
-        | '='
-        | '!='
-        | '<'
-        | '>'
-        | '<='
-        | '>='
-        | 'AND'
-        | 'OR';
+      op: '+' | '-' | '*' | '/' | '&' | '=' | '!=' | '<' | '>' | '<=' | '>=' | 'AND' | 'OR';
       left: AstNode;
       right: AstNode;
     }
@@ -112,7 +99,15 @@ class Parser {
     let left = this.parseAdditive();
     while (this.peek().kind === 'OP') {
       const v = this.peek().value;
-      if (v === '=' || v === '!=' || v === '<>' || v === '<' || v === '>' || v === '<=' || v === '>=') {
+      if (
+        v === '=' ||
+        v === '!=' ||
+        v === '<>' ||
+        v === '<' ||
+        v === '>' ||
+        v === '<=' ||
+        v === '>='
+      ) {
         this.eat();
         const right = this.parseAdditive();
         const op = v === '<>' ? '!=' : v;
@@ -183,7 +178,10 @@ class Parser {
       if (t.value === 'NULL') return { kind: 'Null' };
       // Function call: IDENT ( args )
       if (this.peek().kind !== 'LPAREN') {
-        throw new ParseError(`bare identifier '${t.value}' — did you forget '{...}' for a field?`, t.pos);
+        throw new ParseError(
+          `bare identifier '${t.value}' — did you forget '{...}' for a field?`,
+          t.pos,
+        );
       }
       this.eat(); // (
       const args: AstNode[] = [];

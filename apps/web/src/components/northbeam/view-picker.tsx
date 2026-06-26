@@ -96,11 +96,7 @@ export function ViewPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={cn('h-8 gap-1.5 px-2 font-medium', className)}
-        >
+        <Button variant="ghost" size="sm" className={cn('h-8 gap-1.5 px-2 font-medium', className)}>
           <ActiveIcon className="size-3.5 text-muted-foreground" />
           <span className="max-w-[12rem] truncate">{activeView.label}</span>
           {hasOverrides && (

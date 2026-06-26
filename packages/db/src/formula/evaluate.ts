@@ -198,10 +198,7 @@ export function evaluateAst(node: AstNode, ctx: EvalContext): unknown {
 /** Top-level: parse + evaluate. Returns the formula's result, or null on
  *  evaluation failure. Throws on parse / tokenize errors so the field-editor
  *  surface can show a precise error when the formula expression is broken. */
-export function evaluateFormula(
-  formula: string,
-  data: Record<string, unknown>,
-): unknown {
+export function evaluateFormula(formula: string, data: Record<string, unknown>): unknown {
   const ast = parseFormula(formula);
   return evaluateAst(ast, { data });
 }

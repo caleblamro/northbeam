@@ -3,14 +3,7 @@
 import { PageActions } from '@/components/northbeam/app-shell';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  BarChart3,
-  Building2,
-  ChartLine,
-  Plus,
-  RefreshCw,
-  Zap,
-} from 'lucide-react';
+import { Building2, ChartLine, Plus, RefreshCw, Zap } from 'lucide-react';
 
 type Dash = {
   id: string;
@@ -23,10 +16,40 @@ type Dash = {
 };
 
 const DASHBOARDS: Dash[] = [
-  { id: 'd1', name: 'Revenue overview', desc: 'Pipeline, bookings, and forecast at a glance.', icon: ChartLine, tiles: 8, owner: 'Jordan Mills', shared: true },
-  { id: 'd2', name: 'Sales activity', desc: 'Calls, emails, and meetings by rep this week.', icon: Zap, tiles: 6, owner: 'Aisha Khan' },
-  { id: 'd3', name: 'Account health', desc: 'At-risk accounts and renewal exposure.', icon: Building2, tiles: 5, owner: 'Ravi Teja', shared: true },
-  { id: 'd4', name: 'Migration audit', desc: 'Records imported and field-mapping confidence.', icon: RefreshCw, tiles: 4, owner: 'System' },
+  {
+    id: 'd1',
+    name: 'Revenue overview',
+    desc: 'Pipeline, bookings, and forecast at a glance.',
+    icon: ChartLine,
+    tiles: 8,
+    owner: 'Jordan Mills',
+    shared: true,
+  },
+  {
+    id: 'd2',
+    name: 'Sales activity',
+    desc: 'Calls, emails, and meetings by rep this week.',
+    icon: Zap,
+    tiles: 6,
+    owner: 'Aisha Khan',
+  },
+  {
+    id: 'd3',
+    name: 'Account health',
+    desc: 'At-risk accounts and renewal exposure.',
+    icon: Building2,
+    tiles: 5,
+    owner: 'Ravi Teja',
+    shared: true,
+  },
+  {
+    id: 'd4',
+    name: 'Migration audit',
+    desc: 'Records imported and field-mapping confidence.',
+    icon: RefreshCw,
+    tiles: 4,
+    owner: 'System',
+  },
 ];
 
 export default function DashboardsPage() {

@@ -60,14 +60,12 @@ export async function resolveLayout(
     return s;
   };
 
-  const best = candidates
-    .slice()
-    .sort((a, b) => {
-      const ds = score(b) - score(a);
-      if (ds !== 0) return ds;
-      // Tiebreak: newest wins.
-      return b.createdAt.getTime() - a.createdAt.getTime();
-    })[0];
+  const best = candidates.slice().sort((a, b) => {
+    const ds = score(b) - score(a);
+    if (ds !== 0) return ds;
+    // Tiebreak: newest wins.
+    return b.createdAt.getTime() - a.createdAt.getTime();
+  })[0];
 
   if (best) {
     return { layout: best.layout, source: best };

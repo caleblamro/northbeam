@@ -21,13 +21,7 @@ interface SavedViewsProps {
   className?: string;
 }
 
-export function SavedViews({
-  views,
-  activeId,
-  onSelect,
-  trailing,
-  className,
-}: SavedViewsProps) {
+export function SavedViews({ views, activeId, onSelect, trailing, className }: SavedViewsProps) {
   return (
     <div className={cn('flex items-center gap-1', className)}>
       {views.map((v) => (

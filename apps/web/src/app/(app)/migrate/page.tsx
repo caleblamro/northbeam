@@ -21,14 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { trpc } from '@/lib/api';
-import {
-  AlertCircle,
-  ArrowRight,
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  RefreshCw,
-} from 'lucide-react';
+import { AlertCircle, ArrowRight, ChevronDown, ChevronUp, Loader2, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
@@ -67,8 +60,8 @@ function ConnectScreen({
   return (
     <SectionCard title="Connect your Salesforce org" className="max-w-2xl">
       <p className="text-muted-foreground text-sm leading-relaxed">
-        Northbeam reads your objects, fields, record types, and records through the Salesforce
-        API, maps them onto native objects, and imports everything in one run.
+        Northbeam reads your objects, fields, record types, and records through the Salesforce API,
+        maps them onto native objects, and imports everything in one run.
       </p>
       {status === 'error' && (
         <p className="mt-3 text-destructive text-sm">
@@ -375,13 +368,10 @@ function ObjectMappingCard({
                         <span className="text-muted-foreground">—</span>
                       ) : (
                         <span>
-                          {m.key}{' '}
-                          <span className="text-muted-foreground">({m.type})</span>
+                          {m.key} <span className="text-muted-foreground">({m.type})</span>
                         </span>
                       )}
-                      {m.reason && (
-                        <div className="text-muted-foreground text-xs">{m.reason}</div>
-                      )}
+                      {m.reason && <div className="text-muted-foreground text-xs">{m.reason}</div>}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {m.populatedPct == null ? '—' : `${m.populatedPct}%`}
@@ -390,7 +380,13 @@ function ObjectMappingCard({
                       <Button
                         type="button"
                         size="sm"
-                        variant={f.status === 'mapped' ? 'default' : f.status === 'review' ? 'outline' : 'ghost'}
+                        variant={
+                          f.status === 'mapped'
+                            ? 'default'
+                            : f.status === 'review'
+                              ? 'outline'
+                              : 'ghost'
+                        }
                         onClick={() => onToggleField(f.id, f.status)}
                       >
                         {f.status}

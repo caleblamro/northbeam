@@ -17,12 +17,12 @@
 //   - Per-row actions (delete/duplicate) — pending row-context-menu API.
 
 import { DataGrid } from '@/components/data-grid/data-grid';
-import { useDataGrid } from '@/hooks/use-data-grid';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
 import { FieldValue } from '@/components/northbeam/field-render';
+import { useDataGrid } from '@/hooks/use-data-grid';
 import type { CellOpts } from '@/types/data-grid';
-import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import type { ViewSort } from '@northbeam/db/views';
+import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import Link from 'next/link';
 import { useMemo } from 'react';
 
@@ -154,10 +154,7 @@ export function RecordDataGrid({
     return [nameCol, ...dataCols];
   }, [columnFields, refLabels, objectKey]);
 
-  const initialSorting = useMemo<SortingState>(
-    () => (sort ? toTanStackSorting(sort) : []),
-    [sort],
-  );
+  const initialSorting = useMemo<SortingState>(() => (sort ? toTanStackSorting(sort) : []), [sort]);
 
   const grid = useDataGrid<RecordRow>({
     data: rows,

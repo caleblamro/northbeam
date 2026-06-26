@@ -33,7 +33,11 @@ function field(overrides: Partial<FieldRow>): FieldRow {
 }
 
 describe('displayName', () => {
-  const fields = [field({ key: 'name' }), field({ key: 'first_name' }), field({ key: 'last_name' })];
+  const fields = [
+    field({ key: 'name' }),
+    field({ key: 'first_name' }),
+    field({ key: 'last_name' }),
+  ];
 
   it('uses the nameExpression when provided', () => {
     const data = { first_name: 'Ada', last_name: 'Lovelace' };

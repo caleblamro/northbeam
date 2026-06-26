@@ -24,14 +24,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import type { LayoutSection, ObjectLayout } from '@northbeam/db/field-types';
-import {
-  Columns2,
-  Columns3,
-  GripVertical,
-  Loader2,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+import { Columns2, Columns3, GripVertical, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 const UNASSIGNED_ID = '__unassigned__';
@@ -267,7 +260,11 @@ function DraggableFieldChip({ field }: { field: FieldDefLite }) {
     >
       <GripVertical className="size-3.5 text-muted-foreground" />
       <span className="flex-1 truncate font-medium text-foreground">{field.label}</span>
-      {field.required && <Badge tone="brand" size="sm">required</Badge>}
+      {field.required && (
+        <Badge tone="brand" size="sm">
+          required
+        </Badge>
+      )}
       <Badge tone="neutral" size="sm" className="uppercase tracking-wider">
         {field.type}
       </Badge>
@@ -290,7 +287,9 @@ function UnassignedZone({ fields }: { fields: FieldDefLite[] }) {
       <div className="flex items-center gap-2 text-muted-foreground text-xs">
         <span className="font-semibold uppercase tracking-wider">Unassigned</span>
         <span>·</span>
-        <span>Fields not yet placed in a section. They still appear in a "More" group on the form.</span>
+        <span>
+          Fields not yet placed in a section. They still appear in a "More" group on the form.
+        </span>
       </div>
       {fields.length === 0 ? (
         <div className="rounded-md border border-dashed py-3 text-center text-muted-foreground text-xs">

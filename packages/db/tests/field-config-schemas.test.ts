@@ -57,12 +57,12 @@ describe('picklist config', () => {
   });
 
   it('rejects options with blank value or label', () => {
-    expect(
-      safeValidateFieldConfig('picklist', { options: [{ value: '', label: 'a' }] }).ok,
-    ).toBe(false);
-    expect(
-      safeValidateFieldConfig('picklist', { options: [{ value: 'a', label: '' }] }).ok,
-    ).toBe(false);
+    expect(safeValidateFieldConfig('picklist', { options: [{ value: '', label: 'a' }] }).ok).toBe(
+      false,
+    );
+    expect(safeValidateFieldConfig('picklist', { options: [{ value: 'a', label: '' }] }).ok).toBe(
+      false,
+    );
   });
 });
 

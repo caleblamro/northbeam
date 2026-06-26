@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import * as React from "react";
+import * as React from 'react';
 
 import {
   CheckboxCell,
@@ -12,8 +12,8 @@ import {
   SelectCell,
   ShortTextCell,
   UrlCell,
-} from "@/components/data-grid/data-grid-cell-variants";
-import type { DataGridCellProps } from "@/types/data-grid";
+} from '@/components/data-grid/data-grid-cell-variants';
+import type { DataGridCellProps } from '@/types/data-grid';
 
 export const DataGridCell = React.memo(DataGridCellImpl, (prev, next) => {
   // Fast path: check stable primitive props first
@@ -29,12 +29,8 @@ export const DataGridCell = React.memo(DataGridCellImpl, (prev, next) => {
 
   // Check cell value using row.original instead of getValue() for stability
   // getValue() is unstable and recreates on every render, breaking memoization
-  const prevValue = (prev.cell.row.original as Record<string, unknown>)[
-    prev.columnId
-  ];
-  const nextValue = (next.cell.row.original as Record<string, unknown>)[
-    next.columnId
-  ];
+  const prevValue = (prev.cell.row.original as Record<string, unknown>)[prev.columnId];
+  const nextValue = (next.cell.row.original as Record<string, unknown>)[next.columnId];
   if (prevValue !== nextValue) {
     return false;
   }
@@ -59,36 +55,36 @@ function DataGridCellImpl<TData>({
   rowHeight,
 }: DataGridCellProps<TData>) {
   const cellOpts = cell.column.columnDef.meta?.cell;
-  const variant = cellOpts?.variant ?? "text";
+  const variant = cellOpts?.variant ?? 'text';
 
   let Comp: React.ComponentType<DataGridCellProps<TData>>;
 
   switch (variant) {
-    case "short-text":
+    case 'short-text':
       Comp = ShortTextCell;
       break;
-    case "long-text":
+    case 'long-text':
       Comp = LongTextCell;
       break;
-    case "number":
+    case 'number':
       Comp = NumberCell;
       break;
-    case "url":
+    case 'url':
       Comp = UrlCell;
       break;
-    case "checkbox":
+    case 'checkbox':
       Comp = CheckboxCell;
       break;
-    case "select":
+    case 'select':
       Comp = SelectCell;
       break;
-    case "multi-select":
+    case 'multi-select':
       Comp = MultiSelectCell;
       break;
-    case "date":
+    case 'date':
       Comp = DateCell;
       break;
-    case "file":
+    case 'file':
       Comp = FileCell;
       break;
 

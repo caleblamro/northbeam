@@ -12,14 +12,14 @@
 //     when the account table already has records. Pass `--force` to insert
 //     anyway (you'll end up with duplicates — useful for stress testing).
 
-import postgres from 'postgres';
-import { drizzle } from 'drizzle-orm/postgres-js';
 import { eq, or, sql } from 'drizzle-orm';
-import * as schema from '../schema.js';
-import { seedStandardObjects } from '../seed.js';
-import { seedSampleRecords } from '../sample-records.js';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import { qualified } from '../dynamic/identifiers.js';
 import { getObjectByKey } from '../queries/crm.js';
+import { seedSampleRecords } from '../sample-records.js';
+import * as schema from '../schema.js';
+import { seedStandardObjects } from '../seed.js';
 
 async function main() {
   const [orgArg, ...rest] = process.argv.slice(2);
@@ -27,9 +27,7 @@ async function main() {
 
   if (!orgArg) {
     // eslint-disable-next-line no-console
-    console.error(
-      'Usage: pnpm --filter @northbeam/db seed:org <orgIdOrSlug> [--force]',
-    );
+    console.error('Usage: pnpm --filter @northbeam/db seed:org <orgIdOrSlug> [--force]');
     process.exit(1);
   }
   const url = process.env.DATABASE_URL;
@@ -53,9 +51,7 @@ async function main() {
         slug: schema.organization.slug,
       })
       .from(schema.organization)
-      .where(
-        or(eq(schema.organization.id, orgArg), eq(schema.organization.slug, orgArg)),
-      )
+      .where(or(eq(schema.organization.id, orgArg), eq(schema.organization.slug, orgArg)))
       .limit(1);
 
     if (!found) {
@@ -68,9 +64,7 @@ async function main() {
 
     const orgId = found.id;
     // eslint-disable-next-line no-console
-    console.log(
-      `[seed:org] Reseeding '${found.name}' (slug=${found.slug}, id=${orgId})…`,
-    );
+    console.log(`[seed:org] Reseeding '${found.name}' (slug=${found.slug}, id=${orgId})…`);
 
     await db.transaction(async (tx) => {
       await tx.execute(sql`select set_config('app.org_id', ${orgId}, true)`);

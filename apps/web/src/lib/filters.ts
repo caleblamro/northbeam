@@ -18,12 +18,7 @@ export type { Filter, FilterOp, FilterValue } from '@northbeam/db/views';
 import type { Filter, FilterOp } from '@northbeam/db/views';
 
 /** Ops that don't need a value (so the popover hides the value editor). */
-export const UNARY_OPS: ReadonlySet<FilterOp> = new Set([
-  'isTrue',
-  'isFalse',
-  'isEmpty',
-  'isSet',
-]);
+export const UNARY_OPS: ReadonlySet<FilterOp> = new Set(['isTrue', 'isFalse', 'isEmpty', 'isSet']);
 
 export const OP_LABEL: Record<FilterOp, string> = {
   eq: 'is',
@@ -93,11 +88,7 @@ function isEmptyValue(v: unknown): boolean {
 /** Match a single field value against one filter. Returns true if the row
  *  passes. Designed to mirror Postgres semantics so v1's server predicate
  *  produces identical results. */
-export function matchesFilter(
-  field: FieldDefLite,
-  value: unknown,
-  filter: Filter,
-): boolean {
+export function matchesFilter(field: FieldDefLite, value: unknown, filter: Filter): boolean {
   switch (filter.op) {
     case 'isEmpty':
       return isEmptyValue(value);
@@ -124,11 +115,17 @@ export function matchesFilter(
     case 'neq':
       return String(value).toLowerCase() !== String(fv ?? '').toLowerCase();
     case 'contains':
-      return String(value).toLowerCase().includes(String(fv ?? '').toLowerCase());
+      return String(value)
+        .toLowerCase()
+        .includes(String(fv ?? '').toLowerCase());
     case 'startsWith':
-      return String(value).toLowerCase().startsWith(String(fv ?? '').toLowerCase());
+      return String(value)
+        .toLowerCase()
+        .startsWith(String(fv ?? '').toLowerCase());
     case 'endsWith':
-      return String(value).toLowerCase().endsWith(String(fv ?? '').toLowerCase());
+      return String(value)
+        .toLowerCase()
+        .endsWith(String(fv ?? '').toLowerCase());
     case 'gt':
       return Number(value) > Number(fv);
     case 'lt':

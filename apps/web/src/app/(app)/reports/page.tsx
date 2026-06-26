@@ -5,17 +5,7 @@ import { SectionCard } from '@/components/northbeam/section-card';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { fmtMoney } from '@/lib/mock-crm';
-import {
-  AlertTriangle,
-  ArrowRight,
-  BookOpen,
-  ChartLine,
-  Plus,
-  RefreshCw,
-  Sparkles,
-  TrendingUp,
-  Zap,
-} from 'lucide-react';
+import { AlertTriangle, ArrowRight, Plus, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 
 const SUGGESTIONS = [
@@ -26,9 +16,24 @@ const SUGGESTIONS = [
 ];
 
 const INSIGHTS = [
-  { tone: 'danger' as const, icon: AlertTriangle, title: 'Meridian Health is at risk', body: 'No activity in 18 days on a $220K open deal.' },
-  { tone: 'warning' as const, icon: RefreshCw, title: '3 deals slipped close dates', body: 'Northwind, Atlas, and Cobalt pushed past their forecast.' },
-  { tone: 'success' as const, icon: TrendingUp, title: 'Win rate up 8 points', body: 'Closed-won climbed to 41% over the last 30 days.' },
+  {
+    tone: 'danger' as const,
+    icon: AlertTriangle,
+    title: 'Meridian Health is at risk',
+    body: 'No activity in 18 days on a $220K open deal.',
+  },
+  {
+    tone: 'warning' as const,
+    icon: RefreshCw,
+    title: '3 deals slipped close dates',
+    body: 'Northwind, Atlas, and Cobalt pushed past their forecast.',
+  },
+  {
+    tone: 'success' as const,
+    icon: TrendingUp,
+    title: 'Win rate up 8 points',
+    body: 'Closed-won climbed to 41% over the last 30 days.',
+  },
 ];
 
 const TONE_CLASS: Record<'danger' | 'warning' | 'success', string> = {
@@ -84,7 +89,9 @@ export default function ReportsPage() {
           return (
             <SectionCard key={i.title}>
               <div className="flex gap-3">
-                <div className={`grid size-8 shrink-0 place-items-center rounded-md ${TONE_CLASS[i.tone]}`}>
+                <div
+                  className={`grid size-8 shrink-0 place-items-center rounded-md ${TONE_CLASS[i.tone]}`}
+                >
                   <IconCmp className="size-3.5" />
                 </div>
                 <div className="min-w-0">
@@ -108,10 +115,8 @@ export default function ReportsPage() {
           <SectionCard title="What changed this week">
             <p className="text-sm leading-relaxed text-foreground">
               Pipeline grew{' '}
-              <span className="font-medium text-[var(--success)]">
-                +{fmtMoney(18_000_00)}
-              </span>{' '}
-              with 4 new deals. Two closed won, 3 slipped past close. Net new pipeline
+              <span className="font-medium text-[var(--success)]">+{fmtMoney(18_000_00)}</span> with
+              4 new deals. Two closed won, 3 slipped past close. Net new pipeline
               <span className="font-medium text-[var(--success)]"> +12% MoM</span>.
             </p>
           </SectionCard>

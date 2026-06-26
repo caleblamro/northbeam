@@ -9,11 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { MaskInput } from '@/components/ui/mask-input';
-import {
-  PhoneInput,
-  PhoneInputCountrySelect,
-  PhoneInputField,
-} from '@/components/ui/phone-input';
+import { PhoneInput, PhoneInputCountrySelect, PhoneInputField } from '@/components/ui/phone-input';
 import {
   Select,
   SelectContent,
@@ -31,7 +27,6 @@ import {
 import { Check, Link as LinkIcon, MapPin } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { AddressInput, formatAddressOneLine } from './address-input';
-import { COMMON_CURRENCIES } from './currency-combobox';
 import { DatePicker, formatLongDate } from './date-picker';
 import { DateTimePicker } from './date-time-picker';
 import { DurationInput } from './duration-input';
@@ -193,9 +188,7 @@ export function FieldInput({
           mask="percentage"
           value={str}
           placeholder={cfg.placeholder}
-          onValueChange={(_masked, unmasked) =>
-            onChange(unmasked === '' ? null : Number(unmasked))
-          }
+          onValueChange={(_masked, unmasked) => onChange(unmasked === '' ? null : Number(unmasked))}
         />
       );
     case 'date':
@@ -232,10 +225,7 @@ export function FieldInput({
       );
     case 'checkbox':
       return (
-        <Checkbox
-          checked={!!value}
-          onCheckedChange={(checked) => onChange(checked === true)}
-        />
+        <Checkbox checked={!!value} onCheckedChange={(checked) => onChange(checked === true)} />
       );
     case 'picklist':
       return (

@@ -7,10 +7,17 @@ import { DEAL_STAGE_OPTIONS } from '@/lib/tones';
 import { useState } from 'react';
 import { Button, IconButton, MenuButton, type MenuItem, SplitButton } from './button-legacy';
 import { CommandPalette } from './command-legacy';
-import { CurrencyInput, EmailInput, Field, MaskedInput, PhoneInput, TextInput } from './input-legacy';
-import { Combobox, NativeSelect, type Option, Select } from './select-legacy';
 import { Frame, Section, SegToggle, Swatch } from './doc';
+import {
+  CurrencyInput,
+  EmailInput,
+  Field,
+  MaskedInput,
+  PhoneInput,
+  TextInput,
+} from './input-legacy';
 import { Badge, Kbd } from './primitives';
+import { Combobox, NativeSelect, type Option, Select } from './select-legacy';
 import { Sidebar } from './sidebar';
 
 /* ── Foundations ─────────────────────────────────────────────────────────── */

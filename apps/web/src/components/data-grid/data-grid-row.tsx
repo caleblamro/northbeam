@@ -1,30 +1,21 @@
-"use client";
+'use client';
 
-import type {
-  ColumnPinningState,
-  Row,
-  TableMeta,
-  VisibilityState,
-} from "@tanstack/react-table";
-import type { VirtualItem } from "@tanstack/react-virtual";
-import * as React from "react";
-import { DataGridCell } from "@/components/data-grid/data-grid-cell";
-import { useComposedRefs } from "@/lib/compose-refs";
+import { DataGridCell } from '@/components/data-grid/data-grid-cell';
+import { cn } from '@/lib/cn';
+import { useComposedRefs } from '@/lib/compose-refs';
 import {
   flexRender,
   getCellKey,
   getColumnBorderVisibility,
   getColumnPinningStyle,
   getRowHeightValue,
-} from "@/lib/data-grid";
-import { cn } from "@/lib/cn";
-import type {
-  CellPosition,
-  Direction,
-  RowHeightValue,
-} from "@/types/data-grid";
+} from '@/lib/data-grid';
+import type { CellPosition, Direction, RowHeightValue } from '@/types/data-grid';
+import type { ColumnPinningState, Row, TableMeta, VisibilityState } from '@tanstack/react-table';
+import type { VirtualItem } from '@tanstack/react-virtual';
+import * as React from 'react';
 
-interface DataGridRowProps<TData> extends React.ComponentProps<"div"> {
+interface DataGridRowProps<TData> extends React.ComponentProps<'div'> {
   row: Row<TData>;
   tableMeta: TableMeta<TData>;
   virtualItem: VirtualItem;
@@ -175,7 +166,7 @@ function DataGridRowImpl<TData>({
 
   const onRowChange = React.useCallback(
     (node: HTMLDivElement | null) => {
-      if (typeof virtualRowIndex === "undefined") return;
+      if (typeof virtualRowIndex === 'undefined') return;
 
       if (node) {
         measureElement(node);
@@ -211,8 +202,8 @@ function DataGridRowImpl<TData>({
       {...props}
       ref={rowRef}
       className={cn(
-        "absolute flex w-full border-b [content-visibility:auto]",
-        !adjustLayout && "will-change-transform",
+        'absolute flex w-full border-b [content-visibility:auto]',
+        !adjustLayout && 'will-change-transform',
         className,
       )}
       style={{
@@ -227,14 +218,11 @@ function DataGridRowImpl<TData>({
         const columnId = cell.column.id;
 
         const isCellFocused =
-          focusedCell?.rowIndex === virtualRowIndex &&
-          focusedCell?.columnId === columnId;
+          focusedCell?.rowIndex === virtualRowIndex && focusedCell?.columnId === columnId;
         const isCellEditing =
-          editingCell?.rowIndex === virtualRowIndex &&
-          editingCell?.columnId === columnId;
+          editingCell?.rowIndex === virtualRowIndex && editingCell?.columnId === columnId;
         const isCellSelected =
-          cellSelectionKeys?.has(getCellKey(virtualRowIndex, columnId)) ??
-          false;
+          cellSelectionKeys?.has(getCellKey(virtualRowIndex, columnId)) ?? false;
 
         const isSearchMatch = searchMatchColumns?.has(columnId) ?? false;
         const isActiveSearchMatch = activeSearchMatch?.columnId === columnId;
@@ -252,23 +240,23 @@ function DataGridRowImpl<TData>({
             key={cell.id}
             role="gridcell"
             aria-colindex={colIndex + 1}
-            data-highlighted={isCellFocused ? "" : undefined}
+            data-highlighted={isCellFocused ? '' : undefined}
             data-slot="grid-cell"
             tabIndex={-1}
             className={cn({
-              grow: stretchColumns && columnId !== "select",
-              "border-e": showEndBorder && columnId !== "select",
-              "border-s": showStartBorder && columnId !== "select",
+              grow: stretchColumns && columnId !== 'select',
+              'border-e': showEndBorder && columnId !== 'select',
+              'border-s': showStartBorder && columnId !== 'select',
             })}
             style={{
               ...getColumnPinningStyle({ column: cell.column, dir }),
               width: `calc(var(--col-${columnId}-size) * 1px)`,
             }}
           >
-            {typeof cell.column.columnDef.header === "function" ? (
+            {typeof cell.column.columnDef.header === 'function' ? (
               <div
-                className={cn("size-full px-3 py-1.5", {
-                  "bg-primary/10": isRowSelected,
+                className={cn('size-full px-3 py-1.5', {
+                  'bg-primary/10': isRowSelected,
                 })}
               >
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}

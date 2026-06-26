@@ -10,16 +10,8 @@
 
 import { useCurrentRole } from '@/lib/can';
 import { cn } from '@/lib/cn';
-import { can, type Permission } from '@northbeam/core/roles';
-import {
-  Building2,
-  CreditCard,
-  Database,
-  FileClock,
-  Plug,
-  ShieldCheck,
-  Users,
-} from 'lucide-react';
+import { type Permission, can } from '@northbeam/core/roles';
+import { Building2, CreditCard, Database, FileClock, Plug, ShieldCheck, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -96,8 +88,7 @@ export function SetupShell({ children }: { children: ReactNode }) {
                 {group.label}
               </div>
               {visible.map((it) => {
-                const active =
-                  pathname === it.href || pathname.startsWith(`${it.href}/`);
+                const active = pathname === it.href || pathname.startsWith(`${it.href}/`);
                 const Icon = it.icon;
                 return (
                   <Link

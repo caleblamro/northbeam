@@ -5,6 +5,7 @@
 
 'use client';
 
+import { Button } from '@/components/ui/button';
 import {
   ACCENTS,
   type Accent,
@@ -15,7 +16,6 @@ import {
   type Palette,
   useTheme,
 } from '@/lib/theme';
-import { Button } from '@/components/ui/button';
 import { Palette as PaletteIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Icon } from './icons';

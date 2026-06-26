@@ -28,10 +28,7 @@ export type WriteAuditEventInput = {
 /** Append a single audit event. Never throws — a failed audit row is
  *  always better than a failed mutation. The caller has no result to act
  *  on, so we return void. */
-export async function writeAuditEvent(
-  db: DbExecutor,
-  input: WriteAuditEventInput,
-): Promise<void> {
+export async function writeAuditEvent(db: DbExecutor, input: WriteAuditEventInput): Promise<void> {
   try {
     await db.insert(auditLog).values({
       organizationId: input.organizationId,
@@ -81,9 +78,9 @@ export async function listAuditEvents(
   if (opts.actionPrefix) {
     const safe = opts.actionPrefix.replace(/[^a-zA-Z0-9._-]/g, '');
     if (safe.length > 0) {
-      const prefixed: SQL = (
-        await import('drizzle-orm').then((m) => m.like(auditLog.action, `${safe}%`))
-      ) as SQL;
+      const prefixed: SQL = (await import('drizzle-orm').then((m) =>
+        m.like(auditLog.action, `${safe}%`),
+      )) as SQL;
       where = and(where, prefixed);
     }
   }

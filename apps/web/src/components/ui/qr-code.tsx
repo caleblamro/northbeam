@@ -1,22 +1,22 @@
-"use client";
+'use client';
 
-import { Slot as SlotPrimitive } from "radix-ui";
-import * as React from "react";
-import { useComposedRefs } from "@/lib/compose-refs";
-import { cn } from "@/lib/cn";
-import { useLazyRef } from "@/hooks/use-lazy-ref";
+import { useLazyRef } from '@/hooks/use-lazy-ref';
+import { cn } from '@/lib/cn';
+import { useComposedRefs } from '@/lib/compose-refs';
+import { Slot as SlotPrimitive } from 'radix-ui';
+import * as React from 'react';
 
-const ROOT_NAME = "QRCode";
-const CANVAS_NAME = "QRCodeCanvas";
-const SVG_NAME = "QRCodeSvg";
-const IMAGE_NAME = "QRCodeImage";
-const SKELETON_NAME = "QRCodeSkeleton";
+const ROOT_NAME = 'QRCode';
+const CANVAS_NAME = 'QRCodeCanvas';
+const SVG_NAME = 'QRCodeSvg';
+const IMAGE_NAME = 'QRCodeImage';
+const SKELETON_NAME = 'QRCodeSkeleton';
 
-type QRCodeLevel = "L" | "M" | "Q" | "H";
+type QRCodeLevel = 'L' | 'M' | 'Q' | 'H';
 
 interface QRCodeCanvasOpts {
   errorCorrectionLevel: QRCodeLevel;
-  type?: "image/png" | "image/jpeg" | "image/webp";
+  type?: 'image/png' | 'image/jpeg' | 'image/webp';
   quality?: number;
   margin?: number;
   color?: {
@@ -63,10 +63,7 @@ function useStore<T>(selector: (state: StoreState) => T): T {
     throw new Error(`\`useQRCode\` must be used within \`${ROOT_NAME}\``);
   }
 
-  const getSnapshot = React.useCallback(
-    () => selector(store.getState()),
-    [store, selector],
-  );
+  const getSnapshot = React.useCallback(() => selector(store.getState()), [store, selector]);
 
   return React.useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
 }
@@ -81,7 +78,7 @@ function useQRCodeContext(consumerName: string) {
   return context;
 }
 
-interface QRCodeProps extends Omit<React.ComponentProps<"div">, "onError"> {
+interface QRCodeProps extends Omit<React.ComponentProps<'div'>, 'onError'> {
   value: string;
   size?: number;
   level?: QRCodeLevel;
@@ -98,11 +95,11 @@ function QRCode(props: QRCodeProps) {
   const {
     value,
     size = 200,
-    level = "M",
+    level = 'M',
     margin = 1,
     quality = 0.92,
-    backgroundColor = "#ffffff",
-    foregroundColor = "#000000",
+    backgroundColor = '#ffffff',
+    foregroundColor = '#000000',
     onError,
     onGenerated,
     className,
@@ -119,7 +116,7 @@ function QRCode(props: QRCodeProps) {
     svgString: null,
     isGenerating: false,
     error: null,
-    generationKey: "",
+    generationKey: '',
   }));
 
   const store = React.useMemo<Store>(() => {
@@ -160,7 +157,7 @@ function QRCode(props: QRCodeProps) {
   const canvasOpts = React.useMemo<QRCodeCanvasOpts>(
     () => ({
       errorCorrectionLevel: level,
-      type: "image/png",
+      type: 'image/png',
       quality,
       margin,
       color: {
@@ -173,7 +170,7 @@ function QRCode(props: QRCodeProps) {
   );
 
   const generationKey = React.useMemo(() => {
-    if (!value) return "";
+    if (!value) return '';
 
     return JSON.stringify({
       value,
@@ -191,11 +188,7 @@ function QRCode(props: QRCodeProps) {
       if (!value || !targetGenerationKey) return;
 
       const currentState = store.getState();
-      if (
-        currentState.isGenerating ||
-        currentState.generationKey === targetGenerationKey
-      )
-        return;
+      if (currentState.isGenerating || currentState.generationKey === targetGenerationKey) return;
 
       store.setStates({
         isGenerating: true,
@@ -203,7 +196,7 @@ function QRCode(props: QRCodeProps) {
       });
 
       try {
-        const QRCode = (await import("qrcode")).default;
+        const QRCode = (await import('qrcode')).default;
 
         let dataUrl: string | null = null;
 
@@ -222,7 +215,7 @@ function QRCode(props: QRCodeProps) {
           margin: canvasOpts.margin,
           color: canvasOpts.color,
           width: canvasOpts.width,
-          type: "svg",
+          type: 'svg',
         });
 
         store.setStates({
@@ -235,9 +228,7 @@ function QRCode(props: QRCodeProps) {
         onGenerated?.();
       } catch (error) {
         const parsedError =
-          error instanceof Error
-            ? error
-            : new Error("Failed to generate QR code");
+          error instanceof Error ? error : new Error('Failed to generate QR code');
         store.setStates({
           error: parsedError,
           isGenerating: false,
@@ -271,7 +262,7 @@ function QRCode(props: QRCodeProps) {
     }
   }, [generationKey, onQRCodeGenerate]);
 
-  const RootPrimitive = asChild ? SlotPrimitive.Slot : "div";
+  const RootPrimitive = asChild ? SlotPrimitive.Slot : 'div';
 
   return (
     <StoreContext.Provider value={store}>
@@ -279,10 +270,10 @@ function QRCode(props: QRCodeProps) {
         <RootPrimitive
           data-slot="qr-code"
           {...rootProps}
-          className={cn(className, "relative flex flex-col items-center gap-2")}
+          className={cn(className, 'relative flex flex-col items-center gap-2')}
           style={
             {
-              "--qr-code-size": `${size}px`,
+              '--qr-code-size': `${size}px`,
               ...style,
             } as React.CSSProperties
           }
@@ -292,7 +283,7 @@ function QRCode(props: QRCodeProps) {
   );
 }
 
-interface QRCodeCanvasProps extends React.ComponentProps<"canvas"> {
+interface QRCodeCanvasProps extends React.ComponentProps<'canvas'> {
   asChild?: boolean;
 }
 
@@ -304,7 +295,7 @@ function QRCodeCanvas(props: QRCodeCanvasProps) {
 
   const composedRef = useComposedRefs(ref, context.canvasRef);
 
-  const CanvasPrimitive = asChild ? SlotPrimitive.Slot : "canvas";
+  const CanvasPrimitive = asChild ? SlotPrimitive.Slot : 'canvas';
 
   return (
     <CanvasPrimitive
@@ -314,15 +305,15 @@ function QRCodeCanvas(props: QRCodeCanvasProps) {
       width={context.size}
       height={context.size}
       className={cn(
-        "relative max-h-(--qr-code-size) max-w-(--qr-code-size)",
-        !generationKey && "invisible",
+        'relative max-h-(--qr-code-size) max-w-(--qr-code-size)',
+        !generationKey && 'invisible',
         className,
       )}
     />
   );
 }
 
-interface QRCodeSvgProps extends React.ComponentProps<"div"> {
+interface QRCodeSvgProps extends React.ComponentProps<'div'> {
   asChild?: boolean;
 }
 
@@ -334,35 +325,32 @@ function QRCodeSvg(props: QRCodeSvgProps) {
 
   if (!svgString) return null;
 
-  const SvgPrimitive = asChild ? SlotPrimitive.Slot : "div";
+  const SvgPrimitive = asChild ? SlotPrimitive.Slot : 'div';
 
   return (
     <SvgPrimitive
       data-slot="qr-code-svg"
       {...svgProps}
-      className={cn(
-        "relative max-h-(--qr-code-size) max-w-(--qr-code-size)",
-        className,
-      )}
+      className={cn('relative max-h-(--qr-code-size) max-w-(--qr-code-size)', className)}
       style={{ width: context.size, height: context.size, ...style }}
       dangerouslySetInnerHTML={{ __html: svgString }}
     />
   );
 }
 
-interface QRCodeImageProps extends React.ComponentProps<"img"> {
+interface QRCodeImageProps extends React.ComponentProps<'img'> {
   asChild?: boolean;
 }
 
 function QRCodeImage(props: QRCodeImageProps) {
-  const { alt = "QR Code", asChild, className, ...imageProps } = props;
+  const { alt = 'QR Code', asChild, className, ...imageProps } = props;
 
   const context = useQRCodeContext(IMAGE_NAME);
   const dataUrl = useStore((state) => state.dataUrl);
 
   if (!dataUrl) return null;
 
-  const ImagePrimitive = asChild ? SlotPrimitive.Slot : "img";
+  const ImagePrimitive = asChild ? SlotPrimitive.Slot : 'img';
 
   return (
     <ImagePrimitive
@@ -372,24 +360,21 @@ function QRCodeImage(props: QRCodeImageProps) {
       alt={alt}
       width={context.size}
       height={context.size}
-      className={cn(
-        "relative max-h-(--qr-code-size) max-w-(--qr-code-size)",
-        className,
-      )}
+      className={cn('relative max-h-(--qr-code-size) max-w-(--qr-code-size)', className)}
     />
   );
 }
 
-interface QRCodeDownloadProps extends React.ComponentProps<"button"> {
+interface QRCodeDownloadProps extends React.ComponentProps<'button'> {
   filename?: string;
-  format?: "png" | "svg";
+  format?: 'png' | 'svg';
   asChild?: boolean;
 }
 
 function QRCodeDownload(props: QRCodeDownloadProps) {
   const {
-    filename = "qrcode",
-    format = "png",
+    filename = 'qrcode',
+    format = 'png',
     asChild,
     className,
     children,
@@ -404,13 +389,13 @@ function QRCodeDownload(props: QRCodeDownloadProps) {
       buttonProps.onClick?.(event);
       if (event.defaultPrevented) return;
 
-      const link = document.createElement("a");
+      const link = document.createElement('a');
 
-      if (format === "png" && dataUrl) {
+      if (format === 'png' && dataUrl) {
         link.href = dataUrl;
         link.download = `${filename}.png`;
-      } else if (format === "svg" && svgString) {
-        const blob = new Blob([svgString], { type: "image/svg+xml" });
+      } else if (format === 'svg' && svgString) {
+        const blob = new Blob([svgString], { type: 'image/svg+xml' });
         link.href = URL.createObjectURL(blob);
         link.download = `${filename}.svg`;
       } else {
@@ -421,21 +406,21 @@ function QRCodeDownload(props: QRCodeDownloadProps) {
       link.click();
       document.body.removeChild(link);
 
-      if (format === "svg" && svgString) {
+      if (format === 'svg' && svgString) {
         URL.revokeObjectURL(link.href);
       }
     },
     [dataUrl, svgString, filename, format, buttonProps.onClick],
   );
 
-  const ButtonPrimitive = asChild ? SlotPrimitive.Slot : "button";
+  const ButtonPrimitive = asChild ? SlotPrimitive.Slot : 'button';
 
   return (
     <ButtonPrimitive
       type="button"
       data-slot="qr-code-download"
       {...buttonProps}
-      className={cn("max-w-(--qr-code-size)", className)}
+      className={cn('max-w-(--qr-code-size)', className)}
       onClick={onClick}
     >
       {children ?? `Download ${format.toUpperCase()}`}
@@ -443,28 +428,28 @@ function QRCodeDownload(props: QRCodeDownloadProps) {
   );
 }
 
-interface QRCodeOverlayProps extends React.ComponentProps<"div"> {
+interface QRCodeOverlayProps extends React.ComponentProps<'div'> {
   asChild?: boolean;
 }
 
 function QRCodeOverlay(props: QRCodeOverlayProps) {
   const { asChild, className, ...overlayProps } = props;
 
-  const OverlayPrimitive = asChild ? SlotPrimitive.Slot : "div";
+  const OverlayPrimitive = asChild ? SlotPrimitive.Slot : 'div';
 
   return (
     <OverlayPrimitive
       data-slot="qr-code-overlay"
       {...overlayProps}
       className={cn(
-        "absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-sm bg-background",
+        'absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-sm bg-background',
         className,
       )}
     />
   );
 }
 
-interface QRCodeSkeletonProps extends React.ComponentProps<"div"> {
+interface QRCodeSkeletonProps extends React.ComponentProps<'div'> {
   asChild?: boolean;
 }
 
@@ -480,14 +465,14 @@ function QRCodeSkeleton(props: QRCodeSkeletonProps) {
 
   if (isLoaded) return null;
 
-  const SkeletonPrimitive = asChild ? SlotPrimitive.Slot : "div";
+  const SkeletonPrimitive = asChild ? SlotPrimitive.Slot : 'div';
 
   return (
     <SkeletonPrimitive
       data-slot="qr-code-skeleton"
       {...skeletonProps}
       className={cn(
-        "absolute max-h-(--qr-code-size) max-w-(--qr-code-size) animate-pulse bg-accent",
+        'absolute max-h-(--qr-code-size) max-w-(--qr-code-size) animate-pulse bg-accent',
         className,
       )}
       style={{

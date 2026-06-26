@@ -152,9 +152,7 @@ export function RecordFormDrawer({
                       description={f.config?.description}
                       helpText={f.config?.helpText}
                       error={fieldState.error?.message}
-                      className={
-                        g.cols > 1 && FULL_WIDTH.has(f.type) ? 'col-span-full' : undefined
-                      }
+                      className={g.cols > 1 && FULL_WIDTH.has(f.type) ? 'col-span-full' : undefined}
                     >
                       <FieldInput
                         field={f}

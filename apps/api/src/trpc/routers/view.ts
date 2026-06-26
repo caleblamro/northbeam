@@ -129,9 +129,7 @@ export const viewRouter = router({
    *  object (a fresh org always has the seeded default, so null is rare). */
   default: protectedProcedure
     .input(z.object({ objectId: z.string().uuid() }))
-    .query(({ ctx, input }) =>
-      getDefaultView(ctx.db, ctx.auth.organizationId, input.objectId),
-    ),
+    .query(({ ctx, input }) => getDefaultView(ctx.db, ctx.auth.organizationId, input.objectId)),
 
   /** Create a new view. Caller becomes the owner. Default `sharedWith` is
    *  a personal view ({user, caller}); pass [{kind:'org'}] to share the
@@ -190,9 +188,7 @@ export const viewRouter = router({
       const [row] = await ctx.db
         .update(schema.view)
         .set({ ...patch, updatedAt: new Date() })
-        .where(
-          and(eq(schema.view.organizationId, ctx.auth.organizationId), eq(schema.view.id, id)),
-        )
+        .where(and(eq(schema.view.organizationId, ctx.auth.organizationId), eq(schema.view.id, id)))
         .returning();
       await writeAuditEvent(ctx.db, {
         organizationId: ctx.auth.organizationId,
@@ -228,7 +224,10 @@ export const viewRouter = router({
         .update(schema.view)
         .set({ isDefault: true })
         .where(
-          and(eq(schema.view.organizationId, ctx.auth.organizationId), eq(schema.view.id, input.id)),
+          and(
+            eq(schema.view.organizationId, ctx.auth.organizationId),
+            eq(schema.view.id, input.id),
+          ),
         );
       await writeAuditEvent(ctx.db, {
         organizationId: ctx.auth.organizationId,
@@ -264,7 +263,10 @@ export const viewRouter = router({
       await ctx.db
         .delete(schema.view)
         .where(
-          and(eq(schema.view.organizationId, ctx.auth.organizationId), eq(schema.view.id, input.id)),
+          and(
+            eq(schema.view.organizationId, ctx.auth.organizationId),
+            eq(schema.view.id, input.id),
+          ),
         );
       await writeAuditEvent(ctx.db, {
         organizationId: ctx.auth.organizationId,

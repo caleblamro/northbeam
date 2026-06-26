@@ -143,9 +143,7 @@ export function AddressInput({
           value={value}
           onChange={onChange}
           disabled={disabled}
-          onSwitchToSearch={
-            tokenAvailable ? () => setMode('search') : undefined
-          }
+          onSwitchToSearch={tokenAvailable ? () => setMode('search') : undefined}
         />
       )}
     </div>
@@ -367,7 +365,5 @@ function AddressManual({
 export function formatAddressOneLine(v: AddressValue | null | undefined): string {
   if (!v) return '';
   if (v.formatted) return v.formatted;
-  return [v.line1, v.line2, v.city, v.region, v.postal_code, v.country]
-    .filter(Boolean)
-    .join(', ');
+  return [v.line1, v.line2, v.city, v.region, v.postal_code, v.country].filter(Boolean).join(', ');
 }

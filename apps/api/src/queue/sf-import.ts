@@ -6,7 +6,7 @@
 // Job naming: one queue ('sf-import'), one job per migration run, keyed by
 // runId so a double-click on Execute is idempotent at the queue layer too.
 
-import { Queue, type JobsOptions } from 'bullmq';
+import { type JobsOptions, Queue } from 'bullmq';
 import { redis } from './connection.js';
 
 export const SF_IMPORT_QUEUE = 'sf-import';

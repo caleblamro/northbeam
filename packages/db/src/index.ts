@@ -46,14 +46,14 @@ export {
 export { STANDARD_OBJECTS, seedStandardObjects } from './seed.js';
 export { seedSampleRecords } from './sample-records.js';
 // View types + saved-view queries.
-export {
-  type ViewType,
-  type ViewIcon,
-  type ShareTarget,
-  type ViewSort,
-  type Filter,
-  type FilterOp,
-  type FilterValue,
+export type {
+  ViewType,
+  ViewIcon,
+  ShareTarget,
+  ViewSort,
+  Filter,
+  FilterOp,
+  FilterValue,
 } from './views.js';
 export {
   listViewsForUser,

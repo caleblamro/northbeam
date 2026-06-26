@@ -8,7 +8,14 @@
 // override.
 
 import { Button } from '@/components/ui/button';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/cn';
 import { Check, ChevronsUpDown } from 'lucide-react';
@@ -136,10 +143,7 @@ export function CurrencyCombobox({
                   </span>
                   <span className="text-muted-foreground text-xs">{c.symbol}</span>
                   <Check
-                    className={cn(
-                      'ml-2 size-4',
-                      value === c.code ? 'opacity-100' : 'opacity-0',
-                    )}
+                    className={cn('ml-2 size-4', value === c.code ? 'opacity-100' : 'opacity-0')}
                   />
                 </CommandItem>
               ))}

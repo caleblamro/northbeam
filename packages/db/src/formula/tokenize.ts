@@ -27,20 +27,7 @@ export type TokenKind =
 
 export type Token = { kind: TokenKind; value: string; pos: number };
 
-const OPS = new Set([
-  '+',
-  '-',
-  '*',
-  '/',
-  '&',
-  '=',
-  '<',
-  '>',
-  '<=',
-  '>=',
-  '<>',
-  '!=',
-]);
+const OPS = new Set(['+', '-', '*', '/', '&', '=', '<', '>', '<=', '>=', '<>', '!=']);
 
 export class TokenizeError extends Error {
   constructor(

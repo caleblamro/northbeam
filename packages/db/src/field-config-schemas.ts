@@ -52,9 +52,7 @@ const CurrencyConfigSchema = NumberConfigSchema.extend({
 });
 
 const PicklistConfigSchema = BaseConfigSchema.extend({
-  options: z
-    .array(PicklistOptionSchema)
-    .min(1, 'picklist requires at least one option'),
+  options: z.array(PicklistOptionSchema).min(1, 'picklist requires at least one option'),
   restrictToOptions: z.boolean().optional(),
   controllingField: z.string().optional(),
 });

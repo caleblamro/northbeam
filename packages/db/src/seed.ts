@@ -66,7 +66,8 @@ function makeStandardViews(now: Date): Record<string, SeedView[]> {
                 component: 'PageHeader',
                 props: {
                   title: 'Accounts overview',
-                  subtitle: 'Hand-seeded dashboard — proves the artifact format. Edit `view.config.artifact` to change it.',
+                  subtitle:
+                    'Hand-seeded dashboard — proves the artifact format. Edit `view.config.artifact` to change it.',
                 },
               },
               {
@@ -91,7 +92,8 @@ function makeStandardViews(now: Date): Record<string, SeedView[]> {
                   {
                     component: 'Text',
                     props: {
-                      value: 'Accounts your team flagged hot — usually the ones with expansion or renewal motion in flight.',
+                      value:
+                        'Accounts your team flagged hot — usually the ones with expansion or renewal motion in flight.',
                       muted: true,
                     },
                   },
@@ -231,7 +233,8 @@ function makeStandardViews(now: Date): Record<string, SeedView[]> {
                   {
                     component: 'Text',
                     props: {
-                      value: 'Open deals where the rep set probability below 50%. Usually the ones to slip if no action is taken.',
+                      value:
+                        'Open deals where the rep set probability below 50%. Usually the ones to slip if no action is taken.',
                       muted: true,
                     },
                   },
@@ -604,7 +607,14 @@ export const STANDARD_OBJECTS: SeedObject[] = [
           id: 'firmographics',
           label: 'Firmographics',
           cols: 2,
-          fields: ['employees', 'annual_revenue', 'phone', 'fax', 'ticker_symbol', 'account_number'],
+          fields: [
+            'employees',
+            'annual_revenue',
+            'phone',
+            'fax',
+            'ticker_symbol',
+            'account_number',
+          ],
         },
         { id: 'hierarchy', label: 'Hierarchy', cols: 1, fields: ['parent_account'] },
         { id: 'billing', label: 'Billing address', cols: 1, fields: ['billing_address'] },
@@ -672,7 +682,7 @@ export const STANDARD_OBJECTS: SeedObject[] = [
         config: {
           targetObject: 'contact',
           relationshipName: 'direct_reports',
-          description: 'This contact\'s manager. Used to build the org chart.',
+          description: "This contact's manager. Used to build the org chart.",
         },
       },
       {
@@ -725,13 +735,13 @@ export const STANDARD_OBJECTS: SeedObject[] = [
         key: 'do_not_call',
         label: 'Do not call',
         type: 'checkbox',
-        config: { helpText: 'Respect this contact\'s opt-out for phone outreach.' },
+        config: { helpText: "Respect this contact's opt-out for phone outreach." },
       },
       {
         key: 'email_opt_out',
         label: 'Email opt-out',
         type: 'checkbox',
-        config: { helpText: 'Respect this contact\'s opt-out for email outreach.' },
+        config: { helpText: "Respect this contact's opt-out for email outreach." },
       },
       {
         key: 'description',

@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
-import type { ColumnDef, TableMeta } from "@tanstack/react-table";
-import { CopyIcon, EraserIcon, ScissorsIcon, Trash2Icon } from "lucide-react";
-import * as React from "react";
-import { toast } from "sonner";
-import { useAsRef } from "@/hooks/use-as-ref";
-import { parseCellKey } from "@/lib/data-grid";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import type { CellUpdate, ContextMenuState } from "@/types/data-grid";
+} from '@/components/ui/dropdown-menu';
+import { useAsRef } from '@/hooks/use-as-ref';
+import { parseCellKey } from '@/lib/data-grid';
+import type { CellUpdate, ContextMenuState } from '@/types/data-grid';
+import type { ColumnDef, TableMeta } from '@tanstack/react-table';
+import { CopyIcon, EraserIcon, ScissorsIcon, Trash2Icon } from 'lucide-react';
+import * as React from 'react';
+import { toast } from 'sonner';
 
 interface DataGridContextMenuProps<TData> {
   tableMeta: TableMeta<TData>;
@@ -55,16 +55,16 @@ export function DataGridContextMenu<TData>({
 interface ContextMenuProps<TData>
   extends Pick<
       TableMeta<TData>,
-      | "dataGridRef"
-      | "onContextMenuOpenChange"
-      | "selectionState"
-      | "onDataUpdate"
-      | "onRowsDelete"
-      | "onCellsCopy"
-      | "onCellsCut"
-      | "readOnly"
+      | 'dataGridRef'
+      | 'onContextMenuOpenChange'
+      | 'selectionState'
+      | 'onDataUpdate'
+      | 'onRowsDelete'
+      | 'onCellsCopy'
+      | 'onCellsCut'
+      | 'readOnly'
     >,
-    Required<Pick<TableMeta<TData>, "contextMenu">> {
+    Required<Pick<TableMeta<TData>, 'contextMenu'>> {
   tableMeta: TableMeta<TData>;
   columns: Array<ColumnDef<TData>>;
 }
@@ -106,23 +106,23 @@ function ContextMenuImpl<TData>({
 
   const triggerStyle = React.useMemo<React.CSSProperties>(
     () => ({
-      position: "fixed",
+      position: 'fixed',
       left: `${contextMenu.x}px`,
       top: `${contextMenu.y}px`,
-      width: "1px",
-      height: "1px",
+      width: '1px',
+      height: '1px',
       padding: 0,
       margin: 0,
-      border: "none",
-      background: "transparent",
-      pointerEvents: "none",
+      border: 'none',
+      background: 'transparent',
+      pointerEvents: 'none',
       opacity: 0,
     }),
     [contextMenu.x, contextMenu.y],
   );
 
   const onCloseAutoFocus: NonNullable<
-    React.ComponentProps<typeof DropdownMenuContent>["onCloseAutoFocus"]
+    React.ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus']
   > = React.useCallback(
     (event) => {
       event.preventDefault();
@@ -142,11 +142,7 @@ function ContextMenuImpl<TData>({
   const onClear = React.useCallback(() => {
     const { selectionState, columns, onDataUpdate } = propsRef.current;
 
-    if (
-      !selectionState?.selectedCells ||
-      selectionState.selectedCells.size === 0
-    )
-      return;
+    if (!selectionState?.selectedCells || selectionState.selectedCells.size === 0) return;
 
     const updates: Array<CellUpdate> = [];
 
@@ -156,17 +152,17 @@ function ContextMenuImpl<TData>({
       // Get column from columns array
       const column = columns.find((col) => {
         if (col.id) return col.id === columnId;
-        if ("accessorKey" in col) return col.accessorKey === columnId;
+        if ('accessorKey' in col) return col.accessorKey === columnId;
         return false;
       });
       const cellVariant = column?.meta?.cell?.variant;
 
-      let emptyValue: unknown = "";
-      if (cellVariant === "multi-select" || cellVariant === "file") {
+      let emptyValue: unknown = '';
+      if (cellVariant === 'multi-select' || cellVariant === 'file') {
         emptyValue = [];
-      } else if (cellVariant === "number" || cellVariant === "date") {
+      } else if (cellVariant === 'number' || cellVariant === 'date') {
         emptyValue = null;
-      } else if (cellVariant === "checkbox") {
+      } else if (cellVariant === 'checkbox') {
         emptyValue = false;
       }
 
@@ -175,19 +171,13 @@ function ContextMenuImpl<TData>({
 
     onDataUpdate?.(updates);
 
-    toast.success(
-      `${updates.length} cell${updates.length !== 1 ? "s" : ""} cleared`,
-    );
+    toast.success(`${updates.length} cell${updates.length !== 1 ? 's' : ''} cleared`);
   }, [propsRef]);
 
   const onDelete = React.useCallback(async () => {
     const { selectionState, onRowsDelete } = propsRef.current;
 
-    if (
-      !selectionState?.selectedCells ||
-      selectionState.selectedCells.size === 0
-    )
-      return;
+    if (!selectionState?.selectedCells || selectionState.selectedCells.size === 0) return;
 
     const rowIndices = new Set<number>();
     for (const cellKey of selectionState.selectedCells) {
@@ -200,14 +190,11 @@ function ContextMenuImpl<TData>({
 
     await onRowsDelete?.(rowIndicesArray);
 
-    toast.success(`${rowCount} row${rowCount !== 1 ? "s" : ""} deleted`);
+    toast.success(`${rowCount} row${rowCount !== 1 ? 's' : ''} deleted`);
   }, [propsRef]);
 
   return (
-    <DropdownMenu
-      open={contextMenu.open}
-      onOpenChange={onContextMenuOpenChange}
-    >
+    <DropdownMenu open={contextMenu.open} onOpenChange={onContextMenuOpenChange}>
       <DropdownMenuTrigger style={triggerStyle} />
       <DropdownMenuContent
         data-grid-popover=""

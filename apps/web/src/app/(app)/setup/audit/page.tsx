@@ -103,9 +103,7 @@ export default function AuditSetupPage() {
                       <TooltipTrigger asChild>
                         <span>{formatRelative(new Date(row.createdAt))}</span>
                       </TooltipTrigger>
-                      <TooltipContent>
-                        {new Date(row.createdAt).toLocaleString()}
-                      </TooltipContent>
+                      <TooltipContent>{new Date(row.createdAt).toLocaleString()}</TooltipContent>
                     </Tooltip>
                   </TableCell>
                   <TableCell>
@@ -132,11 +130,7 @@ export default function AuditSetupPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <ActionMeta
-                      action={row.action}
-                      targetType={row.targetType}
-                      meta={row.meta}
-                    />
+                    <ActionMeta action={row.action} targetType={row.targetType} meta={row.meta} />
                   </TableCell>
                 </TableRow>
               ))}
@@ -189,8 +183,7 @@ function ActionMeta({
   const type = typeof meta.type === 'string' ? meta.type : null;
   const objectKey = typeof meta.objectKey === 'string' ? meta.objectKey : null;
   const changed = Array.isArray(meta.changed) ? (meta.changed as string[]) : null;
-  const sectionCount =
-    typeof meta.sectionCount === 'number' ? (meta.sectionCount as number) : null;
+  const sectionCount = typeof meta.sectionCount === 'number' ? (meta.sectionCount as number) : null;
   const nodeCount = typeof meta.nodeCount === 'number' ? (meta.nodeCount as number) : null;
 
   return (

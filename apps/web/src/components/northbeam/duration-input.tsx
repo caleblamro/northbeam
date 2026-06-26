@@ -44,7 +44,9 @@ export function DurationInput({
     setError(null);
   }, [value]);
 
-  const validate = (raw: string): { ok: boolean; minutes: number | null; message: string | null } => {
+  const validate = (
+    raw: string,
+  ): { ok: boolean; minutes: number | null; message: string | null } => {
     const trimmed = raw.trim();
     if (!trimmed) return { ok: true, minutes: null, message: null };
     const parsed = parseDurationMinutes(trimmed);
@@ -98,7 +100,8 @@ export function DurationInput({
         disabled={disabled}
         className={cn(
           'tabular-nums',
-          invalid && 'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/30',
+          invalid &&
+            'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/30',
         )}
         inputMode="text"
         aria-invalid={invalid || undefined}

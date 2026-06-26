@@ -12,12 +12,7 @@
 //     transient network blips.
 
 import { formatError, isSilentlyHandledCode, notifyError } from '@/lib/api/errors';
-import {
-  MutationCache,
-  QueryCache,
-  QueryClient,
-  QueryClientProvider,
-} from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { httpBatchLink } from '@trpc/client';
 import { useState } from 'react';
 import superjson from 'superjson';

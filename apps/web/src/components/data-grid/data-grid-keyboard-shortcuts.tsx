@@ -1,8 +1,6 @@
-"use client";
+'use client';
 
-import { SearchIcon, XIcon } from "lucide-react";
-import * as React from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogClose,
@@ -10,12 +8,14 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { Separator } from "@/components/ui/separator";
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Kbd, KbdGroup } from '@/components/ui/kbd';
+import { Separator } from '@/components/ui/separator';
+import { SearchIcon, XIcon } from 'lucide-react';
+import * as React from 'react';
 
-const SHORTCUT_KEY = "/";
+const SHORTCUT_KEY = '/';
 
 interface ShortcutGroup {
   title: string;
@@ -29,31 +29,24 @@ interface DataGridKeyboardShortcutsProps {
   enableSearch?: boolean;
 }
 
-export const DataGridKeyboardShortcuts = React.memo(
-  DataGridKeyboardShortcutsImpl,
-  (prev, next) => {
-    return prev.enableSearch === next.enableSearch;
-  },
-);
+export const DataGridKeyboardShortcuts = React.memo(DataGridKeyboardShortcutsImpl, (prev, next) => {
+  return prev.enableSearch === next.enableSearch;
+});
 
-function DataGridKeyboardShortcutsImpl({
-  enableSearch = false,
-}: DataGridKeyboardShortcutsProps) {
+function DataGridKeyboardShortcutsImpl({ enableSearch = false }: DataGridKeyboardShortcutsProps) {
   const [open, setOpen] = React.useState(false);
-  const [input, setInput] = React.useState("");
+  const [input, setInput] = React.useState('');
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   const isMac =
-    typeof navigator !== "undefined"
-      ? /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
-      : false;
+    typeof navigator !== 'undefined' ? /Mac|iPhone|iPad|iPod/.test(navigator.userAgent) : false;
 
-  const modKey = isMac ? "⌘" : "Ctrl";
+  const modKey = isMac ? '⌘' : 'Ctrl';
 
   const onOpenChange = React.useCallback((isOpen: boolean) => {
     setOpen(isOpen);
     if (!isOpen) {
-      setInput("");
+      setInput('');
     }
   }, []);
 
@@ -62,150 +55,147 @@ function DataGridKeyboardShortcutsImpl({
     inputRef.current?.focus();
   }, []);
 
-  const onInputChange = React.useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      setInput(event.target.value);
-    },
-    [],
-  );
+  const onInputChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(event.target.value);
+  }, []);
 
   const shortcutGroups: ShortcutGroup[] = React.useMemo(
     () => [
       {
-        title: "Navigation",
+        title: 'Navigation',
         shortcuts: [
           {
-            keys: ["↑", "↓", "←", "→"],
-            description: "Navigate between cells",
+            keys: ['↑', '↓', '←', '→'],
+            description: 'Navigate between cells',
           },
           {
-            keys: ["Tab"],
-            description: "Move to next cell",
+            keys: ['Tab'],
+            description: 'Move to next cell',
           },
           {
-            keys: ["Shift", "Tab"],
-            description: "Move to previous cell",
+            keys: ['Shift', 'Tab'],
+            description: 'Move to previous cell',
           },
           {
-            keys: ["Home"],
-            description: "Move to first column",
+            keys: ['Home'],
+            description: 'Move to first column',
           },
           {
-            keys: ["End"],
-            description: "Move to last column",
+            keys: ['End'],
+            description: 'Move to last column',
           },
           {
-            keys: [modKey, "Home"],
-            description: "Move to first cell",
+            keys: [modKey, 'Home'],
+            description: 'Move to first cell',
           },
           {
-            keys: [modKey, "End"],
-            description: "Move to last cell",
+            keys: [modKey, 'End'],
+            description: 'Move to last cell',
           },
           {
-            keys: ["PgUp"],
-            description: "Move up one page",
+            keys: ['PgUp'],
+            description: 'Move up one page',
           },
           {
-            keys: ["PgDn"],
-            description: "Move down one page",
+            keys: ['PgDn'],
+            description: 'Move down one page',
           },
         ],
       },
       {
-        title: "Selection",
+        title: 'Selection',
         shortcuts: [
           {
-            keys: ["Shift", "↑↓←→"],
-            description: "Extend selection",
+            keys: ['Shift', '↑↓←→'],
+            description: 'Extend selection',
           },
           {
-            keys: [modKey, "A"],
-            description: "Select all cells",
+            keys: [modKey, 'A'],
+            description: 'Select all cells',
           },
           {
-            keys: [modKey, "Click"],
-            description: "Toggle cell selection",
+            keys: [modKey, 'Click'],
+            description: 'Toggle cell selection',
           },
           {
-            keys: ["Shift", "Click"],
-            description: "Select range",
+            keys: ['Shift', 'Click'],
+            description: 'Select range',
           },
           {
-            keys: ["Esc"],
-            description: "Clear selection",
+            keys: ['Esc'],
+            description: 'Clear selection',
           },
         ],
       },
       {
-        title: "Editing",
+        title: 'Editing',
         shortcuts: [
           {
-            keys: ["Enter"],
-            description: "Start editing cell",
+            keys: ['Enter'],
+            description: 'Start editing cell',
           },
           {
-            keys: ["Double Click"],
-            description: "Start editing cell",
+            keys: ['Double Click'],
+            description: 'Start editing cell',
           },
           {
-            keys: ["Delete"],
-            description: "Clear selected cells",
+            keys: ['Delete'],
+            description: 'Clear selected cells',
           },
           {
-            keys: ["Backspace"],
-            description: "Clear selected cells",
+            keys: ['Backspace'],
+            description: 'Clear selected cells',
           },
         ],
       },
       ...(enableSearch
         ? [
             {
-              title: "Search",
+              title: 'Search',
               shortcuts: [
                 {
-                  keys: [modKey, "F"],
-                  description: "Open search",
+                  keys: [modKey, 'F'],
+                  description: 'Open search',
                 },
                 {
-                  keys: ["Enter"],
-                  description: "Next match",
+                  keys: ['Enter'],
+                  description: 'Next match',
                 },
                 {
-                  keys: ["Shift", "Enter"],
-                  description: "Previous match",
+                  keys: ['Shift', 'Enter'],
+                  description: 'Previous match',
                 },
                 {
-                  keys: ["Esc"],
-                  description: "Close search",
+                  keys: ['Esc'],
+                  description: 'Close search',
                 },
               ],
             },
           ]
         : []),
       {
-        title: "Sorting",
+        title: 'Sorting',
         shortcuts: [
           {
-            keys: [modKey, "Shift", "S"],
-            description: "Toggle the sort menu",
+            keys: [modKey, 'Shift', 'S'],
+            description: 'Toggle the sort menu',
           },
           {
-            keys: ["Backspace"],
-            description: "Remove sort (when focused)",
+            keys: ['Backspace'],
+            description: 'Remove sort (when focused)',
           },
           {
-            keys: ["Delete"],
-            description: "Remove sort (when focused)",
+            keys: ['Delete'],
+            description: 'Remove sort (when focused)',
           },
         ],
       },
       {
-        title: "General",
+        title: 'General',
         shortcuts: [
           {
-            keys: [modKey, "/"],
-            description: "Show keyboard shortcuts",
+            keys: [modKey, '/'],
+            description: 'Show keyboard shortcuts',
           },
         ],
       },
@@ -237,9 +227,9 @@ function DataGridKeyboardShortcutsImpl({
       }
     }
 
-    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener('keydown', onKeyDown);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener('keydown', onKeyDown);
     };
   }, []);
 
@@ -258,8 +248,8 @@ function DataGridKeyboardShortcutsImpl({
         <DialogHeader className="px-6">
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription className="sr-only">
-            Use these keyboard shortcuts to navigate and interact with the data
-            grid more efficiently.
+            Use these keyboard shortcuts to navigate and interact with the data grid more
+            efficiently.
           </DialogDescription>
         </DialogHeader>
         <div className="px-6">
@@ -282,21 +272,15 @@ function DataGridKeyboardShortcutsImpl({
                 <SearchIcon className="pointer-events-none size-6" />
               </div>
               <div className="flex flex-col gap-1">
-                <div className="font-medium text-lg tracking-tight">
-                  No shortcuts found
-                </div>
-                <p className="text-muted-foreground text-sm">
-                  Try searching for a different term.
-                </p>
+                <div className="font-medium text-lg tracking-tight">No shortcuts found</div>
+                <p className="text-muted-foreground text-sm">Try searching for a different term.</p>
               </div>
             </div>
           ) : (
             <div className="flex flex-col gap-6">
               {filteredGroups.map((shortcutGroup) => (
                 <div key={shortcutGroup.title} className="flex flex-col gap-2">
-                  <h3 className="font-semibold text-foreground text-sm">
-                    {shortcutGroup.title}
-                  </h3>
+                  <h3 className="font-semibold text-foreground text-sm">{shortcutGroup.title}</h3>
                   <div className="divide-y divide-border rounded-md border">
                     {shortcutGroup.shortcuts.map((shortcut, index) => (
                       <ShortcutCard
@@ -316,19 +300,14 @@ function DataGridKeyboardShortcutsImpl({
   );
 }
 
-function ShortcutCard({
-  keys,
-  description,
-}: ShortcutGroup["shortcuts"][number]) {
+function ShortcutCard({ keys, description }: ShortcutGroup['shortcuts'][number]) {
   return (
     <div className="flex items-center gap-4 px-3 py-2">
       <span className="flex-1 text-sm">{description}</span>
       <KbdGroup className="shrink-0">
         {keys.map((key, index) => (
           <React.Fragment key={key}>
-            {index > 0 && (
-              <span className="text-muted-foreground text-xs">+</span>
-            )}
+            {index > 0 && <span className="text-muted-foreground text-xs">+</span>}
             <Kbd>{key}</Kbd>
           </React.Fragment>
         ))}

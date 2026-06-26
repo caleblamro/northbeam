@@ -50,19 +50,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 // logger.ts (pino) and auth.ts (server-only chokepoints) which Turbopack
 // can't bundle for the browser.
 import { ROLES, ROLE_LABELS, type Role } from '@northbeam/core/roles';
-import {
-  Crown,
-  Loader2,
-  Mail,
-  MoreHorizontal,
-  ShieldAlert,
-  UserPlus,
-  Users,
-} from 'lucide-react';
-import { Controller, useForm } from 'react-hook-form';
-import { z } from 'zod';
+import { Crown, Loader2, Mail, MoreHorizontal, ShieldAlert, UserPlus, Users } from 'lucide-react';
 // Users icon stays — used by the empty state below.
 import { useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
+import { z } from 'zod';
 
 const INVITABLE_ROLES: Role[] = ['admin', 'member', 'viewer'];
 
@@ -100,9 +92,7 @@ export default function UsersSetupPage() {
       <SectionCard
         title="Members"
         action={
-          canInvite ? (
-            <InviteButton onInvited={() => utils.org.members.invalidate()} />
-          ) : null
+          canInvite ? <InviteButton onInvited={() => utils.org.members.invalidate()} /> : null
         }
         padding="none"
       >
@@ -256,9 +246,9 @@ function TransferOwnershipDialog({
           </DialogTitle>
         </DialogHeader>
         <p className="text-muted-foreground text-sm leading-relaxed">
-          <span className="font-medium text-foreground">{target?.label}</span> will become the
-          new owner of this workspace. You'll be demoted to an admin and will keep the ability
-          to manage members and settings, but you will{' '}
+          <span className="font-medium text-foreground">{target?.label}</span> will become the new
+          owner of this workspace. You'll be demoted to an admin and will keep the ability to manage
+          members and settings, but you will{' '}
           <span className="font-medium text-foreground">no longer be able to</span> delete the
           workspace, manage billing, or transfer ownership again.
         </p>
@@ -371,11 +361,7 @@ function InviteButton({ onInvited }: { onInvited: () => void }) {
               {...form.register('email')}
             />
           </Field>
-          <Field
-            label="Role"
-            htmlFor="invite-role"
-            error={form.formState.errors.role?.message}
-          >
+          <Field label="Role" htmlFor="invite-role" error={form.formState.errors.role?.message}>
             <Controller
               control={form.control}
               name="role"

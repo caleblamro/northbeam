@@ -4,18 +4,15 @@
 // page navigation + create/edit drawer + delete. One component backs Contacts/
 // Accounts/Deals/Activities on real data.
 
+import { ObjChip } from '@/components/northbeam/app-bits';
+import { HidePageHead, PageActions } from '@/components/northbeam/app-shell';
 import { EmptyState } from '@/components/northbeam/empty-state';
+import type { FieldDefLite } from '@/components/northbeam/field-render';
 import { FilterDialog } from '@/components/northbeam/filter-bar';
 import { ListToolbar } from '@/components/northbeam/list-toolbar';
 import { RecordFormDrawer } from '@/components/northbeam/record-form';
 import { SaveViewDialog } from '@/components/northbeam/save-view-dialog';
 import { ViewPicker } from '@/components/northbeam/view-picker';
-import { getViewRenderer } from '@/lib/views/registry';
-import type { ViewRow } from '@/lib/views/types';
-import type { ShareTarget, ViewIcon } from '@northbeam/db/views';
-import { ObjChip } from '@/components/northbeam/app-bits';
-import { HidePageHead, PageActions } from '@/components/northbeam/app-shell';
-import { type FieldDefLite } from '@/components/northbeam/field-render';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { LoadingScreen } from '@/components/ui/loading-screen';
@@ -27,12 +24,12 @@ import {
   sortRows,
   writeFiltersToParams,
 } from '@/lib/filters';
-import {
-  readSortFromParams,
-  writeSortToParams,
-} from '@/lib/views/url-state';
-import type { ViewSort } from '@northbeam/db/views';
+import { getViewRenderer } from '@/lib/views/registry';
+import type { ViewRow } from '@/lib/views/types';
+import { readSortFromParams, writeSortToParams } from '@/lib/views/url-state';
 import type { ObjectLayout } from '@northbeam/db/field-types';
+import type { ShareTarget, ViewIcon } from '@northbeam/db/views';
+import type { ViewSort } from '@northbeam/db/views';
 import { AlertCircle, Upload, UserPlus } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo, useState } from 'react';
@@ -141,11 +138,7 @@ export function RecordListView({
   // mirrors Postgres semantics so server-side pushdown is a swap, not a
   // redesign.
   const effectiveFilters = useMemo(
-    () => [
-      ...(staticFilters ?? []),
-      ...(activeView.filters ?? []),
-      ...filters,
-    ],
+    () => [...(staticFilters ?? []), ...(activeView.filters ?? []), ...filters],
     [staticFilters, activeView.filters, filters],
   );
   // Sort: URL takes precedence (header click writes there), otherwise fall
@@ -155,7 +148,7 @@ export function RecordListView({
     [searchParams],
   );
   const effectiveSort = useMemo<ViewSort[]>(
-    () => (urlSort.length > 0 ? urlSort : activeView.sort ?? []),
+    () => (urlSort.length > 0 ? urlSort : (activeView.sort ?? [])),
     [urlSort, activeView.sort],
   );
   const setSort = useCallback(
@@ -211,9 +204,9 @@ export function RecordListView({
   // state along with the new view — currently just AIView, which passes
   // its in-progress prompt through `config`.
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const [pendingSaveOverrides, setPendingSaveOverrides] = useState<
-    { config?: unknown } | null
-  >(null);
+  const [pendingSaveOverrides, setPendingSaveOverrides] = useState<{ config?: unknown } | null>(
+    null,
+  );
   const saveAsNewView = useCallback((overrides?: { config?: unknown }) => {
     setPendingSaveOverrides(overrides ?? null);
     setSaveDialogOpen(true);
@@ -293,7 +286,9 @@ export function RecordListView({
           <header className="mb-6 flex items-center gap-3">
             <ObjChip label={objectLabel || objectKey} color={object?.color} size={32} />
             <div className="min-w-0 flex-1">
-              <h1 className="font-medium text-2xl tracking-[-0.02em]">{objectPlural || objectKey}</h1>
+              <h1 className="font-medium text-2xl tracking-[-0.02em]">
+                {objectPlural || objectKey}
+              </h1>
               {!list.isLoading && (
                 <p className="text-muted-foreground text-sm tabular-nums">
                   {rows.length.toLocaleString()} {rows.length === 1 ? 'record' : 'records'}
@@ -360,7 +355,9 @@ export function RecordListView({
         <Card className="p-0">
           <EmptyState
             icon={UserPlus}
-            title={q ? `No ${objectPlural.toLowerCase()} match` : `No ${objectPlural.toLowerCase()} yet`}
+            title={
+              q ? `No ${objectPlural.toLowerCase()} match` : `No ${objectPlural.toLowerCase()} yet`
+            }
             body={
               q
                 ? 'Try a different search.'

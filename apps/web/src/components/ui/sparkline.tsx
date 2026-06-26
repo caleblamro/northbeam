@@ -9,11 +9,11 @@
 // Use it INLINE next to a number (`flex items-end gap-3`) — the visual chunk
 // makes a metric feel like a quote, not a static figure.
 
-import { cn } from "@/lib/cn";
+import { cn } from '@/lib/cn';
 
 interface SparklineProps {
   data: number[];
-  variant?: "bars" | "line";
+  variant?: 'bars' | 'line';
   width?: number;
   height?: number;
   color?: string;
@@ -22,39 +22,39 @@ interface SparklineProps {
   /** Px gap between bars. */
   gap?: number;
   className?: string;
-  "aria-label"?: string;
+  'aria-label'?: string;
 }
 
 export function Sparkline({
   data,
-  variant = "bars",
+  variant = 'bars',
   width,
   height = 28,
-  color = "currentColor",
+  color = 'currentColor',
   barWidth = 2,
   gap = 2,
   className,
-  "aria-label": ariaLabel,
+  'aria-label': ariaLabel,
 }: SparklineProps) {
   if (!data.length) return null;
   const max = Math.max(...data, 1);
   const actualWidth = width ?? data.length * (barWidth + gap) - gap;
 
-  if (variant === "line") {
+  if (variant === 'line') {
     const stepX = actualWidth / Math.max(data.length - 1, 1);
     const pts = data
       .map((v, i) => `${(i * stepX).toFixed(2)},${(height - (v / max) * height).toFixed(2)}`)
-      .join(" ");
-    const area = `M0,${height} L${pts.split(" ").join(" L")} L${actualWidth},${height} Z`;
+      .join(' ');
+    const area = `M0,${height} L${pts.split(' ').join(' L')} L${actualWidth},${height} Z`;
     return (
       <svg
         viewBox={`0 0 ${actualWidth} ${height}`}
         width={actualWidth}
         height={height}
-        className={cn("shrink-0", className)}
+        className={cn('shrink-0', className)}
         aria-label={ariaLabel}
-        role={ariaLabel ? "img" : undefined}
-        aria-hidden={ariaLabel ? undefined : "true"}
+        role={ariaLabel ? 'img' : undefined}
+        aria-hidden={ariaLabel ? undefined : 'true'}
       >
         <path d={area} fill={color} opacity={0.08} />
         <polyline points={pts} stroke={color} strokeWidth={1.25} fill="none" />
@@ -67,10 +67,10 @@ export function Sparkline({
       viewBox={`0 0 ${actualWidth} ${height}`}
       width={actualWidth}
       height={height}
-      className={cn("shrink-0", className)}
+      className={cn('shrink-0', className)}
       aria-label={ariaLabel}
-      role={ariaLabel ? "img" : undefined}
-      aria-hidden={ariaLabel ? undefined : "true"}
+      role={ariaLabel ? 'img' : undefined}
+      aria-hidden={ariaLabel ? undefined : 'true'}
     >
       {data.map((v, i) => {
         const h = (v / max) * height;

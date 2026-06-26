@@ -7,7 +7,7 @@
 // hook is UX, not security.
 
 import { trpc } from '@/lib/api';
-import { can, type Permission, type Role } from '@northbeam/core/roles';
+import { type Permission, type Role, can } from '@northbeam/core/roles';
 
 /** Returns the caller's role on the active org, or null when there's no
  *  active session / org yet (initial render, /sign-in, etc.). */

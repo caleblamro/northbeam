@@ -454,19 +454,13 @@ function baseSchemaFor(field: FieldDefForSchema): z.ZodType<unknown> {
     case 'number':
     case 'percent':
     case 'autonumber':
-      return z
-        .number({ message: 'Enter a number.' })
-        .refine(Number.isFinite, 'Enter a number.');
+      return z.number({ message: 'Enter a number.' }).refine(Number.isFinite, 'Enter a number.');
     case 'currency':
-      return z
-        .number({ message: 'Enter an amount.' })
-        .refine(Number.isFinite, 'Enter an amount.');
+      return z.number({ message: 'Enter an amount.' }).refine(Number.isFinite, 'Enter an amount.');
     case 'duration':
       return z.number().int().nonnegative('Duration must be 0 or more.');
     case 'date':
-      return z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.');
+      return z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.');
     case 'datetime':
       return z.string().refine((v) => !Number.isNaN(new Date(v).getTime()), 'Invalid date.');
     case 'checkbox':

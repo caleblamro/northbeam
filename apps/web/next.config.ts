@@ -9,10 +9,7 @@ import type { NextConfig } from 'next';
 // wins, so apps/web/.env.local (if present) still takes priority.
 function loadRootEnv() {
   try {
-    const file = readFileSync(
-      path.join(import.meta.dirname, '..', '..', '.env.local'),
-      'utf8',
-    );
+    const file = readFileSync(path.join(import.meta.dirname, '..', '..', '.env.local'), 'utf8');
     for (const raw of file.split('\n')) {
       const line = raw.trim();
       if (!line || line.startsWith('#')) continue;

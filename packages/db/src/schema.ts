@@ -355,11 +355,7 @@ export const view = pgTable(
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (t) => ({
-    orgObjectKey: uniqueIndex('view_org_object_key_uq').on(
-      t.organizationId,
-      t.objectId,
-      t.key,
-    ),
+    orgObjectKey: uniqueIndex('view_org_object_key_uq').on(t.organizationId, t.objectId, t.key),
   }),
 );
 

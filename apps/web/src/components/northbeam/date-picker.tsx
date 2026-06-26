@@ -1,10 +1,4 @@
 'use client';
-
-// DatePicker — single-date input with a calendar popover and manual ISO text
-// entry. Value is an ISO date string (YYYY-MM-DD) with no time / tz — date is
-// a calendar-day concept, not a moment.
-
-import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';

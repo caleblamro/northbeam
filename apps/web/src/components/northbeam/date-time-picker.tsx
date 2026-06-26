@@ -32,10 +32,7 @@ function parseLooseDateTime(raw: string): Date | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
   // Accept "YYYY-MM-DD HH:MM" as well as ISO with the 'T' separator.
-  const normalized = trimmed.replace(
-    /^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})$/,
-    '$1T$2',
-  );
+  const normalized = trimmed.replace(/^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})$/, '$1T$2');
   const d = new Date(normalized);
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -92,9 +89,7 @@ export function DateTimePicker({
 
   // Time field inside the popover. Stays in sync with the current value while
   // the popover is closed; while open, it's owned by the popover.
-  const [popoverTime, setPopoverTime] = useState<string>(
-    date ? partsFromDate(date).time : '09:00',
-  );
+  const [popoverTime, setPopoverTime] = useState<string>(date ? partsFromDate(date).time : '09:00');
 
   useEffect(() => {
     if (focused) return;

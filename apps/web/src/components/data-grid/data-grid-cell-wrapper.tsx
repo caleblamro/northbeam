@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { useComposedRefs } from "@/lib/compose-refs";
-import { getCellKey } from "@/lib/data-grid";
-import { cn } from "@/lib/cn";
-import type { DataGridCellProps } from "@/types/data-grid";
+import { cn } from '@/lib/cn';
+import { useComposedRefs } from '@/lib/compose-refs';
+import { getCellKey } from '@/lib/data-grid';
+import type { DataGridCellProps } from '@/types/data-grid';
+import * as React from 'react';
 
 interface DataGridCellWrapperProps<TData>
   extends DataGridCellProps<TData>,
-    React.ComponentProps<"div"> {}
+    React.ComponentProps<'div'> {}
 
 export function DataGridCellWrapper<TData>({
   tableMeta,
@@ -58,15 +58,7 @@ export function DataGridCellWrapper<TData>({
         }
       }
     },
-    [
-      tableMeta,
-      rowIndex,
-      columnId,
-      isEditing,
-      isFocused,
-      readOnly,
-      onClickProp,
-    ],
+    [tableMeta, rowIndex, columnId, isEditing, isFocused, readOnly, onClickProp],
   );
 
   const onContextMenu = React.useCallback(
@@ -95,28 +87,28 @@ export function DataGridCellWrapper<TData>({
       if (event.defaultPrevented) return;
 
       if (
-        event.key === "ArrowUp" ||
-        event.key === "ArrowDown" ||
-        event.key === "ArrowLeft" ||
-        event.key === "ArrowRight" ||
-        event.key === "Home" ||
-        event.key === "End" ||
-        event.key === "PageUp" ||
-        event.key === "PageDown" ||
-        event.key === "Tab"
+        event.key === 'ArrowUp' ||
+        event.key === 'ArrowDown' ||
+        event.key === 'ArrowLeft' ||
+        event.key === 'ArrowRight' ||
+        event.key === 'Home' ||
+        event.key === 'End' ||
+        event.key === 'PageUp' ||
+        event.key === 'PageDown' ||
+        event.key === 'Tab'
       ) {
         return;
       }
 
       if (isFocused && !isEditing && !readOnly) {
-        if (event.key === "F2" || event.key === "Enter") {
+        if (event.key === 'F2' || event.key === 'Enter') {
           event.preventDefault();
           event.stopPropagation();
           tableMeta?.onCellEditingStart?.(rowIndex, columnId);
           return;
         }
 
-        if (event.key === " ") {
+        if (event.key === ' ') {
           event.preventDefault();
           event.stopPropagation();
           tableMeta?.onCellEditingStart?.(rowIndex, columnId);
@@ -130,15 +122,7 @@ export function DataGridCellWrapper<TData>({
         }
       }
     },
-    [
-      onKeyDownProp,
-      isFocused,
-      isEditing,
-      readOnly,
-      tableMeta,
-      rowIndex,
-      columnId,
-    ],
+    [onKeyDownProp, isFocused, isEditing, readOnly, tableMeta, rowIndex, columnId],
   );
 
   const onMouseDown = React.useCallback(
@@ -166,9 +150,9 @@ export function DataGridCellWrapper<TData>({
     <div
       role="button"
       data-slot="grid-cell-wrapper"
-      data-editing={isEditing ? "" : undefined}
-      data-focused={isFocused ? "" : undefined}
-      data-selected={isSelected ? "" : undefined}
+      data-editing={isEditing ? '' : undefined}
+      data-focused={isFocused ? '' : undefined}
+      data-selected={isSelected ? '' : undefined}
       tabIndex={isFocused && !isEditing ? 0 : -1}
       {...props}
       ref={composedRef}
@@ -176,22 +160,17 @@ export function DataGridCellWrapper<TData>({
         // Flex + items-center vertically centers the cell value inside the
         // row's box. Without this the content sits at the top of the row,
         // which looks off when rows are 36px tall.
-        "flex size-full items-center px-2 py-1.5 text-start text-sm outline-none has-data-[slot=checkbox]:items-start has-data-[slot=checkbox]:pt-2.5",
+        'flex size-full items-center px-2 py-1.5 text-start text-sm outline-none has-data-[slot=checkbox]:items-start has-data-[slot=checkbox]:pt-2.5',
         {
-          "ring-1 ring-ring ring-inset": isFocused,
-          "bg-yellow-100 dark:bg-yellow-900/30":
-            isSearchMatch && !isActiveSearchMatch,
-          "bg-orange-200 dark:bg-orange-900/50": isActiveSearchMatch,
-          "bg-primary/10": isSelected && !isEditing,
-          "cursor-default": !isEditing,
-          "**:data-[slot=grid-cell-content]:line-clamp-1":
-            !isEditing && rowHeight === "short",
-          "**:data-[slot=grid-cell-content]:line-clamp-2":
-            !isEditing && rowHeight === "medium",
-          "**:data-[slot=grid-cell-content]:line-clamp-3":
-            !isEditing && rowHeight === "tall",
-          "**:data-[slot=grid-cell-content]:line-clamp-4":
-            !isEditing && rowHeight === "extra-tall",
+          'ring-1 ring-ring ring-inset': isFocused,
+          'bg-yellow-100 dark:bg-yellow-900/30': isSearchMatch && !isActiveSearchMatch,
+          'bg-orange-200 dark:bg-orange-900/50': isActiveSearchMatch,
+          'bg-primary/10': isSelected && !isEditing,
+          'cursor-default': !isEditing,
+          '**:data-[slot=grid-cell-content]:line-clamp-1': !isEditing && rowHeight === 'short',
+          '**:data-[slot=grid-cell-content]:line-clamp-2': !isEditing && rowHeight === 'medium',
+          '**:data-[slot=grid-cell-content]:line-clamp-3': !isEditing && rowHeight === 'tall',
+          '**:data-[slot=grid-cell-content]:line-clamp-4': !isEditing && rowHeight === 'extra-tall',
         },
         className,
       )}

@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { ChevronDown, ChevronUp, X } from "lucide-react";
-import * as React from "react";
-import { useAsRef } from "@/hooks/use-as-ref";
-import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import type { SearchState } from "@/types/data-grid";
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useAsRef } from '@/hooks/use-as-ref';
+import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
+import type { SearchState } from '@/types/data-grid';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import * as React from 'react';
 
 interface DataGridSearchProps extends SearchState {}
 
@@ -15,10 +15,7 @@ export const DataGridSearch = React.memo(DataGridSearchImpl, (prev, next) => {
 
   if (!next.searchOpen) return true;
 
-  if (
-    prev.searchQuery !== next.searchQuery ||
-    prev.matchIndex !== next.matchIndex
-  ) {
+  if (prev.searchQuery !== next.searchQuery || prev.matchIndex !== next.matchIndex) {
     return false;
   }
 
@@ -30,10 +27,7 @@ export const DataGridSearch = React.memo(DataGridSearchImpl, (prev, next) => {
 
     if (!prevMatch || !nextMatch) return false;
 
-    if (
-      prevMatch.rowIndex !== nextMatch.rowIndex ||
-      prevMatch.columnId !== nextMatch.columnId
-    ) {
+    if (prevMatch.rowIndex !== nextMatch.rowIndex || prevMatch.columnId !== nextMatch.columnId) {
       return false;
     }
   }
@@ -74,21 +68,21 @@ function DataGridSearchImpl({
     if (!searchOpen) return;
 
     function onEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         event.preventDefault();
         propsRef.current.onSearchOpenChange(false);
       }
     }
 
-    document.addEventListener("keydown", onEscape);
-    return () => document.removeEventListener("keydown", onEscape);
+    document.addEventListener('keydown', onEscape);
+    return () => document.removeEventListener('keydown', onEscape);
   }, [searchOpen, propsRef]);
 
   const onKeyDown = React.useCallback(
     (event: React.KeyboardEvent) => {
       event.stopPropagation();
 
-      if (event.key === "Enter") {
+      if (event.key === 'Enter') {
         event.preventDefault();
         if (event.shiftKey) {
           propsRef.current.onNavigateToPrevMatch();
@@ -113,38 +107,33 @@ function DataGridSearchImpl({
     [propsRef, debouncedSearch],
   );
 
-  const onTriggerPointerDown = React.useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      // prevent implicit pointer capture
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (target.hasPointerCapture(event.pointerId)) {
-        target.releasePointerCapture(event.pointerId);
-      }
+  const onTriggerPointerDown = React.useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    // prevent implicit pointer capture
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.hasPointerCapture(event.pointerId)) {
+      target.releasePointerCapture(event.pointerId);
+    }
 
-      // Only prevent default if we're not clicking on the input
-      // This allows text selection in the input while still preventing focus stealing elsewhere
-      if (
-        event.button === 0 &&
-        event.ctrlKey === false &&
-        event.pointerType === "mouse" &&
-        !(event.target instanceof HTMLInputElement)
-      ) {
-        event.preventDefault();
-      }
-    },
-    [],
-  );
+    // Only prevent default if we're not clicking on the input
+    // This allows text selection in the input while still preventing focus stealing elsewhere
+    if (
+      event.button === 0 &&
+      event.ctrlKey === false &&
+      event.pointerType === 'mouse' &&
+      !(event.target instanceof HTMLInputElement)
+    ) {
+      event.preventDefault();
+    }
+  }, []);
 
   const onPrevMatchPointerDown = React.useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) =>
-      onTriggerPointerDown(event),
+    (event: React.PointerEvent<HTMLButtonElement>) => onTriggerPointerDown(event),
     [onTriggerPointerDown],
   );
 
   const onNextMatchPointerDown = React.useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) =>
-      onTriggerPointerDown(event),
+    (event: React.PointerEvent<HTMLButtonElement>) => onTriggerPointerDown(event),
     [onTriggerPointerDown],
   );
 

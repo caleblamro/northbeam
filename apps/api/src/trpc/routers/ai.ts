@@ -3,12 +3,12 @@
 // Persistence is not part of the v1 contract — the dialog renders the
 // result; the user closes it; no view row is touched.
 
-import { generateArtifact } from '../../ai/artifact-generator.js';
-import { buildDataSummary } from '../../ai/data-summary.js';
 import { loadEnv } from '@northbeam/config';
 import { getObjectByKey, writeAuditEvent } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { generateArtifact } from '../../ai/artifact-generator.js';
+import { buildDataSummary } from '../../ai/data-summary.js';
 import { permissionProcedure, router } from '../trpc.js';
 
 export const aiRouter = router({

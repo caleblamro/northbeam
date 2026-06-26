@@ -10,7 +10,7 @@
 // input shape so the swap is transparent.
 
 import { Field } from '@/components/northbeam/field';
-import { type FieldDefLite } from '@/components/northbeam/field-render';
+import type { FieldDefLite } from '@/components/northbeam/field-render';
 import { Combobox, type Option } from '@/components/northbeam/select-legacy';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -128,11 +128,7 @@ export function FilterBar({
   );
 
   if (inline) {
-    return (
-      <div className={cn('flex flex-wrap items-center gap-1.5', className)}>
-        {chips}
-      </div>
-    );
+    return <div className={cn('flex flex-wrap items-center gap-1.5', className)}>{chips}</div>;
   }
 
   return (
@@ -178,7 +174,7 @@ function FilterChipEditor({
   const handleOpen = (next: boolean) => {
     if (next) {
       setDraftField(field ?? null);
-      setDraftOp(filter?.op ?? (field ? opsForType(field.type)[0] ?? 'eq' : 'contains'));
+      setDraftOp(filter?.op ?? (field ? (opsForType(field.type)[0] ?? 'eq') : 'contains'));
       setDraftValue(filter?.value);
     }
     setOpen(next);
@@ -193,11 +189,7 @@ function FilterChipEditor({
   const trigger =
     mode === 'add' ? (
       <Button type="button" variant="ghost" size="sm">
-        {filterCount(fields) === 0 ? (
-          <FilterIcon />
-        ) : (
-          <Plus />
-        )}
+        {filterCount(fields) === 0 ? <FilterIcon /> : <Plus />}
         Add filter
       </Button>
     ) : (
@@ -324,18 +316,16 @@ function FieldPicker({
       <CommandList>
         <CommandEmpty>No fields.</CommandEmpty>
         <CommandGroup>
-          {fields
-            .filter(isFilterable)
-            .map((f) => (
-              <CommandItem
-                key={f.key}
-                value={`${f.label} ${f.key} ${f.type}`}
-                onSelect={() => onPick(f)}
-              >
-                <span className="flex-1 font-medium">{f.label}</span>
-                <span className="text-muted-foreground text-xs">{f.type}</span>
-              </CommandItem>
-            ))}
+          {fields.filter(isFilterable).map((f) => (
+            <CommandItem
+              key={f.key}
+              value={`${f.label} ${f.key} ${f.type}`}
+              onSelect={() => onPick(f)}
+            >
+              <span className="flex-1 font-medium">{f.label}</span>
+              <span className="text-muted-foreground text-xs">{f.type}</span>
+            </CommandItem>
+          ))}
         </CommandGroup>
       </CommandList>
     </Command>
@@ -359,12 +349,15 @@ function FilterValueInput({
 }) {
   if (field.type === 'reference') {
     const targetObject = (field.config as { targetObject?: string } | null)?.targetObject ?? '';
-    const selected: Option | null = value == null ? null : { value: String(value), label: String(value) };
+    const selected: Option | null =
+      value == null ? null : { value: String(value), label: String(value) };
     return (
       <Combobox
         value={selected}
         onChange={(o) => onChange(o?.value ?? null)}
-        loadOptions={loadReferenceOptions ? (q) => loadReferenceOptions(targetObject, q) : async () => []}
+        loadOptions={
+          loadReferenceOptions ? (q) => loadReferenceOptions(targetObject, q) : async () => []
+        }
         placeholder={`Search ${targetObject || 'records'}…`}
         emptyText="No matches"
       />
@@ -512,12 +505,7 @@ export function FilterDialog({
         >
           <FilterIcon className="size-3.5" />
           {filters.length > 0 && (
-            <Badge
-              tone="accent"
-              size="sm"
-              dot={false}
-              className="h-4 min-w-4 px-1 tabular-nums"
-            >
+            <Badge tone="accent" size="sm" dot={false} className="h-4 min-w-4 px-1 tabular-nums">
               {filters.length}
             </Badge>
           )}
@@ -620,7 +608,7 @@ function FilterRow({
           value={row.fieldKey}
           onValueChange={(k) => {
             const f = byKey.get(k);
-            const nextOp = f ? opsForType(f.type)[0] ?? row.op : row.op;
+            const nextOp = f ? (opsForType(f.type)[0] ?? row.op) : row.op;
             onChange({ fieldKey: k, op: nextOp, value: null });
           }}
         >
@@ -652,9 +640,7 @@ function FilterRow({
       </Field>
       <Field label="Value" htmlFor={valueId}>
         {isUnary || field.type === 'checkbox' ? (
-          <div className="flex h-9 items-center text-muted-foreground text-xs italic">
-            —
-          </div>
+          <div className="flex h-9 items-center text-muted-foreground text-xs italic">—</div>
         ) : (
           <FilterValueInput
             field={field}

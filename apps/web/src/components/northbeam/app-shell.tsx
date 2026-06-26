@@ -21,8 +21,8 @@ import {
   useState,
 } from 'react';
 import { AIGenerateDialog } from './ai-generate-dialog';
-import { CommandPalette } from './command-legacy';
 import { AppTopbar } from './app-topbar';
+import { CommandPalette } from './command-legacy';
 import { Spinner } from './primitives';
 
 // Lets a page inject action buttons into the layout-owned page header without

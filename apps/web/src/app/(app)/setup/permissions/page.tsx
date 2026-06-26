@@ -31,8 +31,8 @@ export default function PermissionsSetupPage() {
         <div className="min-w-0 text-sm">
           <div className="font-medium text-foreground">Roles are read-only for now</div>
           <p className="text-muted-foreground text-xs leading-relaxed">
-            This matrix shows the current built-in policy. Custom roles, per-record sharing
-            rules, and field-level security are coming in a follow-up.
+            This matrix shows the current built-in policy. Custom roles, per-record sharing rules,
+            and field-level security are coming in a follow-up.
           </p>
         </div>
       </div>
@@ -162,4 +162,3 @@ function PermissionCell({ allowed }: { allowed: boolean }) {
     </span>
   );
 }
-

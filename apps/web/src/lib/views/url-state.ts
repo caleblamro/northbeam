@@ -7,10 +7,7 @@
 // were removed by request — there's only one view type now (`list`), so
 // nothing in the URL needs to remember which type we're on.
 
-import {
-  readFiltersFromParams,
-  writeFiltersToParams,
-} from '@/lib/filters';
+import { readFiltersFromParams } from '@/lib/filters';
 import type { Filter, ViewSort } from '@northbeam/db/views';
 
 export function readViewIdFromParams(params: URLSearchParams): string | null {

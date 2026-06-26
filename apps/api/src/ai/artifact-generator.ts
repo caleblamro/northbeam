@@ -123,11 +123,7 @@ function formatDataSummary(summary: DataSummary): string {
 
 /* ── System prompt ──────────────────────────────────────────────────────── */
 
-function buildSystemPrompt(
-  object: ObjectRow,
-  fields: FieldRow[],
-  summary: DataSummary,
-): string {
+function buildSystemPrompt(object: ObjectRow, fields: FieldRow[], summary: DataSummary): string {
   const fieldLines = fields
     .filter((f) => !f.isSystem || f.key === 'name')
     .slice(0, 40)

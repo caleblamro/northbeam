@@ -9,7 +9,7 @@
 import { type FieldDefLite, FieldValue } from '@/components/northbeam/field-render';
 import type { RecordRow } from '@/components/northbeam/record-data-grid';
 import { cn } from '@/lib/cn';
-import { cva, type VariantProps } from 'class-variance-authority';
+import { type VariantProps, cva } from 'class-variance-authority';
 import Link from 'next/link';
 
 export type { RecordRow };

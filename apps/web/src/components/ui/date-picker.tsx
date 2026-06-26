@@ -19,23 +19,38 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/cn';
-import {
-  Calendar as CalendarIcon,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as React from 'react';
 import { useDayPicker } from 'react-day-picker';
 
 const MONTHS_SHORT = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ];
 
 const MONTHS_LONG = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
 interface DatePickerProps {
@@ -181,10 +196,7 @@ export function DatePicker({
         />
         {withTime && (
           <div className="flex items-center justify-between gap-2 border-border border-t px-3 py-2">
-            <label
-              htmlFor={`${id ?? 'datepicker'}-time`}
-              className="text-muted-foreground text-xs"
-            >
+            <label htmlFor={`${id ?? 'datepicker'}-time`} className="text-muted-foreground text-xs">
               Time
             </label>
             <Input
@@ -310,10 +322,7 @@ function YearPicker({
   const [open, setOpen] = React.useState(false);
   // Show 50 years before and after the current value — covers 1976→2076 by
   // default; the user can scroll through the grid to find any year.
-  const years = React.useMemo(
-    () => Array.from({ length: 101 }, (_, i) => value - 50 + i),
-    [value],
-  );
+  const years = React.useMemo(() => Array.from({ length: 101 }, (_, i) => value - 50 + i), [value]);
   const selectedRef = React.useRef<HTMLButtonElement>(null);
 
   // Scroll the selected year into view when the popover opens.

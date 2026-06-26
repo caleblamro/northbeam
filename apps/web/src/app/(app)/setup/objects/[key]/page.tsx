@@ -7,6 +7,7 @@
 
 import { DescriptionList } from '@/components/northbeam/description-list';
 import { EmptyState } from '@/components/northbeam/empty-state';
+import type { FieldDefLite } from '@/components/northbeam/field-render';
 import { LayoutEditor } from '@/components/northbeam/object-layout-editor';
 import { SectionCard } from '@/components/northbeam/section-card';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
@@ -23,20 +24,11 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { trpc } from '@/lib/api';
 import { useCan } from '@/lib/can';
-import {
-  ArrowLeft,
-  Check,
-  Database,
-  Info,
-  LayoutPanelLeft,
-  Minus,
-  Pencil,
-} from 'lucide-react';
+import type { ObjectLayout } from '@northbeam/db/field-types';
+import { ArrowLeft, Check, Database, Info, LayoutPanelLeft, Minus, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
-import type { FieldDefLite } from '@/components/northbeam/field-render';
-import type { ObjectLayout } from '@northbeam/db/field-types';
 
 // Field-type → tone mapping. The tones share a neutral background and only
 // differ in a small color-dot prefix, so the field list reads as a label,
@@ -174,9 +166,7 @@ export default function ObjectDetailPage() {
             layout={object.layout ?? {}}
             saving={updateLayout.isPending}
             onCancel={() => setEditingLayout(false)}
-            onSave={(layout) =>
-              updateLayout.mutate({ objectId: object.id, layout })
-            }
+            onSave={(layout) => updateLayout.mutate({ objectId: object.id, layout })}
           />
         ) : (
           <LayoutSummary layout={object.layout ?? {}} fields={fields} />
@@ -214,7 +204,7 @@ export default function ObjectDetailPage() {
             </TableHeader>
             <TableBody>
               {fields.map((f) => {
-                const cfg = (f.config ?? {});
+                const cfg = f.config ?? {};
                 const tone = TYPE_TONE[f.type] ?? 'text';
                 const meta = fieldMeta(f.type, cfg);
                 return (

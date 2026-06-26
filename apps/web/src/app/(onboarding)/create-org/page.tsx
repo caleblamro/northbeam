@@ -95,12 +95,7 @@ export default function CreateOrgPage() {
         This is where your contacts, accounts, and deals live. You can invite teammates later.
       </p>
       <div className="flex flex-col gap-3.5">
-        <Field
-          label="Workspace name"
-          required
-          htmlFor="org-name"
-          error={errors.name?.message}
-        >
+        <Field label="Workspace name" required htmlFor="org-name" error={errors.name?.message}>
           <InputGroup>
             <InputGroupAddon>
               <Building2 />
@@ -121,11 +116,7 @@ export default function CreateOrgPage() {
         >
           <InputGroup>
             <InputGroupAddon className="text-muted-foreground">northbeam.app/</InputGroupAddon>
-            <InputGroupInput
-              id="org-slug"
-              placeholder="acme"
-              {...form.register('slug')}
-            />
+            <InputGroupInput id="org-slug" placeholder="acme" {...form.register('slug')} />
           </InputGroup>
         </Field>
       </div>

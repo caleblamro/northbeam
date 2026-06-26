@@ -1,8 +1,8 @@
-import type { Cell, RowData, TableMeta } from "@tanstack/react-table";
+import type { Cell, RowData, TableMeta } from '@tanstack/react-table';
 
-export type Direction = "ltr" | "rtl";
+export type Direction = 'ltr' | 'rtl';
 
-export type RowHeightValue = "short" | "medium" | "tall" | "extra-tall";
+export type RowHeightValue = 'short' | 'medium' | 'tall' | 'extra-tall';
 
 export interface CellSelectOption {
   label: string;
@@ -13,36 +13,36 @@ export interface CellSelectOption {
 
 export type CellOpts =
   | {
-      variant: "short-text";
+      variant: 'short-text';
     }
   | {
-      variant: "long-text";
+      variant: 'long-text';
     }
   | {
-      variant: "number";
+      variant: 'number';
       min?: number;
       max?: number;
       step?: number;
     }
   | {
-      variant: "select";
+      variant: 'select';
       options: CellSelectOption[];
     }
   | {
-      variant: "multi-select";
+      variant: 'multi-select';
       options: CellSelectOption[];
     }
   | {
-      variant: "checkbox";
+      variant: 'checkbox';
     }
   | {
-      variant: "date";
+      variant: 'date';
     }
   | {
-      variant: "url";
+      variant: 'url';
     }
   | {
-      variant: "file";
+      variant: 'file';
       maxFileSize?: number;
       maxFiles?: number;
       accept?: string;
@@ -55,7 +55,7 @@ export interface CellUpdate {
   value: unknown;
 }
 
-declare module "@tanstack/react-table" {
+declare module '@tanstack/react-table' {
   // biome-ignore lint/correctness/noUnusedVariables: TData and TValue are used in the ColumnMeta interface
   interface ColumnMeta<TData extends RowData, TValue> {
     label?: string;
@@ -80,24 +80,12 @@ declare module "@tanstack/react-table" {
     onDataUpdate?: (params: CellUpdate | Array<CellUpdate>) => void;
     onRowsDelete?: (rowIndices: number[]) => void | Promise<void>;
     onColumnClick?: (columnId: string) => void;
-    onCellClick?: (
-      rowIndex: number,
-      columnId: string,
-      event?: React.MouseEvent,
-    ) => void;
+    onCellClick?: (rowIndex: number, columnId: string, event?: React.MouseEvent) => void;
     onCellDoubleClick?: (rowIndex: number, columnId: string) => void;
-    onCellMouseDown?: (
-      rowIndex: number,
-      columnId: string,
-      event: React.MouseEvent,
-    ) => void;
+    onCellMouseDown?: (rowIndex: number, columnId: string, event: React.MouseEvent) => void;
     onCellMouseEnter?: (rowIndex: number, columnId: string) => void;
     onCellMouseUp?: () => void;
-    onCellContextMenu?: (
-      rowIndex: number,
-      columnId: string,
-      event: React.MouseEvent,
-    ) => void;
+    onCellContextMenu?: (rowIndex: number, columnId: string, event: React.MouseEvent) => void;
     onCellEditingStart?: (rowIndex: number, columnId: string) => void;
     onCellEditingStop?: (opts?: {
       direction?: NavigationDirection;
@@ -154,20 +142,20 @@ export interface PasteDialogState {
 }
 
 export type NavigationDirection =
-  | "up"
-  | "down"
-  | "left"
-  | "right"
-  | "home"
-  | "end"
-  | "ctrl+up"
-  | "ctrl+down"
-  | "ctrl+home"
-  | "ctrl+end"
-  | "pageup"
-  | "pagedown"
-  | "pageleft"
-  | "pageright";
+  | 'up'
+  | 'down'
+  | 'left'
+  | 'right'
+  | 'home'
+  | 'end'
+  | 'ctrl+up'
+  | 'ctrl+down'
+  | 'ctrl+home'
+  | 'ctrl+end'
+  | 'pageup'
+  | 'pagedown'
+  | 'pageleft'
+  | 'pageright';
 
 export interface SearchState {
   searchMatches: CellPosition[];
@@ -204,46 +192,46 @@ export interface FileCellData {
 }
 
 export type TextFilterOperator =
-  | "contains"
-  | "notContains"
-  | "equals"
-  | "notEquals"
-  | "startsWith"
-  | "endsWith"
-  | "isEmpty"
-  | "isNotEmpty";
+  | 'contains'
+  | 'notContains'
+  | 'equals'
+  | 'notEquals'
+  | 'startsWith'
+  | 'endsWith'
+  | 'isEmpty'
+  | 'isNotEmpty';
 
 export type NumberFilterOperator =
-  | "equals"
-  | "notEquals"
-  | "lessThan"
-  | "lessThanOrEqual"
-  | "greaterThan"
-  | "greaterThanOrEqual"
-  | "isBetween"
-  | "isEmpty"
-  | "isNotEmpty";
+  | 'equals'
+  | 'notEquals'
+  | 'lessThan'
+  | 'lessThanOrEqual'
+  | 'greaterThan'
+  | 'greaterThanOrEqual'
+  | 'isBetween'
+  | 'isEmpty'
+  | 'isNotEmpty';
 
 export type DateFilterOperator =
-  | "equals"
-  | "notEquals"
-  | "before"
-  | "after"
-  | "onOrBefore"
-  | "onOrAfter"
-  | "isBetween"
-  | "isEmpty"
-  | "isNotEmpty";
+  | 'equals'
+  | 'notEquals'
+  | 'before'
+  | 'after'
+  | 'onOrBefore'
+  | 'onOrAfter'
+  | 'isBetween'
+  | 'isEmpty'
+  | 'isNotEmpty';
 
 export type SelectFilterOperator =
-  | "is"
-  | "isNot"
-  | "isAnyOf"
-  | "isNoneOf"
-  | "isEmpty"
-  | "isNotEmpty";
+  | 'is'
+  | 'isNot'
+  | 'isAnyOf'
+  | 'isNoneOf'
+  | 'isEmpty'
+  | 'isNotEmpty';
 
-export type BooleanFilterOperator = "isTrue" | "isFalse";
+export type BooleanFilterOperator = 'isTrue' | 'isFalse';
 
 export type FilterOperator =
   | TextFilterOperator

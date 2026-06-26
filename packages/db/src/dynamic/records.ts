@@ -3,7 +3,7 @@
 // refLabels) so the tRPC router barely changes — but every value is a real typed
 // column. Returns/accepts records as `{ ...system, data: {fieldKey: value} }`.
 
-import { type SQL, and, eq, inArray, sql } from 'drizzle-orm';
+import { type SQL, and, eq, sql } from 'drizzle-orm';
 import type { DbExecutor } from '../client.js';
 import type { FieldConfig } from '../field-types.js';
 import {
@@ -13,7 +13,7 @@ import {
   getObjectById,
   getObjectByKey,
 } from '../queries/crm.js';
-import { fieldDef, objectDef } from '../schema.js';
+import { fieldDef } from '../schema.js';
 import { SYS, qid, qualified } from './identifiers.js';
 import { COMPUTED, TEXT_TYPES, fromDb, toDb } from './pgtypes.js';
 
@@ -87,11 +87,7 @@ export async function listRecords(
   const clauses: SQL[] = [];
 
   // Visibility filter — only applies to private objects with non-admin caller.
-  if (
-    opts.acl &&
-    opts.object.defaultVisibility === 'private' &&
-    !opts.acl.isAdminish
-  ) {
+  if (opts.acl && opts.object.defaultVisibility === 'private' && !opts.acl.isAdminish) {
     const visParts: SQL[] = [sql`${col(SYS.ownerId)} = ${opts.acl.userId}`];
     if (opts.acl.sharedRecordIds.length > 0) {
       const ids = sql.join(

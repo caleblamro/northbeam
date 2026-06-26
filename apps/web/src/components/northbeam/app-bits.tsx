@@ -310,12 +310,7 @@ export function RecordDrawer({
                 <h2>{title}</h2>
                 {subtitle && <p>{subtitle}</p>}
               </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Close"
-                onClick={onClose}
-              >
+              <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
                 <X />
               </Button>
             </div>

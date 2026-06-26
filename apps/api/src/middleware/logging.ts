@@ -37,10 +37,7 @@ export const requestLogger = createMiddleware<{ Variables: LoggingVariables }>(a
     const path = new URL(c.req.url).pathname;
     // Drop health probes — they're noisy and the orchestrator already knows.
     if (path !== '/health' && path !== '/ready') {
-      logger.info(
-        { requestId, method: c.req.method, path, status, duration_ms },
-        'request',
-      );
+      logger.info({ requestId, method: c.req.method, path, status, duration_ms }, 'request');
     }
   }
 });

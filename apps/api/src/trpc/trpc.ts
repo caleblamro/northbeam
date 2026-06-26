@@ -74,10 +74,7 @@ const procedureLogger = t.middleware(async ({ ctx, path, type, next }) => {
     logger.info(base, 'trpc');
   } else {
     const err = result.error;
-    logger.warn(
-      { ...base, code: err.code, message: err.message, cause: err.cause },
-      'trpc.error',
-    );
+    logger.warn({ ...base, code: err.code, message: err.message, cause: err.cause }, 'trpc.error');
   }
   return result;
 });

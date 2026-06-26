@@ -39,12 +39,7 @@ interface DescriptionListProps extends VariantProps<typeof descriptionListVarian
   className?: string;
 }
 
-export function DescriptionList({
-  items,
-  density,
-  labelWidth,
-  className,
-}: DescriptionListProps) {
+export function DescriptionList({ items, density, labelWidth, className }: DescriptionListProps) {
   return (
     <dl className={cn(descriptionListVariants({ density, labelWidth }), className)}>
       {items.map((it, i) => (

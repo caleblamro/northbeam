@@ -8,9 +8,9 @@
 // Hand-authorable (you can write JSON onto config.artifact directly) +
 // AI-authorable (the dialog's "Save as view" lands here).
 
-import { ArtifactView, type Artifact } from '@/components/northbeam/views/artifact-walker';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import { SectionCard } from '@/components/northbeam/section-card';
+import { type Artifact, ArtifactView } from '@/components/northbeam/views/artifact-walker';
 import type { ViewRenderer, ViewRendererProps } from '@/lib/views/types';
 import { LayoutDashboard } from 'lucide-react';
 import { z } from 'zod';

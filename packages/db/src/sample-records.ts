@@ -256,10 +256,7 @@ function isoOffsetDatetime(days: number): string {
   return new Date(Date.now() + days * 86_400_000).toISOString();
 }
 
-export async function seedSampleRecords(
-  db: DbExecutor,
-  organizationId: string,
-): Promise<void> {
+export async function seedSampleRecords(db: DbExecutor, organizationId: string): Promise<void> {
   const accountObj = await getObjectByKey(db, organizationId, 'account');
   const contactObj = await getObjectByKey(db, organizationId, 'contact');
   const dealObj = await getObjectByKey(db, organizationId, 'deal');
@@ -327,13 +324,15 @@ export async function seedSampleRecords(
     const accountContacts = contactIds.filter((c) => c.accountId === accountId);
     for (let j = 0; j < 3; j++) {
       const stage =
-        j === 0
-          ? 'closed_won'
-          : STAGES[(i + j) % (STAGES.length - 2)] ?? 'prospecting';
+        j === 0 ? 'closed_won' : (STAGES[(i + j) % (STAGES.length - 2)] ?? 'prospecting');
       const closed = stage === 'closed_won' || stage === 'closed_lost';
       const won = stage === 'closed_won';
       const amount = 15_000 + ((i * 5 + j * 13) % 12) * 12_500;
-      const probability = won ? 100 : stage === 'closed_lost' ? 0 : Math.min(85, 15 + j * 25 + i * 3);
+      const probability = won
+        ? 100
+        : stage === 'closed_lost'
+          ? 0
+          : Math.min(85, 15 + j * 25 + i * 3);
       const dueDays = closed ? -30 - i * 4 - j * 7 : 14 + j * 30;
       const primary = accountContacts[j % accountContacts.length];
       await createRecord(db, {
@@ -390,8 +389,7 @@ export async function seedSampleRecords(
           contact: c.id,
           related_account: c.accountId,
           due_date: isoOffsetDatetime(dueOffsetDays),
-          duration:
-            type === 'call' ? 30 : type === 'meeting' ? 60 : type === 'email' ? 10 : 20,
+          duration: type === 'call' ? 30 : type === 'meeting' ? 60 : type === 'email' ? 10 : 20,
           notes: 'Auto-seeded sample activity. Replace or delete freely.',
         },
       });

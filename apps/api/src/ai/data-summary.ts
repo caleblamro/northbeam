@@ -3,13 +3,7 @@
 // against truth instead of guessing. Cheap by design — bounded queries,
 // no scans bigger than the visible record count.
 
-import {
-  countRecords,
-  type FieldRow,
-  listRecords,
-  type ObjectRow,
-  sumField,
-} from '@northbeam/db';
+import { type FieldRow, type ObjectRow, countRecords, listRecords, sumField } from '@northbeam/db';
 import type { Database } from '@northbeam/db';
 import type { DataSummary } from './artifact-generator.js';
 
@@ -32,7 +26,9 @@ export async function buildDataSummary(
   // bounded on big workspaces) and tally in JS — the dynamic record layer
   // doesn't have a generic GROUP BY helper yet, and a sample is enough for
   // a CRM dashboard prompt.
-  const picklists = opts.fields.filter((f) => f.type === 'picklist').slice(0, PICKLIST_GROUPS_TO_INCLUDE);
+  const picklists = opts.fields
+    .filter((f) => f.type === 'picklist')
+    .slice(0, PICKLIST_GROUPS_TO_INCLUDE);
   const picklistCounts: DataSummary['picklistCounts'] = [];
   if (picklists.length > 0) {
     const rows = await listRecords(db, {
@@ -56,9 +52,7 @@ export async function buildDataSummary(
   }
 
   // First currency / number → sum + average.
-  const numericField = opts.fields.find(
-    (f) => f.type === 'currency' || f.type === 'number',
-  );
+  const numericField = opts.fields.find((f) => f.type === 'currency' || f.type === 'number');
   let numericSummary: DataSummary['numericSummary'] = null;
   if (numericField && recordCount > 0) {
     const sum = await sumField(db, {
