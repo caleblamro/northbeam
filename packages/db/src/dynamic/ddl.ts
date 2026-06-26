@@ -44,7 +44,9 @@ export async function createObjectTable(
   await db.execute(
     sql.raw(`create table if not exists ${tbl} (${SYSTEM_COLUMNS}${cols ? `,\n  ${cols}` : ''}\n)`),
   );
-  // Default indexes: name (search/sort), owner, and a partial-unique on salesforce_id.
+  // Default indexes: name (search/sort), owner, created_at (the default list
+  // sort — every list view / searchRefs orders by created_at desc), and a
+  // partial-unique on salesforce_id.
   await db.execute(
     sql.raw(
       `create unique index if not exists ${qid(`${table}_sfid_uq`)} on ${tbl} ("salesforce_id") where "salesforce_id" is not null`,
@@ -55,6 +57,11 @@ export async function createObjectTable(
   );
   await db.execute(
     sql.raw(`create index if not exists ${qid(`${table}_owner_idx`)} on ${tbl} ("owner_id")`),
+  );
+  await db.execute(
+    sql.raw(
+      `create index if not exists ${qid(`${table}_created_idx`)} on ${tbl} ("created_at" desc)`,
+    ),
   );
   for (const f of fields) if (f.indexed) await ensureFieldIndex(db, orgId, object, f);
 }
