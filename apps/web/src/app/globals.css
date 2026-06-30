@@ -1,12 +1,5 @@
 @import "tailwindcss";
 
-/* Tailwind v4 defaults the `dark:` variant to `@media (prefers-color-scheme: dark)`,
-   which fires whenever the user's OS is in dark mode — even when the app itself
-   is rendering light. Rebind `dark:` to our app-controlled `[data-theme="dark"]`
-   attribute so DiceUI components like `dark:bg-input/30` only paint when the
-   workspace is actually in dark mode. */
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-
 /* Northbeam design tokens + components — ported from design_handoff_northbeam/.
    Light is the default; dark is opt-in via [data-theme="dark"]. */
 @import "./tokens.css";
@@ -15,6 +8,13 @@
 @import "./components-nav.css";
 @import "./components-doc.css";
 @import "./components-app.css";
+
+/* Tailwind v4 defaults the `dark:` variant to `@media (prefers-color-scheme: dark)`,
+   which fires whenever the user's OS is in dark mode — even when the app itself
+   is rendering light. Rebind `dark:` to our app-controlled `[data-theme="dark"]`
+   attribute so DiceUI components like `dark:bg-input/30` only paint when the
+   workspace is actually in dark mode. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* Expose tokens to Tailwind v4 so utility classes resolve correctly.
    next/font sets --font-sans / --font-mono on <html> (see app/layout.tsx).

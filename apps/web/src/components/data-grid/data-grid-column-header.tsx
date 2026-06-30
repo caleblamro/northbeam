@@ -64,9 +64,8 @@ export function DataGridColumnHeader<TData, TValue>({
           const updated = [...prev];
           updated[existingSortIndex] = newSort;
           return updated;
-        } else {
-          return [...prev, newSort];
         }
+        return [...prev, newSort];
       });
     },
     [column.id, table],

@@ -2498,7 +2498,8 @@ function useDataGrid<TData>({
             }
             event.preventDefault();
             return;
-          } else if (isCtrlPressed && !shiftKey) {
+          }
+          if (isCtrlPressed && !shiftKey) {
             direction = 'home';
           } else {
             direction = 'left';
@@ -2539,7 +2540,8 @@ function useDataGrid<TData>({
             }
             event.preventDefault();
             return;
-          } else if (isCtrlPressed && !shiftKey) {
+          }
+          if (isCtrlPressed && !shiftKey) {
             direction = 'end';
           } else {
             direction = 'right';

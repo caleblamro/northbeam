@@ -77,6 +77,13 @@ export function DataTableFacetedFilter<TData, TValue>({
               tabIndex={0}
               className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               onClick={onReset}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onReset();
+                }
+              }}
             >
               <XCircle />
             </div>

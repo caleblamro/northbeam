@@ -10,7 +10,7 @@
 
 export { tokenize, type Token, TokenizeError } from './tokenize.js';
 export { parseFormula, collectFieldKeys, type AstNode, ParseError } from './parse.js';
-export { evaluateFormula, evaluateAst, EvalError, type EvalContext } from './evaluate.js';
+export { evaluateFormula, evaluateAst, FormulaEvalError, type EvalContext } from './evaluate.js';
 export { supportedFunctionNames, type FnHandler } from './functions.js';
 
 import { parseFormula } from './parse.js';

@@ -368,7 +368,7 @@ export function parseDurationMinutes(input: string): number | null {
   if (!s) return null;
 
   const colon = s.match(/^(\d+):([0-5]?\d)$/);
-  if (colon && colon[1] && colon[2]) {
+  if (colon?.[1] && colon[2]) {
     return Number(colon[1]) * 60 + Number(colon[2]);
   }
 

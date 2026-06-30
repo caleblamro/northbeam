@@ -47,7 +47,7 @@ export const aiRouter = router({
       // Wrapped in try/catch — a flaky summary shouldn't block generation,
       // and the prompt explicitly tells Claude to mark sample values when
       // the summary doesn't cover a metric.
-      let summary;
+      let summary: Awaited<ReturnType<typeof buildDataSummary>>;
       try {
         summary = await buildDataSummary(ctx.db, {
           orgId: ctx.auth.organizationId,

@@ -72,7 +72,7 @@ function pad(n: number): string {
   return n.toString().padStart(2, '0');
 }
 
-function parseValue(value: string | null | undefined, withTime: boolean): Date | undefined {
+function parseValue(value: string | null | undefined): Date | undefined {
   if (!value) return undefined;
   // Accept both 'YYYY-MM-DD' and 'YYYY-MM-DDTHH:mm[:ss]' inputs.
   const [d, t = '00:00'] = value.split('T');
@@ -117,7 +117,7 @@ export function DatePicker({
   disabled,
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
-  const date = parseValue(value, withTime);
+  const date = parseValue(value);
 
   const handleSelect = (d: Date | undefined) => {
     if (!d) {

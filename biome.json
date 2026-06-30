@@ -43,7 +43,13 @@
       "a11y": {
         "noAutofocus": "warn",
         "useKeyWithClickEvents": "warn",
-        "useSemanticElements": "warn"
+        "useSemanticElements": "warn",
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": {
+            "inputComponents": ["Checkbox", "RadioItem"]
+          }
+        }
       }
     }
   },

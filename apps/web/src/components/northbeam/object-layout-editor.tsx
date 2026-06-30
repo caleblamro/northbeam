@@ -40,7 +40,6 @@ interface LayoutEditorProps {
 
 function nextSectionId(taken: Set<string>): string {
   let i = taken.size + 1;
-  // biome-ignore lint/correctness/noConstantCondition: bounded by retry
   while (true) {
     const id = `section_${i}`;
     if (!taken.has(id)) return id;

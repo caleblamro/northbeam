@@ -98,6 +98,7 @@ export function DataGrid<TData>({
         aria-rowcount={rows.length + (onRowAddProp ? 1 : 0)}
         aria-colcount={columns.length}
         data-slot="grid"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: the grid is a focusable keyboard-navigation container
         tabIndex={0}
         ref={dataGridRef}
         className="relative grid select-none overflow-auto rounded-md border focus:outline-none"

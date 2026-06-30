@@ -440,22 +440,21 @@ const MASK_PATTERNS: Record<MaskPatternKey, MaskPattern> = {
           const num = Number.parseInt(segment, 10);
           return num <= 255;
         });
-      } else {
-        if (!REGEX_CACHE.digitsOnly.test(value)) return false;
-        if (value.length > 12) return false;
-
-        const chunks = [];
-        for (let i = 0; i < value.length; i += 3) {
-          chunks.push(value.substring(i, i + 3));
-        }
-
-        if (chunks.length > 4) return false;
-
-        return chunks.every((chunk) => {
-          const num = Number.parseInt(chunk, 10);
-          return num >= 0 && num <= 255;
-        });
       }
+      if (!REGEX_CACHE.digitsOnly.test(value)) return false;
+      if (value.length > 12) return false;
+
+      const chunks = [];
+      for (let i = 0; i < value.length; i += 3) {
+        chunks.push(value.substring(i, i + 3));
+      }
+
+      if (chunks.length > 4) return false;
+
+      return chunks.every((chunk) => {
+        const num = Number.parseInt(chunk, 10);
+        return num >= 0 && num <= 255;
+      });
     },
   },
   macAddress: {
@@ -570,10 +569,9 @@ function applyCurrencyMask(opts: {
       if (result.match(/^[^\d\s]+/)) {
         const finalResult = result.replace(/(\d)$/, `$1${decimalSeparator}`);
         return finalResult;
-      } else {
-        const finalResult = result.replace(/(\d)(\s*)([^\d\s]+)$/, `$1${decimalSeparator}$2$3`);
-        return finalResult;
       }
+      const finalResult = result.replace(/(\d)(\s*)([^\d\s]+)$/, `$1${decimalSeparator}$2$3`);
+      return finalResult;
     }
 
     return result;
@@ -683,15 +681,12 @@ function getCurrencyCaretPosition(opts: {
       const match = newValue.match(/(\d)\s*([^\d\s]+)$/);
       if (match?.[1]) {
         return newValue.lastIndexOf(match[1]) + 1;
-      } else {
-        return newValue.length;
       }
-    } else {
       return newValue.length;
     }
-  } else {
     return newValue.length;
   }
+  return newValue.length;
 }
 
 function getPatternCaretPosition(opts: {

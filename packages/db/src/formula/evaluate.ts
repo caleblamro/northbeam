@@ -25,10 +25,10 @@ export type EvalContext = {
   now?: Date;
 };
 
-export class EvalError extends Error {
+export class FormulaEvalError extends Error {
   constructor(message: string) {
     super(`Formula evaluate error: ${message}`);
-    this.name = 'EvalError';
+    this.name = 'FormulaEvalError';
   }
 }
 
@@ -130,10 +130,11 @@ export function evaluateAst(node: AstNode, ctx: EvalContext): unknown {
           return false;
         }
       }
+      throw new FormulaEvalError('unhandled binary operator');
     }
     case 'Call': {
       const fn = FUNCTIONS[node.name];
-      if (!fn) throw new EvalError(`unknown function '${node.name}'`);
+      if (!fn) throw new FormulaEvalError(`unknown function '${node.name}'`);
       const args = node.args.map((a) => evaluateAst(a, ctx));
       return fn(args, ctx);
     }

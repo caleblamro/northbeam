@@ -39,8 +39,13 @@ export class ParseError extends Error {
 
 class Parser {
   private idx = 0;
+  // tokenize() always appends a trailing EOF; keep it as a fallback so the
+  // index accessors stay total without a non-null assertion.
+  private readonly eof: Token;
 
-  constructor(private readonly toks: Token[]) {}
+  constructor(private readonly toks: Token[]) {
+    this.eof = toks[toks.length - 1] ?? { kind: 'EOF', value: '', pos: 0 };
+  }
 
   parse(): AstNode {
     const expr = this.parseOr();
@@ -52,11 +57,11 @@ class Parser {
   }
 
   private peek(): Token {
-    return this.toks[this.idx]!;
+    return this.toks[this.idx] ?? this.eof;
   }
 
   private eat(): Token {
-    const t = this.toks[this.idx]!;
+    const t = this.peek();
     this.idx++;
     return t;
   }

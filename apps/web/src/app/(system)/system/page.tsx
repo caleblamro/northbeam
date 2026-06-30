@@ -100,9 +100,9 @@ export default function SystemGalleryPage() {
             <div className="toc__brand-sub">Stripe-inspired · v0.1</div>
           </div>
         </div>
-        {SECTIONS.map((s, i) =>
+        {SECTIONS.map((s) =>
           'sec' in s ? (
-            <div className="toc__sec" key={`sec${i}`}>
+            <div className="toc__sec" key={s.sec}>
               {s.sec}
             </div>
           ) : (

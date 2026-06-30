@@ -193,7 +193,11 @@ function FilterChipEditor({
         Add filter
       </Button>
     ) : (
-      <ChipTrigger filter={filter as Filter} field={field as FieldDefLite} onRemove={onRemove!} />
+      <ChipTrigger
+        filter={filter as Filter}
+        field={field as FieldDefLite}
+        onRemove={onRemove ?? (() => {})}
+      />
     );
 
   return (

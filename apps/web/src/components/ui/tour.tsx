@@ -631,9 +631,9 @@ function Tour(props: TourProps) {
         store.notify();
       },
       notify: () => {
-        listenersRef.current.forEach((l) => {
+        for (const l of listenersRef.current) {
           l();
-        });
+        }
       },
       addStep: (stepData) => {
         const id = `step-${stepIdCounterRef.current.current++}`;
@@ -1328,6 +1328,7 @@ function TourArrow(props: TourArrowProps) {
       }}
     >
       <svg
+        aria-hidden="true"
         viewBox="0 0 30 10"
         preserveAspectRatio="none"
         width={width}

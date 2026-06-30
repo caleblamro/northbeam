@@ -458,7 +458,7 @@ function Rating(props: RatingProps) {
             onFocus={onFocus}
             onMouseDown={onMouseDown}
           />
-          <svg width="0" height="0" style={{ position: 'absolute' }}>
+          <svg aria-hidden="true" width="0" height="0" style={{ position: 'absolute' }}>
             <defs>
               <linearGradient id={getPartialFillGradientId(rootId, step)}>
                 {dir === 'rtl' ? (

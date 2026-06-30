@@ -333,6 +333,7 @@ function QRCodeSvg(props: QRCodeSvgProps) {
       {...svgProps}
       className={cn('relative max-h-(--qr-code-size) max-w-(--qr-code-size)', className)}
       style={{ width: context.size, height: context.size, ...style }}
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: renders the library-generated QR SVG markup — no user-controlled HTML
       dangerouslySetInnerHTML={{ __html: svgString }}
     />
   );
