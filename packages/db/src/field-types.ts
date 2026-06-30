@@ -77,12 +77,12 @@ export const FIELD_TYPES = [
   },
   // ── Advanced / derived (read-only) ───────────────────────────────────────
   //
-  // `formula` is now backed by the engine in src/formula/. `rollup` and `ai`
-  // remain inert until their respective workers ship (rollup needs aggregation
-  // over a child object; ai needs the LLM worker). Marking the inert ones
-  // `unavailable` hides them from the field-picker so a customer can't create
-  // one and see `null`. The types stay in the union so already-imported SF
-  // formula / rollup fields continue to render their existing value.
+  // `formula` and `rollup` are backed by the engine in src/formula/ +
+  // src/compute/. `ai` and `autonumber` remain inert until their workers ship
+  // (ai needs the LLM worker; autonumber needs the per-field sequence engine).
+  // Marking the inert ones `unavailable` hides them from the field-picker so a
+  // customer can't create one and see `null`. The types stay in the union so
+  // already-imported SF fields of those types continue to render.
   {
     id: 'formula',
     label: 'Formula',
@@ -96,7 +96,6 @@ export const FIELD_TYPES = [
     icon: 'sigma',
     group: 'Advanced',
     storage: 'computed',
-    unavailable: true,
   },
   {
     id: 'ai',
@@ -239,9 +238,16 @@ export type FormulaFieldConfig = BaseFieldConfig & {
   returnType?: FieldType;
 };
 
-/** rollup — `rollup` is semantically required. */
+/** rollup — `rollup` is semantically required.
+ *    - childObject: object_def.key of the child being aggregated
+ *    - via:         the child's reference field key that points back at THIS
+ *                   record's object (disambiguates multiple lookups to the parent)
+ *    - childField:  the child field key to aggregate (omit/ignored for count)
+ *    - fn:          count | sum | avg | min | max
+ *    - filter:      optional Northbeam formula evaluated per child; only children
+ *                   for which it is truthy are aggregated */
 export type RollupFieldConfig = BaseFieldConfig & {
-  rollup?: { childObject: string; childField: string; fn: RollupFn; filter?: string };
+  rollup?: { childObject: string; via: string; childField?: string; fn: RollupFn; filter?: string };
 };
 
 /** ai — `aiPrompt` is semantically required. */

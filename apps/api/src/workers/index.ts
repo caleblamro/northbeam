@@ -5,6 +5,7 @@
 
 import { logger } from '@northbeam/core';
 import { env } from '../lib/env.js';
+import { startComputeWorker } from './compute-worker.js';
 import { startSfImportWorker } from './sf-import-worker.js';
 
 // Fail-fast on missing env.
@@ -13,9 +14,12 @@ env();
 const sfImport = startSfImportWorker();
 logger.info({ worker: 'sf-import' }, 'worker.started');
 
+const compute = startComputeWorker();
+logger.info({ worker: 'compute' }, 'worker.started');
+
 async function shutdown(signal: NodeJS.Signals) {
   logger.info({ signal }, 'worker.shutting_down');
-  await sfImport.close();
+  await Promise.all([sfImport.close(), compute.close()]);
   process.exit(0);
 }
 

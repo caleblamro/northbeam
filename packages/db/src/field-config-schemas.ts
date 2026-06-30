@@ -82,12 +82,26 @@ const FormulaConfigSchema = BaseConfigSchema.extend({
 });
 
 const RollupConfigSchema = BaseConfigSchema.extend({
-  rollup: z.object({
-    childObject: z.string().min(1),
-    childField: z.string().min(1),
-    fn: z.enum(['sum', 'count', 'avg', 'min', 'max']),
-    filter: z.string().optional(),
-  }),
+  rollup: z
+    .object({
+      childObject: z.string().min(1),
+      via: z
+        .string()
+        .min(1, 'rollup requires `via` (the child lookup field pointing at this object)'),
+      childField: z.string().optional(),
+      fn: z.enum(['sum', 'count', 'avg', 'min', 'max']),
+      filter: z.string().optional(),
+    })
+    .superRefine((r, ctx) => {
+      // Every aggregate except COUNT needs a child field to aggregate.
+      if (r.fn !== 'count' && !r.childField) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `rollup fn '${r.fn}' requires a childField`,
+          path: ['childField'],
+        });
+      }
+    }),
 });
 
 const AiConfigSchema = BaseConfigSchema.extend({

@@ -87,6 +87,16 @@ export function displayName(
   return 'Untitled';
 }
 
+/** Every rollup field defined in the org. Small (rollups are rare); the caller
+ *  filters by the child object the rollup aggregates. Used to find which parent
+ *  rollups a child write invalidates. */
+export async function listRollupFields(db: DbExecutor, orgId: string): Promise<FieldRow[]> {
+  return db
+    .select()
+    .from(fieldDef)
+    .where(and(eq(fieldDef.organizationId, orgId), eq(fieldDef.type, 'rollup')));
+}
+
 /** Keep only keys that correspond to real (writable) fields on the object. */
 export function sanitizeData(
   fields: FieldRow[],

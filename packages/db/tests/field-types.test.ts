@@ -49,11 +49,11 @@ describe('FIELD_TYPES registry', () => {
 
 describe('PICKABLE_FIELD_TYPES', () => {
   it('excludes the inert compute types until their engines ship', () => {
-    // formula is now backed by src/formula/, so it IS pickable. rollup, ai,
-    // and autonumber remain unavailable until their engines land.
+    // formula + rollup are backed by src/formula/ + src/compute/, so they ARE
+    // pickable. ai and autonumber remain unavailable until their engines land.
     const ids = PICKABLE_FIELD_TYPES.map((f) => f.id);
     expect(ids).toContain('formula');
-    expect(ids).not.toContain('rollup');
+    expect(ids).toContain('rollup');
     expect(ids).not.toContain('ai');
     expect(ids).not.toContain('autonumber');
   });
@@ -68,12 +68,13 @@ describe('PICKABLE_FIELD_TYPES', () => {
 
 describe('isFieldTypeAvailable', () => {
   it('returns false for the still-inert compute types', () => {
-    expect(isFieldTypeAvailable('rollup')).toBe(false);
     expect(isFieldTypeAvailable('ai')).toBe(false);
     expect(isFieldTypeAvailable('autonumber')).toBe(false);
   });
 
-  it('returns true for every supported type, including formula', () => {
+  it('returns true for every supported type, including formula + rollup', () => {
+    expect(isFieldTypeAvailable('formula')).toBe(true);
+    expect(isFieldTypeAvailable('rollup')).toBe(true);
     expect(isFieldTypeAvailable('text')).toBe(true);
     expect(isFieldTypeAvailable('currency')).toBe(true);
     expect(isFieldTypeAvailable('reference')).toBe(true);

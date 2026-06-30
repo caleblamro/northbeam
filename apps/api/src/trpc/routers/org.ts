@@ -4,6 +4,8 @@
 
 import {
   ROLES,
+  getObjectByKey,
+  recomputeObjectPage,
   schema,
   seedSampleRecords,
   seedStandardObjects,
@@ -70,6 +72,21 @@ export const orgRouter = router({
           // un-create the org, since the metadata is already in place.
           try {
             await seedSampleRecords(tx, result.id);
+            // Populate formula + rollup columns on the seeded records so the
+            // workspace demonstrates the compute engine out of the gate (the
+            // sample inserts skip computed fields, like any record write).
+            const now = new Date();
+            for (const key of ['deal', 'account']) {
+              const owf = await getObjectByKey(tx, result.id, key);
+              if (owf) {
+                await recomputeObjectPage(tx, {
+                  orgId: result.id,
+                  object: owf.object,
+                  fields: owf.fields,
+                  now,
+                });
+              }
+            }
           } catch (err) {
             // eslint-disable-next-line no-console
             console.warn('[org.create] sample records seed failed', err);

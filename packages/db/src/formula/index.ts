@@ -9,8 +9,9 @@
 // field_def.config.formula and writes the result back to the record's column.
 
 export { tokenize, type Token, TokenizeError } from './tokenize.js';
-export { parseFormula, type AstNode, ParseError } from './parse.js';
+export { parseFormula, collectFieldKeys, type AstNode, ParseError } from './parse.js';
 export { evaluateFormula, evaluateAst, EvalError, type EvalContext } from './evaluate.js';
+export { supportedFunctionNames, type FnHandler } from './functions.js';
 
 import { parseFormula } from './parse.js';
 import { ParseError } from './parse.js';

@@ -66,6 +66,7 @@ export {
   listObjects,
   getObjectByKey,
   getObjectById,
+  listRollupFields,
   displayName,
   sanitizeData,
   type ObjectRow,
@@ -94,10 +95,14 @@ export {
 // validateFormula at write time so a malformed expression can't reach storage.
 export {
   evaluateFormula,
+  evaluateAst,
   parseFormula,
+  collectFieldKeys,
+  supportedFunctionNames,
   tokenize,
   validateFormula,
   type AstNode,
+  type EvalContext,
 } from './formula/index.js';
 // Native record CRUD (per-object physical tables).
 export {
@@ -110,9 +115,21 @@ export {
   deleteRecord,
   resolveRefLabels,
   listRelated,
+  listChildrenByRef,
   type RecordRow,
   type RelatedGroup,
 } from './dynamic/records.js';
+export { aggregateChildField } from './dynamic/rollups.js';
+// Compute orchestration — recompute formulas + rollups (topo-ordered) and the
+// cross-object context builder the pure evaluator reads from.
+export {
+  recomputeRecord,
+  recomputeAndPersist,
+  recomputeParentRollups,
+  recomputeObjectPage,
+  ComputeError,
+} from './compute/recompute.js';
+export { buildComputeContext } from './compute/context.js';
 // DDL engine + identifier/type helpers (used by seeding + the SF import engine).
 export {
   ensureSchema,

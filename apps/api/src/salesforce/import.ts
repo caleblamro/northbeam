@@ -26,6 +26,7 @@ import {
 } from '@northbeam/db';
 import type { SalesforceClient } from '@northbeam/salesforce';
 import { eq } from 'drizzle-orm';
+import { enqueueCompute } from '../queue/compute.js';
 import { flagIfAuthError } from './client.js';
 import type { MappedObject, ProposedField } from './mapper.js';
 
@@ -210,6 +211,13 @@ export async function executeRun(
         });
       });
       stats.refsResolved = (stats.refsResolved ?? 0) + result;
+    }
+
+    // 5 — compute pass: now that every object's records + references are
+    // loaded, populate formula/rollup columns. Enqueued off-thread (one backfill
+    // job per object) so the import itself completes promptly.
+    for (const plan of plans) {
+      await enqueueCompute({ orgId, objectKey: plan.obj.targetKey, reason: 'import' });
     }
 
     stats.currentObject = undefined;

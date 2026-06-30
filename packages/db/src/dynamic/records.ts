@@ -326,6 +326,28 @@ export async function resolveRefLabels(
   return labels;
 }
 
+/** Child records whose `refColumn` (a `f_<via>` reference column) points at
+ *  `parentId`. Used by the filtered roll-up path, which aggregates in app code
+ *  after evaluating the filter formula per child. Bounded by `limit` so a
+ *  pathological parent can't load an unbounded child set. */
+export async function listChildrenByRef(
+  db: DbExecutor,
+  opts: {
+    orgId: string;
+    object: ObjectRow;
+    fields: FieldRow[];
+    refColumn: string;
+    parentId: string;
+    limit?: number;
+  },
+): Promise<RecordRow[]> {
+  const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
+  const res = await db.execute(
+    sql`select * from ${tbl} where ${col(opts.refColumn)} = ${opts.parentId}::uuid limit ${opts.limit ?? 5000}`,
+  );
+  return asRows(res).map((r) => rowToRecord(opts.fields, r));
+}
+
 /** Records on OTHER objects that reference this record (reverse lookups). */
 export async function listRelated(
   db: DbExecutor,

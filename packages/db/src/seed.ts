@@ -582,6 +582,26 @@ export const STANDARD_OBJECTS: SeedObject[] = [
         label: 'Shipping address',
         type: 'address',
       },
+      // Roll-up summaries — aggregate the account's child deals. Computed by the
+      // engine on deal create/update/delete (and a backfill pass on seed).
+      {
+        key: 'total_pipeline',
+        label: 'Open pipeline',
+        type: 'rollup',
+        config: {
+          rollup: { childObject: 'deal', via: 'account', childField: 'amount', fn: 'sum' },
+          helpText: 'Sum of every linked deal’s amount. Rolled up automatically.',
+        },
+      },
+      {
+        key: 'deal_count',
+        label: 'Deals',
+        type: 'rollup',
+        config: {
+          rollup: { childObject: 'deal', via: 'account', fn: 'count' },
+          helpText: 'Number of deals linked to this account.',
+        },
+      },
       {
         key: 'description',
         label: 'Description',
@@ -594,7 +614,7 @@ export const STANDARD_OBJECTS: SeedObject[] = [
     ],
     layout: {
       compactKeys: ['industry', 'type', 'phone'],
-      statKeys: ['annual_revenue', 'employees'],
+      statKeys: ['total_pipeline', 'deal_count', 'annual_revenue'],
       listColumns: ['industry', 'type', 'employees', 'annual_revenue', 'phone'],
       sections: [
         {
@@ -616,6 +636,7 @@ export const STANDARD_OBJECTS: SeedObject[] = [
             'account_number',
           ],
         },
+        { id: 'pipeline', label: 'Pipeline', cols: 2, fields: ['total_pipeline', 'deal_count'] },
         { id: 'hierarchy', label: 'Hierarchy', cols: 1, fields: ['parent_account'] },
         { id: 'billing', label: 'Billing address', cols: 1, fields: ['billing_address'] },
         { id: 'shipping', label: 'Shipping address', cols: 1, fields: ['shipping_address'] },
@@ -851,6 +872,16 @@ export const STANDARD_OBJECTS: SeedObject[] = [
         },
       },
       {
+        key: 'weighted_amount',
+        label: 'Weighted amount',
+        type: 'formula',
+        config: {
+          formula: '{amount} * {probability} / 100',
+          returnType: 'currency',
+          helpText: 'Amount × probability — forecast-weighted value. Computed automatically.',
+        },
+      },
+      {
         key: 'close_date',
         label: 'Close date',
         type: 'date',
@@ -912,7 +943,7 @@ export const STANDARD_OBJECTS: SeedObject[] = [
     ],
     layout: {
       compactKeys: ['account', 'stage', 'close_date'],
-      statKeys: ['amount', 'probability'],
+      statKeys: ['amount', 'weighted_amount', 'probability'],
       listColumns: ['account', 'amount', 'stage', 'close_date', 'probability'],
       sections: [
         {
@@ -925,7 +956,7 @@ export const STANDARD_OBJECTS: SeedObject[] = [
           id: 'forecast',
           label: 'Forecast',
           cols: 2,
-          fields: ['amount', 'probability', 'close_date', 'forecast_category'],
+          fields: ['amount', 'probability', 'weighted_amount', 'close_date', 'forecast_category'],
         },
         {
           id: 'classification',

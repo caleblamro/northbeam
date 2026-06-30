@@ -20,6 +20,7 @@ import {
   pgTypeFor,
 } from '@northbeam/db';
 import type { DescribeField, SObjectDescribe } from '@northbeam/salesforce';
+import { transpileFormula } from './transpile.js';
 
 /** SF standard objects that map onto our seeded system objects. */
 export const STANDARD_TARGETS: Record<string, string> = {
@@ -196,12 +197,12 @@ export function mapSObject(
     let reason: string | undefined;
 
     if (type === 'formula') {
-      const ret = mapSalesforceType(f.type).type;
-      config.formula = f.calculatedFormula ?? '';
-      config.returnType = ret;
+      // Return type now; `config.formula` is set by the post-loop transpile
+      // pass (needs every field's final key to resolve references).
+      config.returnType = mapSalesforceType(f.type).type;
       status = 'review';
       confidence = 50;
-      reason = 'formula — native engine lands in the next chunk; excluded until then';
+      reason = 'formula pending transpile';
     } else if (type === 'picklist' || type === 'multipicklist') {
       config.options = f.picklistValues
         .filter((p) => p.active)
@@ -262,6 +263,28 @@ export function mapSObject(
       reason,
       populatedPct: pct,
     });
+  }
+
+  // Formula transpile pass — runs after every field has its final key so refs
+  // resolve. Same-object refs resolve to their NB key; cross-object paths and
+  // unsupported functions leave the field as 'review' (we never store an
+  // untranslated SF formula).
+  const sfNameToKey = new Map(fields.map((pf) => [pf.sfField, pf.key]));
+  for (const pf of fields) {
+    if (pf.type !== 'formula' || pf.status === 'skip') continue;
+    const sf = d.fields.find((x) => x.name === pf.sfField)?.calculatedFormula ?? '';
+    const result = transpileFormula(sf, (path) => sfNameToKey.get(path) ?? null);
+    if (result.ok) {
+      pf.config.formula = result.formula;
+      pf.status = 'mapped';
+      pf.confidence = 80;
+      pf.reason = undefined;
+    } else {
+      pf.config.formula = '';
+      pf.status = 'review';
+      pf.confidence = 40;
+      pf.reason = `formula needs review: ${result.reason}`;
+    }
   }
 
   const targetKey = STANDARD_TARGETS[d.name] ?? sfToKey(d.name);

@@ -100,8 +100,26 @@ describe('computed type configs', () => {
 
   it('rollup requires the descriptor', () => {
     expect(safeValidateFieldConfig('rollup', {}).ok).toBe(false);
-    const cfg = { rollup: { childObject: 'deal', childField: 'amount', fn: 'sum' as const } };
+    const cfg = {
+      rollup: { childObject: 'deal', via: 'account', childField: 'amount', fn: 'sum' as const },
+    };
     expect(validateFieldConfig('rollup', cfg)).toMatchObject(cfg);
+  });
+
+  it('rollup requires `via` (the child lookup field)', () => {
+    expect(
+      safeValidateFieldConfig('rollup', {
+        rollup: { childObject: 'deal', childField: 'amount', fn: 'sum' },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it('rollup count does not require a childField', () => {
+    expect(
+      safeValidateFieldConfig('rollup', {
+        rollup: { childObject: 'deal', via: 'account', fn: 'count' },
+      }).ok,
+    ).toBe(true);
   });
 
   it('rollup rejects an unknown aggregation fn', () => {

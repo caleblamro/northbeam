@@ -6,7 +6,6 @@ import {
   createRecord,
   deleteRecord,
   displayName,
-  evaluateFormula,
   getObjectByKey,
   getRecord,
   grantShare,
@@ -14,7 +13,8 @@ import {
   listRecords,
   listRelated,
   listSharesForRecord,
-  narrowFieldConfig,
+  recomputeAndPersist,
+  recomputeParentRollups,
   resolveRefLabels,
   revokeShare,
   sanitizeData,
@@ -192,13 +192,30 @@ export const recordRouter = router({
     .input(z.object({ objectKey: z.string(), data: dataSchema }))
     .mutation(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey);
-      return createRecord(ctx.db, {
+      const created = await createRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
         fields,
         data: sanitizeData(fields, input.data),
         ownerId: ctx.auth.userId,
       });
+      // Compute this record's own formulas/rollups in-transaction, then update
+      // any parent whose rollups this new child feeds.
+      const now = new Date();
+      const computed = await recomputeAndPersist(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        object,
+        fields,
+        recordId: created.id,
+        now,
+      });
+      await recomputeParentRollups(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        childObjectKey: object.key,
+        childData: created.data,
+        now,
+      });
+      return { ...created, data: { ...created.data, ...computed } };
     }),
 
   update: protectedProcedure
@@ -234,7 +251,26 @@ export const recordRouter = router({
         id: input.id,
         data: merged,
       });
-      return row;
+      // Recompute this record, then refresh parent rollups for BOTH the old and
+      // new reference targets (a child re-parented to a different record must
+      // update both the old and new parent's rollup).
+      const now = new Date();
+      const computed = await recomputeAndPersist(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        object,
+        fields,
+        recordId: input.id,
+        now,
+      });
+      for (const childData of [existing.data, merged]) {
+        await recomputeParentRollups(ctx.db, {
+          orgId: ctx.auth.organizationId,
+          childObjectKey: object.key,
+          childData,
+          now,
+        });
+      }
+      return row ? { ...row, data: { ...row.data, ...computed } } : row;
     }),
 
   remove: protectedProcedure
@@ -262,6 +298,13 @@ export const recordRouter = router({
         }
       }
       await deleteRecord(ctx.db, { orgId: ctx.auth.organizationId, object, id: input.id });
+      // The parent's rollups must drop this now-deleted child.
+      await recomputeParentRollups(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        childObjectKey: object.key,
+        childData: existing.data,
+        now: new Date(),
+      });
       return { ok: true as const };
     }),
 
@@ -340,10 +383,10 @@ export const recordRouter = router({
       return { ok: true as const };
     }),
 
-  /** Re-evaluate every formula field on a record from its current data, and
-   *  persist the new values. Pure-engine — no I/O beyond the record itself.
-   *  Triggered by the field-editor "Recalculate now" button and by a future
-   *  cron / change-stream worker; safe to call any time. */
+  /** Re-evaluate every formula + rollup field on a record (topologically
+   *  ordered, with cross-object resolution) and persist the new values.
+   *  Triggered by the field-editor "Recalculate now" button; safe to call any
+   *  time. Same-record writes already recompute automatically. */
   recompute: protectedProcedure
     .input(z.object({ objectKey: z.string(), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -355,34 +398,14 @@ export const recordRouter = router({
         id: input.id,
       });
       if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
-
-      const formulaFields = fields.filter((f) => f.type === 'formula');
-      if (!formulaFields.length) return { recomputed: 0 };
-
-      const next: Record<string, unknown> = { ...row.data };
-      let recomputed = 0;
-      for (const f of formulaFields) {
-        const cfg = narrowFieldConfig('formula', f.config);
-        if (!cfg.formula) continue;
-        try {
-          next[f.key] = evaluateFormula(cfg.formula, next);
-          recomputed++;
-        } catch (err) {
-          // Skip a single bad formula rather than failing the whole row —
-          // surface in the logger so a misconfigured field is visible.
-          next[f.key] = null;
-        }
-      }
-
-      await updateRecord(ctx.db, {
+      const values = await recomputeAndPersist(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
         fields,
-        id: input.id,
-        data: next,
-        includeComputed: true, // the compute path is allowed to write formula columns
+        recordId: input.id,
+        now: new Date(),
       });
-      return { recomputed };
+      return { recomputed: Object.keys(values).length };
     }),
 
   /** Typeahead for reference (lookup) fields: search a target object's records. */

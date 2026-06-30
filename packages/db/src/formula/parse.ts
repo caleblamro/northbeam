@@ -202,3 +202,27 @@ class Parser {
 export function parseFormula(input: string): AstNode {
   return new Parser(tokenize(input)).parse();
 }
+
+/** Every field key referenced by an AST, including dotted cross-object paths
+ *  (e.g. 'account.owner.name'). Used to build the formula dependency graph and
+ *  to know which references the compute-context builder must pre-resolve. */
+export function collectFieldKeys(node: AstNode, into: Set<string> = new Set()): Set<string> {
+  switch (node.kind) {
+    case 'Field':
+      into.add(node.key);
+      break;
+    case 'Unary':
+      collectFieldKeys(node.expr, into);
+      break;
+    case 'Binary':
+      collectFieldKeys(node.left, into);
+      collectFieldKeys(node.right, into);
+      break;
+    case 'Call':
+      for (const arg of node.args) collectFieldKeys(arg, into);
+      break;
+    default:
+      break;
+  }
+  return into;
+}
