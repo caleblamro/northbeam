@@ -6,36 +6,24 @@
 // this same UI flips to writable cells backed by a DB-stored role/permission
 // table, and the static map becomes the seed for the default policy.
 
+import { RoleCard } from '@/components/northbeam/role-card';
 import { SectionCard } from '@/components/northbeam/section-card';
-import { Badge } from '@/components/ui/badge';
+import { Callout } from '@/components/ui/callout';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/cn';
 // Import from the /roles subpath, not the barrel — the barrel pulls
 // logger.ts (pino) and auth.ts (server-only chokepoints) which Turbopack
 // can't bundle for the browser.
-import {
-  PERMISSION_GROUPS,
-  ROLES,
-  ROLE_DESCRIPTIONS,
-  ROLE_LABELS,
-  type Role,
-  can,
-} from '@northbeam/core/roles';
+import { PERMISSION_GROUPS, ROLES, ROLE_LABELS, can } from '@northbeam/core/roles';
 import { Check, Info, Minus } from 'lucide-react';
 
 export default function PermissionsSetupPage() {
   return (
     <>
-      <div className="flex items-start gap-3 rounded-md border bg-card px-4 py-3">
-        <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 text-sm">
-          <div className="font-medium text-foreground">Roles are read-only for now</div>
-          <p className="text-muted-foreground text-xs leading-relaxed">
-            This matrix shows the current built-in policy. Custom roles, per-record sharing rules,
-            and field-level security are coming in a follow-up.
-          </p>
-        </div>
-      </div>
+      <Callout variant="info" icon={Info} title="Roles are read-only for now">
+        This matrix shows the current built-in policy. Custom roles, per-record sharing rules, and
+        field-level security are coming in a follow-up.
+      </Callout>
 
       <SectionCard title="Roles">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -80,24 +68,6 @@ export default function PermissionsSetupPage() {
         </div>
       </SectionCard>
     </>
-  );
-}
-
-function RoleCard({ role }: { role: Role }) {
-  return (
-    <div className="rounded-md border bg-card p-4">
-      <div className="flex items-center gap-2">
-        <span className="font-medium text-foreground text-sm">{ROLE_LABELS[role]}</span>
-        {role === 'owner' && (
-          <Badge tone="accent" size="sm">
-            Singleton
-          </Badge>
-        )}
-      </div>
-      <p className="mt-1.5 text-muted-foreground text-xs leading-relaxed">
-        {ROLE_DESCRIPTIONS[role]}
-      </p>
-    </div>
   );
 }
 

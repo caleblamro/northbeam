@@ -353,3 +353,77 @@
 .split--secondary > .split__caret::before {
   background: var(--border-strong);
 }
+
+/* ============================================================
+   MOTION + STATE UTILITIES (showcase building blocks)
+   Reusable, token-driven helpers for page-load reveals and
+   hover lift. Purely additive — opt-in via class names.
+   ============================================================ */
+
+/* ---- Staggered page-load reveal ----
+   Fades + rises 6px → 0 over 0.4s with --ease-out.
+   Usage (per element):       <div class="reveal">…</div>
+   Usage (staggered list):    add .reveal-1 … .reveal-6 for +40ms steps,
+                              OR set inline style="--reveal-delay: 200ms".
+   The numbered helpers and the custom prop both feed animation-delay,
+   so a parent can stagger children either way. */
+@keyframes nb-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.reveal {
+  --reveal-delay: 0ms;
+  opacity: 0;
+  animation: nb-reveal 0.4s var(--ease-out) both;
+  animation-delay: var(--reveal-delay);
+}
+.reveal-1 {
+  --reveal-delay: 40ms;
+}
+.reveal-2 {
+  --reveal-delay: 80ms;
+}
+.reveal-3 {
+  --reveal-delay: 120ms;
+}
+.reveal-4 {
+  --reveal-delay: 160ms;
+}
+.reveal-5 {
+  --reveal-delay: 200ms;
+}
+.reveal-6 {
+  --reveal-delay: 240ms;
+}
+
+/* ---- Hover lift ----
+   Subtle rise + shadow on hover. Pair with any card/tile.
+   Usage: <div class="lift">…</div> */
+.lift {
+  transition: transform 0.16s var(--ease), box-shadow 0.16s var(--ease);
+}
+.lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---- Respect reduced-motion: kill transforms + animation ---- */
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    animation: none;
+  }
+  .lift {
+    transition: none;
+  }
+  .lift:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}

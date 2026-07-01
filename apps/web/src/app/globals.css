@@ -58,12 +58,18 @@
   --color-link: var(--accent);
   --color-link-foreground: var(--accent-hover);
 
-  /* Charts (placeholder palette — Northbeam-tuned later) */
-  --color-chart-1: var(--brand);
-  --color-chart-2: var(--accent);
-  --color-chart-3: var(--success);
-  --color-chart-4: var(--warning);
-  --color-chart-5: var(--danger);
+  /* Charts — accent + neutral ramp (retuned from a semantic green/amber/red
+     mix that clashed with the single-accent, minimal aesthetic). chart-1 is
+     the chromatic note (indigo accent) for the primary/forecast series;
+     chart-2..5 step down a near-black → muted neutral ramp so secondary
+     series read as quiet hairlines rather than a rainbow. Existing tokens
+     only. Semantic colors (success/warning/danger) stay reserved for status,
+     not data series. */
+  --color-chart-1: var(--accent);
+  --color-chart-2: var(--brand);
+  --color-chart-3: var(--ink-secondary);
+  --color-chart-4: var(--ink-muted);
+  --color-chart-5: var(--ink-subtle);
 
   /* Radii (let `rounded-md`, `rounded-lg` etc. follow Northbeam's scale) */
   --radius-sm: var(--radius-sm);

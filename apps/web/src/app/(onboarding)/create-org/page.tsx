@@ -90,11 +90,11 @@ export default function CreateOrgPage() {
 
   return (
     <form onSubmit={onSubmit}>
-      <h1 className="mb-2 font-semibold text-2xl tracking-tight">Create your workspace</h1>
-      <p className="mb-5 text-muted-foreground leading-relaxed">
+      <h1 className="reveal mb-2 font-semibold text-2xl tracking-tight">Create your workspace</h1>
+      <p className="reveal reveal-1 mb-6 text-muted-foreground leading-relaxed">
         This is where your contacts, accounts, and deals live. You can invite teammates later.
       </p>
-      <div className="flex flex-col gap-3.5">
+      <div className="reveal reveal-2 flex flex-col gap-4">
         <Field label="Workspace name" required htmlFor="org-name" error={errors.name?.message}>
           <InputGroup>
             <InputGroupAddon>
@@ -120,7 +120,7 @@ export default function CreateOrgPage() {
           </InputGroup>
         </Field>
       </div>
-      <div className="mt-4">
+      <div className="reveal reveal-3 mt-5">
         <Button type="submit" className="w-full" disabled={create.isPending}>
           {create.isPending && <Loader2 className="size-4 animate-spin" />}
           Create workspace

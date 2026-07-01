@@ -1,9 +1,13 @@
 'use client';
 
 import { PageActions } from '@/components/northbeam/app-shell';
+import { CreateCard } from '@/components/northbeam/create-card';
+import { EmptyState } from '@/components/northbeam/empty-state';
+import { IconTile } from '@/components/northbeam/icon-tile';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building2, ChartLine, Plus, RefreshCw, Zap } from 'lucide-react';
+import { Sparkline, fakeSeries } from '@/components/ui/sparkline';
+import { Building2, ChartLine, LayoutDashboard, Plus, RefreshCw, Zap } from 'lucide-react';
 
 type Dash = {
   id: string;
@@ -13,6 +17,8 @@ type Dash = {
   tiles: number;
   owner: string;
   shared?: boolean;
+  spark: 'bars' | 'line';
+  seed: number;
 };
 
 const DASHBOARDS: Dash[] = [
@@ -24,6 +30,8 @@ const DASHBOARDS: Dash[] = [
     tiles: 8,
     owner: 'Jordan Mills',
     shared: true,
+    spark: 'line',
+    seed: 17,
   },
   {
     id: 'd2',
@@ -32,6 +40,8 @@ const DASHBOARDS: Dash[] = [
     icon: Zap,
     tiles: 6,
     owner: 'Aisha Khan',
+    spark: 'bars',
+    seed: 41,
   },
   {
     id: 'd3',
@@ -41,6 +51,8 @@ const DASHBOARDS: Dash[] = [
     tiles: 5,
     owner: 'Ravi Teja',
     shared: true,
+    spark: 'line',
+    seed: 8,
   },
   {
     id: 'd4',
@@ -49,6 +61,8 @@ const DASHBOARDS: Dash[] = [
     icon: RefreshCw,
     tiles: 4,
     owner: 'System',
+    spark: 'bars',
+    seed: 23,
   },
 ];
 
@@ -62,35 +76,53 @@ export default function DashboardsPage() {
         </Button>
       </PageActions>
 
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {DASHBOARDS.map((d) => {
-          const IconCmp = d.icon;
-          return (
-            <Card key={d.id} className="cursor-pointer transition-shadow hover:shadow-sm">
+      {DASHBOARDS.length === 0 ? (
+        <EmptyState
+          icon={LayoutDashboard}
+          title="No dashboards yet"
+          body="Build a dashboard to track pipeline, activity, and account health in one place."
+          action={
+            <Button>
+              <Plus />
+              New dashboard
+            </Button>
+          }
+        />
+      ) : (
+        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {DASHBOARDS.map((d, i) => (
+            <Card
+              key={d.id}
+              className="reveal lift cursor-pointer gap-4"
+              style={{ '--reveal-delay': `${i * 40}ms` } as React.CSSProperties}
+            >
               <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="grid size-9 place-items-center rounded-md bg-primary/10 text-primary">
-                    <IconCmp className="size-4" />
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <IconTile icon={d.icon} tone={d.shared ? 'accent' : 'neutral'} />
+                    <div className="min-w-0">
+                      <CardTitle className="truncate">{d.name}</CardTitle>
+                      <p className="text-muted-foreground text-xs tabular-nums">{d.tiles} tiles</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <CardTitle>{d.name}</CardTitle>
-                    <p className="text-muted-foreground text-xs">{d.tiles} tiles</p>
-                  </div>
+                  <Sparkline
+                    data={fakeSeries(d.seed, d.spark === 'bars' ? 12 : 18)}
+                    variant={d.spark}
+                    height={26}
+                    color="var(--accent)"
+                    className="mt-0.5 text-link"
+                    aria-label={`${d.name} trend`}
+                  />
                 </div>
               </CardHeader>
               <CardContent className="text-muted-foreground text-sm leading-snug">
                 {d.desc}
               </CardContent>
             </Card>
-          );
-        })}
-        <Card className="grid cursor-pointer place-items-center border-dashed bg-transparent py-10 text-center text-muted-foreground hover:bg-muted/40">
-          <div>
-            <Plus className="mx-auto mb-2 size-5" />
-            <span className="font-semibold text-foreground">Create dashboard</span>
-          </div>
-        </Card>
-      </div>
+          ))}
+          <CreateCard label="Create dashboard" className="reveal reveal-4 min-h-full" />
+        </div>
+      )}
     </>
   );
 }

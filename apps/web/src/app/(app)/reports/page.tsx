@@ -1,9 +1,13 @@
 'use client';
 
 import { PageActions } from '@/components/northbeam/app-shell';
+import { InsightCard } from '@/components/northbeam/insight-card';
 import { SectionCard } from '@/components/northbeam/section-card';
 import { Button } from '@/components/ui/button';
+import { Chip } from '@/components/ui/chip';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
+import { Kbd } from '@/components/ui/kbd';
+import { Sparkline } from '@/components/ui/sparkline';
 import { fmtMoney } from '@/lib/mock-crm';
 import { AlertTriangle, ArrowRight, Plus, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
@@ -36,11 +40,9 @@ const INSIGHTS = [
   },
 ];
 
-const TONE_CLASS: Record<'danger' | 'warning' | 'success', string> = {
-  danger: 'bg-muted text-destructive',
-  warning: 'bg-muted text-[var(--warning)]',
-  success: 'bg-muted text-[var(--success)]',
-};
+// Mock forecast-vs-actual, in cents. Actual tracks just under forecast, closing the gap.
+const FORECAST = [62, 68, 71, 79, 84, 90, 96, 103, 110, 118, 126, 135].map((v) => v * 1000_00);
+const ACTUAL = [60, 64, 70, 74, 82, 86, 95, 99, 108, 114, 121, 129].map((v) => v * 1000_00);
 
 export default function ReportsPage() {
   const [q, setQ] = useState('');
@@ -54,77 +56,104 @@ export default function ReportsPage() {
         </Button>
       </PageActions>
 
-      <InputGroup className="mb-3">
-        <InputGroupAddon>
-          <Sparkles className="text-link" />
-        </InputGroupAddon>
-        <InputGroupInput
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Ask anything about your pipeline…"
-        />
-        <InputGroupAddon align="inline-end">
-          <Button size="sm">
-            Ask
-            <ArrowRight />
-          </Button>
-        </InputGroupAddon>
-      </InputGroup>
-      <div className="mb-7 flex flex-wrap gap-1.5">
+      <div className="reveal reveal-1 mb-3">
+        <InputGroup className="h-11 has-[[data-slot=input-group-control]:focus-visible]:border-accent has-[[data-slot=input-group-control]:focus-visible]:ring-accent/25">
+          <InputGroupAddon>
+            <Sparkles className="size-[1.125rem] text-accent" />
+          </InputGroupAddon>
+          <InputGroupInput
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Ask anything about your pipeline…"
+            className="text-[0.9375rem]"
+          />
+          <InputGroupAddon align="inline-end">
+            <Kbd>⌘K</Kbd>
+            <Button size="sm">
+              Ask
+              <ArrowRight />
+            </Button>
+          </InputGroupAddon>
+        </InputGroup>
+      </div>
+
+      <div className="reveal reveal-2 mb-7 flex flex-wrap gap-1.5">
         {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setQ(s)}
-            className="rounded-full border border-border bg-card px-3 py-1 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
-          >
+          <Chip key={s} selected={false} onClick={() => setQ(s)}>
             {s}
-          </button>
+          </Chip>
         ))}
       </div>
 
       <div className="mb-7 grid gap-3 md:grid-cols-3">
-        {INSIGHTS.map((i) => {
-          const IconCmp = i.icon;
-          return (
-            <SectionCard key={i.title}>
-              <div className="flex gap-3">
-                <div
-                  className={`grid size-8 shrink-0 place-items-center rounded-md ${TONE_CLASS[i.tone]}`}
-                >
-                  <IconCmp className="size-3.5" />
-                </div>
-                <div className="min-w-0">
-                  <h4 className="font-medium text-foreground text-sm">{i.title}</h4>
-                  <p className="mt-1 text-muted-foreground text-xs leading-snug">{i.body}</p>
-                </div>
-              </div>
-            </SectionCard>
-          );
-        })}
+        {INSIGHTS.map((i, idx) => (
+          <div
+            key={i.title}
+            className="reveal"
+            style={{ '--reveal-delay': `${120 + idx * 60}ms` } as React.CSSProperties}
+          >
+            <InsightCard icon={i.icon} tone={i.tone} title={i.title} body={i.body} />
+          </div>
+        ))}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <SectionCard title="Revenue forecast">
-          <p className="text-muted-foreground text-sm">
-            Forecast vs. actual chart placeholder. Wire to real data once the reports query layer
-            ships (#32 + #11).
-          </p>
-        </SectionCard>
+        <div className="reveal" style={{ '--reveal-delay': '320ms' } as React.CSSProperties}>
+          <SectionCard title="Revenue forecast">
+            <div className="mb-4 flex items-baseline gap-4 text-xs">
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <span className="inline-block h-0.5 w-3 rounded-full bg-accent" />
+                Forecast
+              </span>
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <span className="inline-block h-0.5 w-3 rounded-full bg-foreground" />
+                Actual
+              </span>
+              <span className="ml-auto font-medium text-foreground tabular-nums">
+                {fmtMoney(ACTUAL.at(-1) ?? 0)}{' '}
+                <span className="text-[var(--success)]">of {fmtMoney(FORECAST.at(-1) ?? 0)}</span>
+              </span>
+            </div>
+            <div className="relative h-[120px] w-full overflow-hidden">
+              <Sparkline
+                data={FORECAST}
+                variant="line"
+                width={640}
+                height={120}
+                color="var(--accent)"
+                className="absolute inset-0 h-full w-full"
+                aria-label="Forecasted revenue trend"
+              />
+              <Sparkline
+                data={ACTUAL}
+                variant="line"
+                width={640}
+                height={120}
+                color="var(--foreground)"
+                className="absolute inset-0 h-full w-full"
+                aria-label="Actual revenue trend"
+              />
+            </div>
+          </SectionCard>
+        </div>
         <div className="flex flex-col gap-4">
-          <SectionCard title="What changed this week">
-            <p className="text-sm leading-relaxed text-foreground">
-              Pipeline grew{' '}
-              <span className="font-medium text-[var(--success)]">+{fmtMoney(18_000_00)}</span> with
-              4 new deals. Two closed won, 3 slipped past close. Net new pipeline
-              <span className="font-medium text-[var(--success)]"> +12% MoM</span>.
-            </p>
-          </SectionCard>
-          <SectionCard title="Saved reports">
-            <p className="text-muted-foreground text-sm">
-              Saved-report list comes online with #11.
-            </p>
-          </SectionCard>
+          <div className="reveal" style={{ '--reveal-delay': '380ms' } as React.CSSProperties}>
+            <SectionCard title="What changed this week">
+              <p className="text-sm leading-relaxed text-foreground">
+                Pipeline grew{' '}
+                <span className="font-medium text-[var(--success)]">+{fmtMoney(18_000_00)}</span>{' '}
+                with 4 new deals. Two closed won, 3 slipped past close. Net new pipeline
+                <span className="font-medium text-[var(--success)]"> +12% MoM</span>.
+              </p>
+            </SectionCard>
+          </div>
+          <div className="reveal" style={{ '--reveal-delay': '440ms' } as React.CSSProperties}>
+            <SectionCard title="Saved reports">
+              <p className="text-muted-foreground text-sm">
+                Saved-report list comes online with #11.
+              </p>
+            </SectionCard>
+          </div>
         </div>
       </div>
     </>

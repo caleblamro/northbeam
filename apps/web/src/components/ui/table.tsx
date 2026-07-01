@@ -58,11 +58,14 @@ function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
       data-slot="table-row"
       className={cn(
         'group/row relative border-b transition-colors',
-        'hover:bg-muted/40 data-[state=selected]:bg-muted',
+        // Interactive treatment (hover tint + indigo edge marker) applies to
+        // body rows only — the header/footer rows use <TableRow> too, and
+        // shouldn't look clickable. Scope the hover/selected states to tbody.
+        '[tbody_&]:hover:bg-muted/40 data-[state=selected]:bg-muted',
         // Signature: 2px indigo edge marker on hover/selected — scales in
         // softly so it never feels harsh.
         'before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:scale-y-0 before:rounded-r before:bg-[var(--accent)] before:transition-transform',
-        'hover:before:scale-y-100 data-[state=selected]:before:scale-y-100',
+        '[tbody_&]:hover:before:scale-y-100 data-[state=selected]:before:scale-y-100',
         className,
       )}
       {...props}
