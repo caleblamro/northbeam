@@ -637,7 +637,12 @@ function useEmbeddedRecords(p: RecordTableProps, defaultLimit: number) {
       sort,
       limit: fetchLimit,
     },
-    { enabled: Boolean(objectKey), retry: false, meta: { silent: true }, placeholderData: (d) => d },
+    {
+      enabled: Boolean(objectKey),
+      retry: false,
+      meta: { silent: true },
+      placeholderData: (d) => d,
+    },
   );
 
   const fields = (query.data?.fields ?? []) as FieldDefLite[];

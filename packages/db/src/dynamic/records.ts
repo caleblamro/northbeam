@@ -15,8 +15,8 @@ import {
 } from '../queries/crm.js';
 import { fieldDef } from '../schema.js';
 import type { Filter, ViewSort } from '../views.js';
-import { buildFilterPredicates, buildOrderBy } from './filters-sql.js';
 import { multipicklistArray } from './bulk.js';
+import { buildFilterPredicates, buildOrderBy } from './filters-sql.js';
 import { SYS, qid, qualified } from './identifiers.js';
 import { COMPUTED, TEXT_TYPES, fromDb, toDb } from './pgtypes.js';
 
