@@ -29,9 +29,12 @@ type FieldRow = {
 export function FieldTableRow({
   field,
   toneMap,
+  onEdit,
 }: {
   field: FieldRow;
   toneMap: Record<string, TypeTone>;
+  /** Opens the field editor. System fields open too — config-only edit. */
+  onEdit?: () => void;
 }) {
   const cfg = field.config ?? {};
   const tone = toneMap[field.type] ?? 'text';
@@ -49,7 +52,10 @@ export function FieldTableRow({
                   <Info className="size-3.5" />
                 </span>
               </TooltipTrigger>
-              <TooltipContent>System field — managed by Northbeam, can't be edited.</TooltipContent>
+              <TooltipContent>
+                System field — managed by Northbeam. Label and options can be edited; it can't be
+                deleted or made optional.
+              </TooltipContent>
             </Tooltip>
           )}
         </div>
@@ -67,7 +73,7 @@ export function FieldTableRow({
           <Badge tone={tone} size="sm" className="uppercase tracking-wider">
             {field.type}
           </Badge>
-          {meta && <span className="text-muted-foreground text-xs">{meta}</span>}
+          {meta && <span className="max-w-48 truncate text-muted-foreground text-xs">{meta}</span>}
         </div>
       </TableCell>
       <TableCell className="text-center">
@@ -77,7 +83,13 @@ export function FieldTableRow({
         <BoolDot value={!!field.indexed} />
       </TableCell>
       <TableCell>
-        <Button variant="ghost" size="icon-sm" aria-label="Edit field" disabled>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Edit ${field.label}`}
+          disabled={!onEdit}
+          onClick={onEdit}
+        >
           <Pencil className="size-3.5" />
         </Button>
       </TableCell>
@@ -94,19 +106,18 @@ function BoolDot({ value }: { value: boolean }): ReactNode {
 }
 
 /** Short inline metadata to render next to the type pill (e.g., "→ account"
- *  for a reference, "USD" for a currency, "12 options" for a picklist). */
-function fieldMeta(
-  type: string,
-  cfg: {
-    targetObject?: string;
-    currencyCode?: string;
-    options?: { value: string; label: string }[];
-  },
-): string | null {
+ *  for a reference, "USD" for a currency, "12 options" for a picklist,
+ *  "SUM · deal.amount" for a rollup). */
+function fieldMeta(type: string, cfg: FieldConfig): string | null {
   if (type === 'reference' && cfg.targetObject) return `→ ${cfg.targetObject}`;
   if (type === 'currency' && cfg.currencyCode) return cfg.currencyCode;
   if ((type === 'picklist' || type === 'multipicklist') && cfg.options?.length) {
     return `${cfg.options.length} options`;
+  }
+  if (type === 'formula' && cfg.formula) return `= ${cfg.formula}`;
+  if (type === 'rollup' && cfg.rollup) {
+    const r = cfg.rollup;
+    return `${r.fn.toUpperCase()} · ${r.childObject}${r.childField ? `.${r.childField}` : ''}`;
   }
   return null;
 }

@@ -32,6 +32,10 @@ import type { MappedObject, ProposedField } from './mapper.js';
 
 const BATCH = 500;
 
+// Deliberate product cap, not a placeholder: a migration imports at most this
+// many records per object — it's a working slice of the org, not a full sync.
+export const MAX_RECORDS_PER_OBJECT = 100;
+
 type Plan = {
   mappingId: string;
   obj: MappedObject; // meta minus fields
@@ -130,7 +134,9 @@ export async function executeRun(
           ].filter((s): s is string => Boolean(s)),
         ),
       ];
-      const soql = `SELECT ${select.join(', ')} FROM ${plan.obj.sfObject}`;
+      // LIMIT enforces the per-object cap at the source — queryAll never
+      // streams more than MAX_RECORDS_PER_OBJECT rows for this object.
+      const soql = `SELECT ${select.join(', ')} FROM ${plan.obj.sfObject} LIMIT ${MAX_RECORDS_PER_OBJECT}`;
       const rtMap = rtMaps.get(plan.obj.targetKey) ?? new Map<string, string>();
 
       let batch: ImportRow[] = [];

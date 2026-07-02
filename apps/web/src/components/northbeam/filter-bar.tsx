@@ -579,8 +579,10 @@ export function FilterDialog({
   );
 }
 
-/* One row inside the FilterDialog: field selector + operator + value + trash. */
-function FilterRow({
+/* One row inside the FilterDialog: field selector + operator + value + trash.
+   Exported for reuse by the format-rules editor (object-rule-editors.tsx),
+   whose rule conditions are the same field/op/value rows. */
+export function FilterRow({
   index,
   row,
   fields,

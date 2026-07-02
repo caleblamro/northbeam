@@ -50,6 +50,20 @@
       "when": 1781720000000,
       "tag": "0006_rls_layout_share_audit_view",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782943234066,
+      "tag": "0007_picklist_validation_format_archive",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782943300000,
+      "tag": "0008_rls_global_picklist_validation",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,7 @@ export function ListView({
   refLabels,
   sort,
   onSortChange,
+  onCellEdit,
 }: ViewRendererProps) {
   const columnKeys = view.columns.length > 0 ? view.columns : fields.slice(0, 4).map((f) => f.key);
   const columns = columnKeys
@@ -37,6 +38,7 @@ export function ListView({
       objectKey={objectKey}
       sort={sort}
       onSortChange={onSortChange}
+      onCellEdit={onCellEdit}
     />
   );
 }

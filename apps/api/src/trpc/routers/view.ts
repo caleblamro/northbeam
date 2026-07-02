@@ -4,10 +4,14 @@
 
 import {
   type Filter,
+  GROUPABLE_TYPES,
+  NUMERIC_TYPES,
+  type ReportConfig,
   type ShareTarget,
   type ViewSort,
   type ViewType,
   getDefaultView,
+  getObjectById,
   getView,
   listViewsForUser,
   schema,
@@ -16,6 +20,8 @@ import {
 import { TRPCError } from '@trpc/server';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
+import type { Context } from '../context.js';
+import { FilterSchema } from '../schemas.js';
 import { permissionProcedure, protectedProcedure, router } from '../trpc.js';
 
 /* ── Zod shapes shared between mutations ────────────────────────────────── */
@@ -26,7 +32,7 @@ const ShareTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('user'), userId: z.string().min(1) }),
 ]) satisfies z.ZodType<ShareTarget>;
 
-const ViewTypeSchema = z.enum(['list', 'dashboard']) satisfies z.ZodType<ViewType>;
+const ViewTypeSchema = z.enum(['list', 'dashboard', 'report']) satisfies z.ZodType<ViewType>;
 
 const ViewIconSchema = z.enum([
   'list',
@@ -47,34 +53,11 @@ const ViewIconSchema = z.enum([
   'clock',
 ]);
 
-// Filter / Sort use the same FilterOp / direction enums the web layer does,
-// so the inferred Zod type lines up with the storage column type exactly.
-// Renderer-specific config validation lives on the web side — keeping the
-// API ignorant of the registry.
-const FilterOpSchema = z.enum([
-  'eq',
-  'neq',
-  'contains',
-  'startsWith',
-  'endsWith',
-  'gt',
-  'lt',
-  'gte',
-  'lte',
-  'before',
-  'after',
-  'isTrue',
-  'isFalse',
-  'isEmpty',
-  'isSet',
-]);
-
-const FilterSchema: z.ZodType<Filter> = z.object({
-  fieldKey: z.string().min(1),
-  op: FilterOpSchema,
-  value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
-});
-
+// Filter (imported from ../schemas.js) / Sort use the same FilterOp /
+// direction enums the web layer does, so the inferred Zod type lines up with
+// the storage column type exactly. Renderer-specific config validation lives
+// on the web side — with one exception: `report` configs execute server-side
+// (record.aggregate), so the server validates them (see assertReportConfig).
 const SortSchema: z.ZodType<ViewSort> = z.object({
   fieldKey: z.string().min(1),
   direction: z.enum(['asc', 'desc']),
@@ -82,11 +65,43 @@ const SortSchema: z.ZodType<ViewSort> = z.object({
 
 const KEY_RE = /^[a-z0-9](?:[a-z0-9-_]{0,46}[a-z0-9])?$/;
 
-const CreateInput = z.object({
+const ReportConfigSchema = z
+  .object({
+    groupBy: z.string().min(1).nullable(),
+    measure: z.object({
+      agg: z.enum(['count', 'sum', 'avg']),
+      fieldKey: z.string().min(1).optional(),
+    }),
+    chartType: z.enum(['bar', 'donut', 'line', 'kpi', 'table']),
+  })
+  .superRefine((cfg, ctx) => {
+    if (cfg.measure.agg !== 'count' && !cfg.measure.fieldKey) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `measure agg '${cfg.measure.agg}' requires a fieldKey`,
+        path: ['measure', 'fieldKey'],
+      });
+    }
+  }) satisfies z.ZodType<ReportConfig>;
+
+// The shared field shapes, sans defaults. CreateInput layers defaults on top;
+// UpdateInput stays default-free so a partial patch can't silently reset the
+// unspecified slots back to empty (zod applies .default() even through
+// .partial(), which would wipe a report's config on a label-only patch).
+const ViewFields = z.object({
   objectId: z.string().uuid(),
   key: z.string().regex(KEY_RE, 'lowercase letters, digits, dashes / underscores'),
   label: z.string().min(1).max(80),
   type: ViewTypeSchema,
+  icon: ViewIconSchema,
+  config: z.unknown(),
+  filters: z.array(FilterSchema),
+  sort: z.array(SortSchema),
+  columns: z.array(z.string()),
+  sharedWith: z.array(ShareTargetSchema),
+});
+
+const CreateInput = ViewFields.extend({
   icon: ViewIconSchema.default('list'),
   config: z.unknown().default({}),
   filters: z.array(FilterSchema).default([]),
@@ -95,9 +110,61 @@ const CreateInput = z.object({
   sharedWith: z.array(ShareTargetSchema).default([]),
 });
 
-const UpdateInput = CreateInput.partial().extend({
+const UpdateInput = ViewFields.partial().extend({
   id: z.string().uuid(),
 });
+
+/** `report` view configs are executed server-side by record.aggregate, so the
+ *  server must trust what it stores: parse the ReportConfig shape and check
+ *  every referenced field key (group-by groupable, measure numeric, filters
+ *  known) against the object's live field list. */
+async function assertReportConfig(
+  ctx: Context,
+  objectId: string,
+  config: unknown,
+  filters: Filter[],
+): Promise<void> {
+  if (!ctx.auth) throw new TRPCError({ code: 'UNAUTHORIZED' });
+  const parsed = ReportConfigSchema.safeParse(config ?? {});
+  if (!parsed.success) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `invalid report config: ${parsed.error.issues[0]?.message ?? 'malformed'}`,
+    });
+  }
+  const result = await getObjectById(ctx.db, ctx.auth.organizationId, objectId);
+  if (!result) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: `object '${objectId}' not found` });
+  }
+  const byKey = new Map(result.fields.map((f) => [f.key, f]));
+  const cfg = parsed.data;
+  if (cfg.groupBy) {
+    const f = byKey.get(cfg.groupBy);
+    if (!f || !GROUPABLE_TYPES.has(f.type)) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `'${cfg.groupBy}' is not a groupable field on '${result.object.key}'`,
+      });
+    }
+  }
+  if (cfg.measure.agg !== 'count') {
+    const f = cfg.measure.fieldKey ? byKey.get(cfg.measure.fieldKey) : undefined;
+    if (!f || !NUMERIC_TYPES.has(f.type)) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `measure field '${cfg.measure.fieldKey ?? ''}' must be a numeric field on '${result.object.key}'`,
+      });
+    }
+  }
+  for (const flt of filters) {
+    if (!byKey.has(flt.fieldKey)) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `filter field '${flt.fieldKey}' does not exist on '${result.object.key}'`,
+      });
+    }
+  }
+}
 
 export const viewRouter = router({
   /** All views the caller can see, optionally narrowed to one object. */
@@ -137,6 +204,9 @@ export const viewRouter = router({
   create: permissionProcedure('view.write')
     .input(CreateInput)
     .mutation(async ({ ctx, input }) => {
+      if (input.type === 'report') {
+        await assertReportConfig(ctx, input.objectId, input.config, input.filters);
+      }
       const shared =
         input.sharedWith.length > 0
           ? input.sharedWith
@@ -183,6 +253,16 @@ export const viewRouter = router({
       const isAdmin = ctx.auth.role === 'owner' || ctx.auth.role === 'admin';
       if (!isOwner && !isAdmin) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'only the view owner can edit this' });
+      }
+      // Re-validate the effective (patched) report spec — covers a config
+      // change, a type switch to 'report', and a filter change alike.
+      if ((input.type ?? existing.type) === 'report') {
+        await assertReportConfig(
+          ctx,
+          input.objectId ?? existing.objectId,
+          input.config !== undefined ? input.config : existing.config,
+          input.filters ?? existing.filters,
+        );
       }
       const { id, ...patch } = input;
       const [row] = await ctx.db

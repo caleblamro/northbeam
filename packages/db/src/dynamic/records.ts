@@ -67,6 +67,26 @@ function bindValue(field: FieldRow, value: unknown): SQL {
 
 const col = (name: string): SQL => sql.raw(qid(name));
 
+/** Row-visibility predicate for private objects — the caller owns the row, has
+ *  an explicit share, or is admin+ (in which case no predicate applies). Public
+ *  objects and missing ACLs also yield null (no restriction). Shared between
+ *  listRecords and aggregateRecords so report visibility ≡ list visibility. */
+export function aclPredicate(
+  object: ObjectRow,
+  acl?: { userId: string; sharedRecordIds: string[]; isAdminish: boolean },
+): SQL | null {
+  if (!acl || object.defaultVisibility !== 'private' || acl.isAdminish) return null;
+  const visParts: SQL[] = [sql`${col(SYS.ownerId)} = ${acl.userId}`];
+  if (acl.sharedRecordIds.length > 0) {
+    const ids = sql.join(
+      acl.sharedRecordIds.map((id) => sql`${id}::uuid`),
+      sql`, `,
+    );
+    visParts.push(sql`${col(SYS.id)} in (${ids})`);
+  }
+  return sql`(${sql.join(visParts, sql` or `)})`;
+}
+
 export async function listRecords(
   db: DbExecutor,
   opts: {
@@ -87,17 +107,8 @@ export async function listRecords(
   const clauses: SQL[] = [];
 
   // Visibility filter — only applies to private objects with non-admin caller.
-  if (opts.acl && opts.object.defaultVisibility === 'private' && !opts.acl.isAdminish) {
-    const visParts: SQL[] = [sql`${col(SYS.ownerId)} = ${opts.acl.userId}`];
-    if (opts.acl.sharedRecordIds.length > 0) {
-      const ids = sql.join(
-        opts.acl.sharedRecordIds.map((id) => sql`${id}::uuid`),
-        sql`, `,
-      );
-      visParts.push(sql`${col(SYS.id)} in (${ids})`);
-    }
-    clauses.push(sql`(${sql.join(visParts, sql` or `)})`);
-  }
+  const vis = aclPredicate(opts.object, opts.acl);
+  if (vis) clauses.push(vis);
 
   const term = opts.search?.trim();
   if (term) {
@@ -156,6 +167,35 @@ export async function countRecords(
   const res = await db.execute(sql`select count(*)::int as n from ${tbl}`);
   const row = asRows(res)[0];
   return Number((row?.n as number | undefined) ?? 0);
+}
+
+/** count(*) restricted to one record type — the record-type admin list shows
+ *  a live count per type. */
+export async function countByRecordType(
+  db: DbExecutor,
+  opts: { orgId: string; object: ObjectRow; recordTypeId: string },
+): Promise<number> {
+  const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
+  const res = await db.execute(
+    sql`select count(*)::int as n from ${tbl} where ${col(SYS.recordTypeId)} = ${opts.recordTypeId}::uuid`,
+  );
+  const row = asRows(res)[0];
+  return Number((row?.n as number | undefined) ?? 0);
+}
+
+/** Repoint every record on `fromId` to `toId` (`null` clears the type). Used
+ *  when a record type is deleted so its records fall back to the object's
+ *  default type. Returns how many rows moved. */
+export async function reassignRecordType(
+  db: DbExecutor,
+  opts: { orgId: string; object: ObjectRow; fromId: string; toId: string | null },
+): Promise<number> {
+  const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
+  const to = opts.toId === null ? sql`null` : sql`${opts.toId}::uuid`;
+  const res = await db.execute(
+    sql`update ${tbl} set ${col(SYS.recordTypeId)} = ${to} where ${col(SYS.recordTypeId)} = ${opts.fromId}::uuid returning ${col(SYS.id)}`,
+  );
+  return asRows(res).length;
 }
 
 /** Sum a numeric/currency field on the object's table. Returns 0 if no rows. */
@@ -243,6 +283,9 @@ export async function updateRecord(
      *  Reserved for the compute path; user-driven updates should leave this
      *  false so user input can't overwrite engine-managed values. */
     includeComputed?: boolean;
+    /** Repoints the record_type_id system column when set; `null` clears it.
+     *  Undefined leaves the current type untouched. */
+    recordTypeId?: string | null;
   },
 ): Promise<RecordRow | null> {
   const { orgId, object, fields, id, data, includeComputed = false } = opts;
@@ -251,6 +294,10 @@ export async function updateRecord(
     sql`${col(SYS.name)} = ${displayName(fields, data, object.nameExpression)}`,
     sql`${col(SYS.updatedAt)} = now()`,
   ];
+  if (opts.recordTypeId !== undefined) {
+    const rt = opts.recordTypeId === null ? sql`null` : sql`${opts.recordTypeId}::uuid`;
+    sets.push(sql`${col(SYS.recordTypeId)} = ${rt}`);
+  }
   for (const f of fields) {
     if (!(f.key in data)) continue;
     if (COMPUTED.has(f.type) && !includeComputed) continue;
@@ -323,6 +370,33 @@ export async function resolveRefLabels(
     );
     for (const row of asRows(res)) labels[String(row[SYS.id])] = String(row[SYS.name] ?? '');
   }
+  return labels;
+}
+
+/** id → display name for an explicit list of record ids on one target object.
+ *  The flat cousin of resolveRefLabels for callers that already hold the ids
+ *  (e.g. aggregate buckets grouped by a reference field) rather than rows. */
+export async function labelsForIds(
+  db: DbExecutor,
+  orgId: string,
+  targetObjectKey: string,
+  ids: string[],
+): Promise<Record<string, string>> {
+  const labels: Record<string, string> = {};
+  const unique = Array.from(new Set(ids.filter((id) => id.length > 0)));
+  if (!unique.length) return labels;
+  const target = await getObjectByKey(db, orgId, targetObjectKey);
+  if (!target) return labels;
+  const tbl = sql.raw(qualified(orgId, target.object.tableName));
+  // Same in-list expansion as resolveRefLabels — one bound param per id.
+  const values = sql.join(
+    unique.map((id) => sql`${id}::uuid`),
+    sql`, `,
+  );
+  const res = await db.execute(
+    sql`select ${col(SYS.id)}, ${col(SYS.name)} from ${tbl} where ${col(SYS.id)} in (${values})`,
+  );
+  for (const row of asRows(res)) labels[String(row[SYS.id])] = String(row[SYS.name] ?? '');
   return labels;
 }
 

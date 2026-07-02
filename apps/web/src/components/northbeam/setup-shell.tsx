@@ -11,7 +11,16 @@
 import { useCurrentRole } from '@/lib/can';
 import { cn } from '@/lib/cn';
 import { type Permission, can } from '@northbeam/core/roles';
-import { Building2, CreditCard, Database, FileClock, Plug, ShieldCheck, Users } from 'lucide-react';
+import {
+  Building2,
+  CreditCard,
+  Database,
+  FileClock,
+  ListChecks,
+  Plug,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -55,7 +64,15 @@ const SETUP_NAV: SetupNavGroup[] = [
   },
   {
     label: 'Customization',
-    items: [{ href: '/setup/objects', label: 'Object manager', icon: Database }],
+    items: [
+      { href: '/setup/objects', label: 'Object manager', icon: Database },
+      {
+        href: '/setup/picklists',
+        label: 'Picklists',
+        icon: ListChecks,
+        permission: 'object.manage',
+      },
+    ],
   },
   {
     label: 'Operations',

@@ -2,6 +2,7 @@
 
 import { PageActions } from '@/components/northbeam/app-shell';
 import { InsightCard } from '@/components/northbeam/insight-card';
+import { SavedReports } from '@/components/northbeam/saved-reports';
 import { SectionCard } from '@/components/northbeam/section-card';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
@@ -10,6 +11,7 @@ import { Kbd } from '@/components/ui/kbd';
 import { Sparkline } from '@/components/ui/sparkline';
 import { fmtMoney } from '@/lib/mock-crm';
 import { AlertTriangle, ArrowRight, Plus, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 
 const SUGGESTIONS = [
@@ -50,9 +52,11 @@ export default function ReportsPage() {
   return (
     <>
       <PageActions>
-        <Button variant="outline">
-          <Plus />
-          New report
+        <Button variant="outline" asChild>
+          <Link href="/reports/builder">
+            <Plus />
+            New report
+          </Link>
         </Button>
       </PageActions>
 
@@ -149,9 +153,7 @@ export default function ReportsPage() {
           </div>
           <div className="reveal" style={{ '--reveal-delay': '440ms' } as React.CSSProperties}>
             <SectionCard title="Saved reports">
-              <p className="text-muted-foreground text-sm">
-                Saved-report list comes online with #11.
-              </p>
+              <SavedReports />
             </SectionCard>
           </div>
         </div>

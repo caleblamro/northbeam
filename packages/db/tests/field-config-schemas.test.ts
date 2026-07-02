@@ -64,6 +64,28 @@ describe('picklist config', () => {
       false,
     );
   });
+
+  it('accepts a globalPicklistId instead of inline options', () => {
+    const cfg = { globalPicklistId: '6f1e0f9a-9df1-4a63-9a3e-2f5b1c9d0e4a' };
+    expect(validateFieldConfig('multipicklist', cfg)).toMatchObject(cfg);
+  });
+
+  it('rejects a config with neither options nor a globalPicklistId', () => {
+    expect(safeValidateFieldConfig('picklist', {}).ok).toBe(false);
+  });
+
+  it('rejects a config with both options and a globalPicklistId', () => {
+    expect(
+      safeValidateFieldConfig('picklist', {
+        options: [{ value: 'a', label: 'A' }],
+        globalPicklistId: '6f1e0f9a-9df1-4a63-9a3e-2f5b1c9d0e4a',
+      }).ok,
+    ).toBe(false);
+  });
+
+  it('rejects a non-uuid globalPicklistId', () => {
+    expect(safeValidateFieldConfig('picklist', { globalPicklistId: 'deal-stages' }).ok).toBe(false);
+  });
 });
 
 describe('reference config', () => {

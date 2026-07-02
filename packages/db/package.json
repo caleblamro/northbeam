@@ -10,6 +10,9 @@
     "./schema": "./src/schema.ts",
     "./roles": "./src/roles.ts",
     "./field-types": "./src/field-types.ts",
+    "./field-config-schemas": "./src/field-config-schemas.ts",
+    "./formula": "./src/formula/index.ts",
+    "./keys": "./src/keys.ts",
     "./views": "./src/views.ts"
   },
   "scripts": {

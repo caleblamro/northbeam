@@ -1,5 +1,10 @@
 export { logger } from './logger.js';
-export { NorthbeamError, type NorthbeamErrorCode } from './errors.js';
+export {
+  NorthbeamError,
+  ValidationFailedError,
+  type NorthbeamErrorCode,
+  type ValidationIssue,
+} from './errors.js';
 export { requires, may, requireSession, requireOrg, type AuthContext } from './auth.js';
 export {
   ROLES,

@@ -18,6 +18,10 @@ import {
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+// Mirrors MAX_RECORDS_PER_OBJECT in apps/api/src/salesforce/import.ts — the
+// deliberate per-object import cap (a working slice, not a full sync).
+export const MAX_RECORDS_PER_OBJECT = 100;
+
 export type RunObject = {
   id: string;
   sfObject: string;
@@ -65,7 +69,9 @@ export function ObjectMappingCard({
           {o.sfObject} → {meta.targetKey ?? '?'}
         </span>
         <Badge tone="neutral" size="sm">
-          {o.recordCount.toLocaleString()} records
+          {o.recordCount > MAX_RECORDS_PER_OBJECT
+            ? `${MAX_RECORDS_PER_OBJECT} of ${o.recordCount.toLocaleString()} records`
+            : `${o.recordCount.toLocaleString()} records`}
         </Badge>
         <span className="ml-auto text-muted-foreground text-xs tabular-nums">
           {counts.mapped} mapped · {counts.review} review · {counts.skip} skip

@@ -17,10 +17,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { RecordDrawer } from './app-bits';
 import { Field } from './field';
-import { type FieldDefLite, FieldInput } from './field-render';
+import { type FieldDefLite, FieldInput, READONLY_FIELD_TYPES } from './field-render';
 import type { Option } from './select-legacy';
 
-const READONLY = new Set(['formula', 'rollup', 'ai', 'autonumber']);
 const FULL_WIDTH = new Set(['textarea', 'multipicklist', 'address']);
 
 export function RecordFormDrawer({
@@ -44,7 +43,7 @@ export function RecordFormDrawer({
   refLabels?: Record<string, string>;
 }) {
   const utils = trpc.useUtils();
-  const editable = useMemo(() => fields.filter((f) => !READONLY.has(f.type)), [fields]);
+  const editable = useMemo(() => fields.filter((f) => !READONLY_FIELD_TYPES.has(f.type)), [fields]);
   const byKey = useMemo(() => new Map(editable.map((f) => [f.key, f])), [editable]);
 
   // Build the sections actually shown: layout sections (editable fields only) +

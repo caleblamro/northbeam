@@ -1,22 +1,36 @@
 // /trpc/record — generic CRUD over records of ANY object, driven by the metadata
 // layer. Every operation is org-scoped. Field values live in `data` (JSONB).
 
+import { ValidationFailedError } from '@northbeam/core';
 import {
+  type FieldRow,
+  type FormatRule,
+  GROUPABLE_TYPES,
+  NUMERIC_TYPES,
+  type PicklistOption,
+  aggregateRecords,
   canEditRecord,
   createRecord,
   deleteRecord,
   displayName,
   getObjectByKey,
   getRecord,
+  getRecordType,
   grantShare,
+  hydratePicklistOptions,
   isAdminish,
+  labelsForIds,
   listRecords,
   listRelated,
   listSharesForRecord,
+  listValidationRules,
+  narrowFieldConfig,
   recomputeAndPersist,
   recomputeParentRollups,
+  requiredIssues,
   resolveRefLabels,
   revokeShare,
+  ruleIssues,
   sanitizeData,
   updateRecord,
   visibleSharedRecordIds,
@@ -24,15 +38,36 @@ import {
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import type { Context } from '../context.js';
+import { FilterSchema } from '../schemas.js';
 import { protectedProcedure, router } from '../trpc.js';
 
 const dataSchema = z.record(z.string(), z.unknown());
 
-async function requireObject(ctx: Context, key: string) {
+async function requireObject(ctx: Context, key: string, opts?: { forWrite?: boolean }) {
   if (!ctx.auth) throw new TRPCError({ code: 'UNAUTHORIZED' });
   const result = await getObjectByKey(ctx.db, ctx.auth.organizationId, key);
   if (!result) throw new TRPCError({ code: 'NOT_FOUND', message: `object '${key}' not found` });
+  // Archived objects stay readable but reject record mutations.
+  if (opts?.forWrite && result.object.archivedAt) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: `object '${key}' is archived` });
+  }
   return result;
+}
+
+/** A recordTypeId sent with a write must be an active type on the object. */
+async function assertRecordType(
+  ctx: Context,
+  object: { id: string; key: string },
+  recordTypeId: string,
+): Promise<void> {
+  if (!ctx.auth) throw new TRPCError({ code: 'UNAUTHORIZED' });
+  const rt = await getRecordType(ctx.db, ctx.auth.organizationId, recordTypeId);
+  if (!rt || rt.objectId !== object.id || !rt.active) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `record type '${recordTypeId}' is not an active type on '${object.key}'`,
+    });
+  }
 }
 
 // Wire-friendly projections shared by list/get/related — the web app's
@@ -45,6 +80,7 @@ type ObjectRowLike = {
   icon: string;
   color: string;
   layout: unknown;
+  formatRules: FormatRule[];
 };
 function serializeObject(o: ObjectRowLike) {
   return {
@@ -55,6 +91,7 @@ function serializeObject(o: ObjectRowLike) {
     icon: o.icon,
     color: o.color,
     layout: o.layout,
+    formatRules: o.formatRules,
   };
 }
 type FieldRowLike = {
@@ -90,7 +127,8 @@ export const recordRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      const { object, fields } = await requireObject(ctx, input.objectKey);
+      const { object, fields: rawFields } = await requireObject(ctx, input.objectKey);
+      const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, rawFields);
       // Pre-resolve the caller's explicit-share record ids when the object
       // is private — listRecords folds them into the WHERE so SQL does the
       // filtering, not app code reading every row.
@@ -124,6 +162,7 @@ export const recordRouter = router({
           id: r.id,
           data: r.data,
           ownerId: r.ownerId,
+          recordTypeId: r.recordTypeId,
           name: displayName(fields, r.data, object.nameExpression),
           createdAt: r.createdAt,
           updatedAt: r.updatedAt,
@@ -135,7 +174,8 @@ export const recordRouter = router({
   get: protectedProcedure
     .input(z.object({ objectKey: z.string(), id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const { object, fields } = await requireObject(ctx, input.objectKey);
+      const { object, fields: rawFields } = await requireObject(ctx, input.objectKey);
+      const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, rawFields);
       // For a single record we just check whether *this* record has a share
       // for the caller; cheaper than the bulk visibleSharedRecordIds query.
       let hasShare = false;
@@ -163,6 +203,7 @@ export const recordRouter = router({
           id: row.id,
           data: row.data,
           ownerId: row.ownerId,
+          recordTypeId: row.recordTypeId,
           name: displayName(fields, row.data, object.nameExpression),
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
@@ -171,37 +212,148 @@ export const recordRouter = router({
       };
     }),
 
+  /** Group-by aggregation for report views and dashboard Chart nodes. Applies
+   *  the same visibility rules as `list` — the ACL predicate is shared with
+   *  listRecords server-side, so a report never counts a hidden row. */
+  aggregate: protectedProcedure
+    .input(
+      z.object({
+        objectKey: z.string(),
+        groupBy: z.string().nullish(),
+        measure: z.object({
+          agg: z.enum(['count', 'sum', 'avg']),
+          fieldKey: z.string().optional(),
+        }),
+        filters: z.array(FilterSchema).default([]),
+        limit: z.number().min(1).max(200).optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const { object, fields: rawFields } = await requireObject(ctx, input.objectKey);
+      const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, rawFields);
+      const byKey = new Map(fields.map((f) => [f.key, f]));
+
+      let groupField: FieldRow | null = null;
+      if (input.groupBy) {
+        const f = byKey.get(input.groupBy);
+        if (!f || !GROUPABLE_TYPES.has(f.type)) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `'${input.groupBy}' is not a groupable field on '${object.key}'`,
+          });
+        }
+        groupField = f;
+      }
+      let measureField: FieldRow | undefined;
+      if (input.measure.agg !== 'count') {
+        const f = input.measure.fieldKey ? byKey.get(input.measure.fieldKey) : undefined;
+        if (!f || !NUMERIC_TYPES.has(f.type)) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `measure field '${input.measure.fieldKey ?? ''}' must be a numeric field on '${object.key}'`,
+          });
+        }
+        measureField = f;
+      }
+
+      const sharedRecordIds =
+        object.defaultVisibility === 'private' && !isAdminish(ctx.auth.role)
+          ? await visibleSharedRecordIds(
+              ctx.db,
+              { orgId: ctx.auth.organizationId, userId: ctx.auth.userId, role: ctx.auth.role },
+              object.id,
+            )
+          : [];
+      const buckets = await aggregateRecords(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        object,
+        fields,
+        groupBy: groupField,
+        measure: { fn: input.measure.agg, field: measureField },
+        filters: input.filters,
+        acl: {
+          userId: ctx.auth.userId,
+          sharedRecordIds,
+          isAdminish: isAdminish(ctx.auth.role),
+        },
+        limit: input.limit,
+      });
+
+      // Reference buckets carry raw uuids — resolve them to display names so
+      // the client can label bars/slices without a second round trip.
+      let groupLabels: Record<string, string> | undefined;
+      if (groupField?.type === 'reference') {
+        const target = narrowFieldConfig('reference', groupField.config).targetObject;
+        const ids = buckets
+          .map((b) => b.group)
+          .filter((g): g is string => typeof g === 'string' && g.length > 0);
+        groupLabels = target
+          ? await labelsForIds(ctx.db, ctx.auth.organizationId, target, ids)
+          : {};
+      }
+      // Picklist buckets carry raw values — ship the (hydrated) options so the
+      // client can map value → label + color.
+      let options: PicklistOption[] | undefined;
+      if (groupField?.type === 'picklist') {
+        options = narrowFieldConfig('picklist', groupField.config).options ?? [];
+      }
+      return { buckets, groupLabels, options };
+    }),
+
   /** Records on other objects that reference this one — the Related panel. */
   related: protectedProcedure
     .input(z.object({ objectKey: z.string(), id: z.string() }))
     .query(async ({ ctx, input }) => {
       const groups = await listRelated(ctx.db, ctx.auth.organizationId, input.objectKey, input.id);
-      return groups.map((g) => ({
-        object: serializeObject(g.object),
-        via: { key: g.via.key, label: g.via.label },
-        fields: g.fields.map(serializeField),
-        rows: g.rows.map((r) => ({
-          id: r.id,
-          data: r.data,
-          name: displayName(g.fields, r.data),
-        })),
-      }));
+      const out = [];
+      for (const g of groups) {
+        const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, g.fields);
+        out.push({
+          object: serializeObject(g.object),
+          via: { key: g.via.key, label: g.via.label },
+          fields: fields.map(serializeField),
+          rows: g.rows.map((r) => ({
+            id: r.id,
+            data: r.data,
+            name: displayName(g.fields, r.data),
+          })),
+        });
+      }
+      return out;
     }),
 
   create: protectedProcedure
-    .input(z.object({ objectKey: z.string(), data: dataSchema }))
+    .input(
+      z.object({
+        objectKey: z.string(),
+        data: dataSchema,
+        recordTypeId: z.string().uuid().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
-      const { object, fields } = await requireObject(ctx, input.objectKey);
+      const { object, fields: rawFields } = await requireObject(ctx, input.objectKey, {
+        forWrite: true,
+      });
+      if (input.recordTypeId) await assertRecordType(ctx, object, input.recordTypeId);
+      const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, rawFields);
+      const data = sanitizeData(fields, input.data);
+      const now = new Date();
+      // Required + validation-rule checks. v1 limitation: rule conditions
+      // referencing formula/rollup keys see null on create (recompute runs
+      // after the save) and the stored values on update.
+      const rules = await listValidationRules(ctx.db, ctx.auth.organizationId, object.id);
+      const issues = [...requiredIssues(fields, data), ...ruleIssues(rules, data, now)];
+      if (issues.length) throw new ValidationFailedError(issues);
       const created = await createRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
         fields,
-        data: sanitizeData(fields, input.data),
+        data,
         ownerId: ctx.auth.userId,
+        recordTypeId: input.recordTypeId,
       });
       // Compute this record's own formulas/rollups in-transaction, then update
       // any parent whose rollups this new child feeds.
-      const now = new Date();
       const computed = await recomputeAndPersist(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
@@ -219,9 +371,20 @@ export const recordRouter = router({
     }),
 
   update: protectedProcedure
-    .input(z.object({ objectKey: z.string(), id: z.string(), data: dataSchema }))
+    .input(
+      z.object({
+        objectKey: z.string(),
+        id: z.string(),
+        data: dataSchema,
+        recordTypeId: z.string().uuid().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
-      const { object, fields } = await requireObject(ctx, input.objectKey);
+      const { object, fields: rawFields } = await requireObject(ctx, input.objectKey, {
+        forWrite: true,
+      });
+      if (input.recordTypeId) await assertRecordType(ctx, object, input.recordTypeId);
+      const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, rawFields);
       const existing = await getRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
@@ -244,17 +407,23 @@ export const recordRouter = router({
         }
       }
       const merged = { ...existing.data, ...sanitizeData(fields, input.data) };
+      const now = new Date();
+      // Checks run on the MERGED record so clearing a required field — or
+      // patching one field into a state a rule forbids — is caught.
+      const rules = await listValidationRules(ctx.db, ctx.auth.organizationId, object.id);
+      const issues = [...requiredIssues(fields, merged), ...ruleIssues(rules, merged, now)];
+      if (issues.length) throw new ValidationFailedError(issues);
       const row = await updateRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
         fields,
         id: input.id,
         data: merged,
+        recordTypeId: input.recordTypeId,
       });
       // Recompute this record, then refresh parent rollups for BOTH the old and
       // new reference targets (a child re-parented to a different record must
       // update both the old and new parent's rollup).
-      const now = new Date();
       const computed = await recomputeAndPersist(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
@@ -276,7 +445,7 @@ export const recordRouter = router({
   remove: protectedProcedure
     .input(z.object({ objectKey: z.string(), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { object, fields } = await requireObject(ctx, input.objectKey);
+      const { object, fields } = await requireObject(ctx, input.objectKey, { forWrite: true });
       // Delete needs the existing row to check the owner.
       const existing = await getRecord(ctx.db, {
         orgId: ctx.auth.organizationId,

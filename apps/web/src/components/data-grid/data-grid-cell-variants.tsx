@@ -508,7 +508,9 @@ export function NumberCell<TData>({
           onChange={onChange}
         />
       ) : (
-        <span data-slot="grid-cell-content">{value}</span>
+        <span data-slot="grid-cell-content">
+          {numberCellOpts?.display ? numberCellOpts.display(initialValue) : value}
+        </span>
       )}
     </DataGridCellWrapper>
   );
@@ -1257,6 +1259,9 @@ export function DateCell<TData>({
   const [value, setValue] = React.useState(initialValue ?? '');
   const containerRef = React.useRef<HTMLDivElement>(null);
 
+  const cellOpts = cell.column.columnDef.meta?.cell;
+  const dateCellOpts = cellOpts?.variant === 'date' ? cellOpts : null;
+
   const prevInitialValueRef = React.useRef(initialValue);
   if (initialValue !== prevInitialValueRef.current) {
     prevInitialValueRef.current = initialValue;
@@ -1324,7 +1329,9 @@ export function DateCell<TData>({
     >
       <Popover open={isEditing} onOpenChange={onOpenChange}>
         <PopoverAnchor asChild>
-          <span data-slot="grid-cell-content">{formatDateForDisplay(value)}</span>
+          <span data-slot="grid-cell-content">
+            {dateCellOpts?.display ? dateCellOpts.display(value) : formatDateForDisplay(value)}
+          </span>
         </PopoverAnchor>
         {isEditing && (
           <PopoverContent

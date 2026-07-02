@@ -22,14 +22,15 @@ import { cn } from '@/lib/cn';
 import type { FieldConfig, ObjectLayout } from '@northbeam/db/field-types';
 import { Loader2, Pencil, Users } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { ObjChip } from './app-bits';
 import { HidePageHead } from './app-shell';
 import { EmptyState } from './empty-state';
-import { type FieldDefLite, FieldInput, FieldValue } from './field-render';
+import { type FieldDefLite, FieldInput, FieldValue, READONLY_FIELD_TYPES } from './field-render';
 import { RecordFormDrawer } from './record-form';
-
-const READONLY = new Set(['formula', 'rollup', 'ai', 'autonumber']);
+import { RecordPeek } from './record-peek';
+import { StagePath, findStageField } from './stage-path';
+import { useParentChain } from './use-parent-chain';
 
 export function RecordView({ objectKey, id }: { objectKey: string; id: string }) {
   const [tab, setTab] = useState<'details' | 'related'>('details');
@@ -37,6 +38,12 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
 
   const rec = trpc.record.get.useQuery({ objectKey, id });
   const related = trpc.record.related.useQuery({ objectKey, id });
+  const parentChain = useParentChain({
+    objectKey,
+    recordId: id,
+    fields: rec.data?.fields as FieldDefLite[] | undefined,
+    data: rec.data?.row.data as Record<string, unknown> | undefined,
+  });
 
   if (rec.isLoading) return <LoadingScreen size="lg" />;
   if (!rec.data) {
@@ -53,17 +60,36 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
     : [{ id: 'all', label: 'Details', cols: 2 as const, fields: fields.map((f) => f.key) }];
   const relatedGroups = related.data ?? [];
   const relatedCount = relatedGroups.reduce((n, g) => n + g.rows.length, 0);
+  const stageField = findStageField(fields as FieldDefLite[]);
 
   return (
     <div className="flex flex-col gap-7">
       <HidePageHead />
 
       <nav className="flex items-center gap-1.5 text-sm" aria-label="Breadcrumb">
+        {parentChain.map((c) => (
+          <Fragment key={`${c.objectKey}.${c.id}`}>
+            <Link href={`/${c.objectKey}`} className="text-muted-foreground hover:text-foreground">
+              {c.objectLabelPlural}
+            </Link>
+            <span className="text-muted-foreground/60">/</span>
+            <RecordPeek objectKey={c.objectKey} id={c.id}>
+              <Link
+                href={`/${c.objectKey}/${c.id}`}
+                className="flex min-w-0 items-center gap-1.5 text-muted-foreground hover:text-foreground"
+              >
+                <ObjChip label={c.objectLabel} color={c.objectColor} size={16} />
+                <span className="truncate">{c.name}</span>
+              </Link>
+            </RecordPeek>
+            <span className="text-muted-foreground/60">/</span>
+          </Fragment>
+        ))}
         <Link href={`/${object.key}`} className="text-muted-foreground hover:text-foreground">
           {object.labelPlural}
         </Link>
         <span className="text-muted-foreground/60">/</span>
-        <span className="font-medium text-foreground">{row.name}</span>
+        <span className="truncate font-medium text-foreground">{row.name}</span>
       </nav>
 
       <header className="flex items-start gap-4">
@@ -100,6 +126,15 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
           Edit
         </Button>
       </header>
+
+      {stageField && (
+        <StagePath
+          objectKey={objectKey}
+          recordId={id}
+          field={stageField}
+          value={row.data[stageField.key]}
+        />
+      )}
 
       {statKeys.length > 0 && (
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-4">
@@ -214,12 +249,14 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
                       {g.rows.map((r) => (
                         <TableRow key={r.id} className="group cursor-pointer hover:bg-muted/40">
                           <TableCell>
-                            <Link
-                              href={`/${g.object.key}/${r.id}`}
-                              className="font-medium text-foreground after:absolute after:inset-0"
-                            >
-                              {r.name}
-                            </Link>
+                            <RecordPeek objectKey={g.object.key} id={r.id}>
+                              <Link
+                                href={`/${g.object.key}/${r.id}`}
+                                className="font-medium text-foreground after:absolute after:inset-0"
+                              >
+                                {r.name}
+                              </Link>
+                            </RecordPeek>
                           </TableCell>
                           {cols.map((c) => (
                             <TableCell key={c.key} className="text-muted-foreground">
@@ -272,7 +309,7 @@ function InlineField({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<unknown>(value);
   const cfg: FieldConfig = field.config ?? {};
-  const readOnly = READONLY.has(field.type);
+  const readOnly = READONLY_FIELD_TYPES.has(field.type);
 
   const update = trpc.record.update.useMutation({
     onSuccess: async () => {

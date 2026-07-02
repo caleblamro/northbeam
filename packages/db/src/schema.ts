@@ -8,9 +8,9 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { FieldConfig, FieldType, ObjectLayout } from './field-types.js';
+import type { FieldConfig, FieldType, ObjectLayout, PicklistOption } from './field-types.js';
 import type { Role } from './roles.js';
-import type { Filter, ShareTarget, ViewIcon, ViewSort, ViewType } from './views.js';
+import type { Filter, FormatRule, ShareTarget, ViewIcon, ViewSort, ViewType } from './views.js';
 
 type DefSource = 'system' | 'custom' | 'salesforce' | 'ai';
 
@@ -159,9 +159,16 @@ export const objectDef = pgTable(
     // (per record type / per audience) — see resolveLayout in queries/layout.ts.
     // Populated by the standard-object seed and the Salesforce importer.
     layout: jsonb('layout').$type<ObjectLayout>().notNull().default({}),
+    // Conditional formatting — Filter[]-based rules evaluated client-side.
+    // Object-global (unlike layout, which record-type/audience overrides can
+    // replace), so a sibling column rather than a layout key.
+    formatRules: jsonb('format_rules').$type<FormatRule[]>().notNull().default([]),
     // System objects are the standard four — present in every workspace, not deletable.
     isSystem: boolean('is_system').notNull().default(false),
     source: text('source').$type<DefSource>().notNull().default('custom'),
+    /** Soft-archive: hidden from pickers and blocked for writes, reads stay
+     *  live. NULL = active. Hard delete exists only for custom objects. */
+    archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
@@ -272,6 +279,56 @@ export const layoutDef = pgTable(
       t.audience,
       t.name,
     ),
+  }),
+);
+
+// Global picklist sets (SF Global Value Sets) — one shared option list many
+// picklist fields can draw from. A field opts in via config.globalPicklistId;
+// options are hydrated server-side at read time (reference-at-read), so
+// editing a set updates every assigned field with a single row write.
+export const globalPicklist = pgTable(
+  'global_picklist',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    values: jsonb('values').$type<PicklistOption[]>().notNull().default([]),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    orgName: uniqueIndex('global_picklist_org_name_uq').on(t.organizationId, t.name),
+  }),
+);
+
+// Validation rules — per-object Northbeam formula conditions that BLOCK a save
+// when they evaluate truthy (Salesforce semantics). Enforced in the record
+// write path (record.create/update/bulkCreate); the SF importer bypasses them.
+export const validationRule = pgTable(
+  'validation_rule',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    objectId: uuid('object_id')
+      .notNull()
+      .references(() => objectDef.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    // Northbeam formula (src/formula/) evaluated against the record's data.
+    condition: text('condition').notNull(),
+    errorMessage: text('error_message').notNull(),
+    /** Field key the error anchors to in the form. NULL = record-level. */
+    errorFieldKey: text('error_field_key'),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    objName: uniqueIndex('validation_rule_obj_name_uq').on(t.objectId, t.name),
   }),
 );
 

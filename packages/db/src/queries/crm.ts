@@ -2,7 +2,7 @@
 // live in per-object physical tables and are read/written by src/dynamic/records.ts
 // (the fully-native data model). This module only touches object_def / field_def.
 
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { DbExecutor } from '../client.js';
 import { fieldDef, objectDef } from '../schema.js';
 
@@ -10,11 +10,19 @@ export type ObjectRow = typeof objectDef.$inferSelect;
 export type FieldRow = typeof fieldDef.$inferSelect;
 export type ObjectWithFields = { object: ObjectRow; fields: FieldRow[] };
 
-export async function listObjects(db: DbExecutor, orgId: string): Promise<ObjectRow[]> {
+export async function listObjects(
+  db: DbExecutor,
+  orgId: string,
+  opts: { includeArchived?: boolean } = {},
+): Promise<ObjectRow[]> {
   return db
     .select()
     .from(objectDef)
-    .where(eq(objectDef.organizationId, orgId))
+    .where(
+      opts.includeArchived
+        ? eq(objectDef.organizationId, orgId)
+        : and(eq(objectDef.organizationId, orgId), isNull(objectDef.archivedAt)),
+    )
     .orderBy(asc(objectDef.label));
 }
 

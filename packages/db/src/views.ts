@@ -8,9 +8,11 @@ import type { Role } from './roles.js';
  *    - `dashboard`: composed layout (PageHeader / SectionCard / MetricGroup
  *      / DescriptionList / RecordTable / RecordGrid / Text). Hand-authorable
  *      and AI-authorable; the artifact lives in `view.config.artifact`.
+ *    - `report`: aggregate over one object (group-by + measure + chart). The
+ *      spec lives in `view.config` as a {@link ReportConfig}.
  *  AI generation itself is reachable only via the ⌘K palette — there is no
  *  separate `ai` view type. */
-export type ViewType = 'list' | 'dashboard';
+export type ViewType = 'list' | 'dashboard' | 'report';
 
 /** Where a view can be shared. `shared_with` on the view row is an array of
  *  these — dynamic enough for org-wide, role-scoped, or direct-to-user shares
@@ -74,4 +76,33 @@ export type Filter = {
   fieldKey: string;
   op: FilterOp;
   value?: FilterValue;
+};
+
+/* ── Format rules ───────────────────────────────────────────────────────────
+   Conditional formatting for an object's records, stored as
+   object_def.format_rules (JSONB). Conditions are plain Filter rows (AND-ed),
+   not formulas — they reuse the filter editor UI and the client-side
+   rowPassesFilters matcher. Evaluated client-side at v1. */
+export type FormatTone = 'red' | 'amber' | 'green' | 'blue' | 'purple' | 'gray';
+
+export type FormatRule = {
+  id: string;
+  label: string;
+  tone: FormatTone;
+  filters: Filter[];
+  active: boolean;
+};
+
+/* ── Report config ──────────────────────────────────────────────────────────
+   Type-specific config for `report` views: one object, an optional group-by
+   field, a measure, and a chart type. Lives in `view.config`; the shared
+   filters/sort slots on the view row still apply. */
+export type ReportAgg = 'count' | 'sum' | 'avg';
+
+export type ReportConfig = {
+  /** field key to bucket by; null = single-row totals. */
+  groupBy: string | null;
+  /** `fieldKey` is required unless `agg` is 'count'. */
+  measure: { agg: ReportAgg; fieldKey?: string };
+  chartType: 'bar' | 'donut' | 'line' | 'kpi' | 'table';
 };

@@ -1,0 +1,327 @@
+'use client';
+
+// Chart primitives for dashboard artifacts — BarList, Donut, StatTile.
+// Plain HTML/SVG, no chart dependency. Follows the dataviz design method:
+//   - BarList: ranked nominal categories, ONE hue for every bar (slot 1),
+//     bars ≤ 24px thick, 4px rounded data-end + square baseline edge,
+//     hairline recessive track, labels/values in text tokens only.
+//   - Donut: part-to-whole, ≤ 6 segments, fixed categorical slot order,
+//     2px surface-color gaps between segments (no strokes), total in the
+//     center, legend always present (swatch + label + value).
+//   - StatTile: sentence-case label, semibold PROPORTIONAL-figure value
+//     (tabular-nums is reserved for aligned columns, never big standalone
+//     numbers), signed delta colored by direction, optional 12-pt sparkline.
+// Tooltips enhance, never gate: BarList shows values as direct labels and
+// the Donut legend carries every value, so hover is a convenience.
+
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Sparkline } from '@/components/ui/sparkline';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/cn';
+import { type ReactNode, useState } from 'react';
+
+/* ── Chart ramp ──────────────────────────────────────────────────────────────
+   Local resolved ramp for `--color-chart-1..5` (globals.css @theme). The
+   tokens resolve to --accent / --brand / --ink-secondary / --ink-muted /
+   --ink-subtle: slots 2-5 are neutrals (OKLCH chroma ≈ 0.01) that fail the
+   categorical chroma floor — a gray can't do series-identity work — and the
+   dark-mode accent (#818cf8, L 0.68) sits just above the dark lightness band.
+   Snapped here to validated values instead of editing the tokens:
+     light: #4f46e5 #1baf7a #eda100 #e34948 #008300 → validator ALL PASS
+            (contrast WARN on slots 2-3 — relieved: BarList shows direct
+            value labels and the Donut always ships a legend with values)
+     dark:  #6366f1 #199e70 #c98500 #e66767 #008300 → validator ALL PASS
+   Slot 1 light IS the literal --accent value, so single-series charts stay
+   on brand. Verified with dataviz/scripts/validate_palette.js against the
+   real surfaces (--surface: #ffffff light / #101012 dark). */
+const CHART_RAMP_CSS = `
+.nb-chart {
+  --nb-chart-1: #4f46e5;
+  --nb-chart-2: #1baf7a;
+  --nb-chart-3: #eda100;
+  --nb-chart-4: #e34948;
+  --nb-chart-5: #008300;
+  --nb-chart-other: var(--ink-subtle);
+}
+[data-theme="dark"] .nb-chart {
+  --nb-chart-1: #6366f1;
+  --nb-chart-2: #199e70;
+  --nb-chart-3: #c98500;
+  --nb-chart-4: #e66767;
+  --nb-chart-5: #008300;
+}
+`;
+
+const SLOT_COLORS = [
+  'var(--nb-chart-1)',
+  'var(--nb-chart-2)',
+  'var(--nb-chart-3)',
+  'var(--nb-chart-4)',
+  'var(--nb-chart-5)',
+] as const;
+
+/** De-duplicated (React hoists by href) style carrying the validated ramp. */
+function ChartRampStyle() {
+  return (
+    <style href="nb-chart-ramp" precedence="medium">
+      {CHART_RAMP_CSS}
+    </style>
+  );
+}
+
+export type ChartDatum = {
+  label: string;
+  value: number;
+  /** Pre-formatted display value (currency etc). Falls back to toLocaleString. */
+  display?: string;
+  /** Marks the folded "Other" bucket — rendered in the de-emphasis hue. */
+  isOther?: boolean;
+};
+
+function displayOf(d: ChartDatum): string {
+  return d.display ?? d.value.toLocaleString('en-US');
+}
+
+/* ── BarList ────────────────────────────────────────────────────────────── */
+
+export function BarList({ items, className }: { items: ChartDatum[]; className?: string }) {
+  const max = Math.max(...items.map((d) => d.value), 1);
+  return (
+    <div className={cn('nb-chart flex flex-col gap-2.5', className)}>
+      <ChartRampStyle />
+      {items.map((d, i) => {
+        const pct = Math.max((Math.max(d.value, 0) / max) * 100, 0.5);
+        return (
+          <Tooltip key={`${d.label}-${i}`}>
+            {/* Hover-only enhancement — label AND value are already visible
+                as direct text on the row, so nothing is gated on the tooltip. */}
+            <TooltipTrigger asChild>
+              <div className="group">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="truncate text-[13px] text-foreground">{d.label}</span>
+                  <span className="shrink-0 text-[13px] text-muted-foreground tabular-nums">
+                    {displayOf(d)}
+                  </span>
+                </div>
+                {/* Track: hairline recessive, one step off surface. Bar: single
+                    hue (slot 1), 8px thick, 4px rounded data-end, square
+                    baseline edge. "Other" wears the de-emphasis hue. */}
+                <div className="mt-1 h-2 w-full rounded-r-[4px] bg-muted">
+                  <div
+                    className="h-full rounded-r-[4px] transition-[width] duration-300"
+                    style={{
+                      width: `${pct}%`,
+                      background: d.isOther ? 'var(--nb-chart-other)' : 'var(--nb-chart-1)',
+                    }}
+                  />
+                </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <span className="font-semibold tabular-nums">{displayOf(d)}</span>{' '}
+              <span className="opacity-80">{d.label}</span>
+            </TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Donut ──────────────────────────────────────────────────────────────── */
+
+const DONUT_SIZE = 168;
+const R_OUTER = 80;
+const R_INNER = 57; // 23px ring — same weight class as the bar spec (≤ 24px)
+const GAP_PX = 2; // surface-color gap between segments — the only separator
+
+function polar(r: number, angle: number): [number, number] {
+  const c = DONUT_SIZE / 2;
+  return [c + r * Math.sin(angle), c - r * Math.cos(angle)];
+}
+
+/** Annular sector path from `start` to `end` (radians from 12 o'clock, clockwise). */
+function sectorPath(start: number, end: number): string {
+  const large = end - start > Math.PI ? 1 : 0;
+  const [ox0, oy0] = polar(R_OUTER, start);
+  const [ox1, oy1] = polar(R_OUTER, end);
+  const [ix0, iy0] = polar(R_INNER, start);
+  const [ix1, iy1] = polar(R_INNER, end);
+  return [
+    `M ${ox0.toFixed(2)} ${oy0.toFixed(2)}`,
+    `A ${R_OUTER} ${R_OUTER} 0 ${large} 1 ${ox1.toFixed(2)} ${oy1.toFixed(2)}`,
+    `L ${ix1.toFixed(2)} ${iy1.toFixed(2)}`,
+    `A ${R_INNER} ${R_INNER} 0 ${large} 0 ${ix0.toFixed(2)} ${iy0.toFixed(2)}`,
+    'Z',
+  ].join(' ');
+}
+
+export function Donut({
+  segments,
+  totalDisplay,
+  className,
+}: {
+  /** ≤ 6 entries (fold the tail into "Other" before passing). Slot colors are
+   *  assigned in fixed categorical order; "Other" gets the de-emphasis hue. */
+  segments: ChartDatum[];
+  /** Center figure. Defaults to the localized sum of segment values. */
+  totalDisplay?: string;
+  className?: string;
+}) {
+  const [hover, setHover] = useState<{ x: number; y: number; i: number } | null>(null);
+  const total = segments.reduce((acc, s) => acc + Math.max(s.value, 0), 0);
+  const center = totalDisplay ?? total.toLocaleString('en-US');
+
+  const colorOf = (s: ChartDatum, i: number) =>
+    s.isOther ? 'var(--nb-chart-other)' : SLOT_COLORS[Math.min(i, SLOT_COLORS.length - 1)];
+
+  // Angular gap equivalent to GAP_PX at the ring's mid radius.
+  const pad = GAP_PX / ((R_OUTER + R_INNER) / 2);
+  let cursor = 0;
+  const arcs = segments.map((s, i) => {
+    const sweep = total > 0 ? (Math.max(s.value, 0) / total) * Math.PI * 2 : 0;
+    const start = cursor;
+    cursor += sweep;
+    if (sweep <= 0) return null;
+    const gap = segments.length > 1 ? pad / 2 : 0; // full circle → no gap
+    const a0 = start + gap;
+    const a1 = Math.max(cursor - gap, a0 + 0.004);
+    // A single full-circle segment can't be one SVG arc — split it in two.
+    if (sweep >= Math.PI * 2 - 0.0001) {
+      return { d: `${sectorPath(0, Math.PI)} ${sectorPath(Math.PI, Math.PI * 2)}`, i, mid: 0 };
+    }
+    return { d: sectorPath(a0, a1), i, mid: (a0 + a1) / 2 };
+  });
+
+  if (total <= 0) {
+    return <p className="text-muted-foreground text-sm">No data to chart.</p>;
+  }
+
+  return (
+    <div className={cn('nb-chart flex flex-wrap items-center gap-x-8 gap-y-4', className)}>
+      <ChartRampStyle />
+      <div className="relative shrink-0" style={{ width: DONUT_SIZE, height: DONUT_SIZE }}>
+        <svg
+          viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`}
+          width={DONUT_SIZE}
+          height={DONUT_SIZE}
+          role="img"
+          aria-label={`Donut chart, total ${center}`}
+        >
+          {arcs.map((arc) => {
+            if (!arc) return null;
+            const s = segments[arc.i];
+            if (!s) return null;
+            return (
+              <path
+                key={arc.i}
+                d={arc.d}
+                fill={colorOf(s, arc.i)}
+                className="outline-none transition-opacity"
+                opacity={hover === null || hover.i === arc.i ? 1 : 0.45}
+                tabIndex={0}
+                aria-label={`${s.label}: ${displayOf(s)}`}
+                onMouseMove={(e) => {
+                  const box = e.currentTarget.ownerSVGElement?.getBoundingClientRect();
+                  if (box) setHover({ x: e.clientX - box.left, y: e.clientY - box.top, i: arc.i });
+                }}
+                onMouseLeave={() => setHover(null)}
+                onFocus={() => {
+                  const [x, y] = polar((R_OUTER + R_INNER) / 2, arc.mid);
+                  setHover({ x, y, i: arc.i });
+                }}
+                onBlur={() => setHover(null)}
+              />
+            );
+          })}
+        </svg>
+        {/* Center total — the donut's one direct label. Proportional figures. */}
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <span className="font-semibold text-foreground text-xl tracking-tight">{center}</span>
+          <span className="text-[11px] text-muted-foreground">Total</span>
+        </div>
+        {hover !== null && segments[hover.i] && (
+          <div
+            className="pointer-events-none absolute z-10 w-max rounded-md bg-primary px-2.5 py-1 text-primary-foreground text-xs shadow-md"
+            style={{ left: hover.x, top: hover.y - 10, transform: 'translate(-50%, -100%)' }}
+          >
+            <span className="font-semibold tabular-nums">
+              {displayOf(segments[hover.i] as ChartDatum)}
+            </span>{' '}
+            <span className="opacity-80">{(segments[hover.i] as ChartDatum).label}</span>
+          </div>
+        )}
+      </div>
+      {/* Legend — always present; the accessible home of every value. */}
+      <ul className="m-0 flex min-w-36 list-none flex-col gap-1.5 p-0">
+        {segments.map((s, i) => (
+          <li key={`${s.label}-${i}`} className="flex items-center gap-2 text-[13px]">
+            <span
+              aria-hidden="true"
+              className="size-2.5 shrink-0 rounded-[2px]"
+              style={{ background: colorOf(s, i) }}
+            />
+            <span className="min-w-0 flex-1 truncate text-foreground">{s.label}</span>
+            <span className="text-muted-foreground tabular-nums">{displayOf(s)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ── StatTile ───────────────────────────────────────────────────────────── */
+
+export function StatTile({
+  label,
+  value,
+  delta,
+  spark,
+  loading,
+  className,
+}: {
+  /** Sentence case, no trailing colon. */
+  label: ReactNode;
+  value?: ReactNode;
+  delta?: { text: ReactNode; trend?: 'up' | 'down' | 'neutral' };
+  /** Optional 12-point trend series. */
+  spark?: number[];
+  loading?: boolean;
+  className?: string;
+}) {
+  return (
+    <Card className={cn('nb-chart gap-0 px-5 py-4', className)}>
+      <ChartRampStyle />
+      <div className="font-medium text-[13px] text-muted-foreground">{label}</div>
+      <div className="mt-1.5 flex items-end justify-between gap-3">
+        {/* Big standalone number → proportional figures, never tabular-nums. */}
+        <div className="min-h-8 font-semibold text-2xl text-foreground tracking-tight">
+          {loading || value === undefined ? <Skeleton className="h-7 w-20" /> : value}
+        </div>
+        {spark && spark.length > 1 && !loading && (
+          <Sparkline
+            data={spark.slice(-12)}
+            variant="line"
+            height={24}
+            width={72}
+            color="var(--nb-chart-1)"
+            className="mb-0.5"
+            aria-label="Trend"
+          />
+        )}
+      </div>
+      {delta && !loading && (
+        <div
+          className={cn('mt-1 font-medium text-[11px]', {
+            'text-[var(--success)]': delta.trend === 'up',
+            'text-destructive': delta.trend === 'down',
+            'text-muted-foreground': delta.trend === 'neutral' || !delta.trend,
+          })}
+        >
+          {delta.text}
+        </div>
+      )}
+    </Card>
+  );
+}

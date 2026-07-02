@@ -1,11 +1,11 @@
 'use client';
 
-// Object Manager — Salesforce-style index of every object in the workspace.
-// Read-only scaffold for now: the field editor + layout customizer (#18) will
-// open from a row click in a follow-up. The data model is already in place —
-// objectDef / fieldDef — so we just surface what exists.
+// Object Manager — Salesforce-style index of every object in the workspace
+// (including archived ones, so they stay reachable for unarchiving). Custom
+// objects are created here via the New-object wizard.
 
 import { EmptyState } from '@/components/northbeam/empty-state';
+import { NewObjectDialog } from '@/components/northbeam/new-object-dialog';
 import { SectionCard } from '@/components/northbeam/section-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,30 +18,34 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { trpc } from '@/lib/api';
+import { useCan } from '@/lib/can';
 import { ChevronRight, Database, Plus } from 'lucide-react';
 // Database stays — used by the empty state below.
 import Link from 'next/link';
 
 export default function ObjectManagerPage() {
-  const objects = trpc.object.list.useQuery();
+  const objects = trpc.object.list.useQuery({ includeArchived: true });
+  const canManage = useCan('object.manage');
   const rows = objects.data ?? [];
+
+  const newObjectButton = (
+    <Button variant="outline" disabled={!canManage}>
+      <Plus />
+      New object
+    </Button>
+  );
 
   return (
     <SectionCard
       title="Object manager"
-      action={
-        <Button variant="outline" disabled>
-          <Plus />
-          New object
-        </Button>
-      }
+      action={canManage ? <NewObjectDialog trigger={newObjectButton} /> : newObjectButton}
       padding="none"
     >
       {objects.isSuccess && rows.length === 0 ? (
         <EmptyState
           icon={Database}
           title="No objects yet"
-          body="Standard objects are seeded when a workspace is created. Custom objects will be createable from here."
+          body="Standard objects are seeded when a workspace is created. Use New object to add a custom one."
           size="sm"
         />
       ) : (
@@ -72,9 +76,16 @@ export default function ObjectManagerPage() {
                   </code>
                 </TableCell>
                 <TableCell>
-                  <Badge tone={obj.isSystem ? 'neutral' : 'brand'} size="sm">
-                    {obj.isSystem ? 'Standard' : 'Custom'}
-                  </Badge>
+                  <span className="flex items-center gap-1">
+                    <Badge tone={obj.isSystem ? 'neutral' : 'brand'} size="sm">
+                      {obj.isSystem ? 'Standard' : 'Custom'}
+                    </Badge>
+                    {obj.archivedAt ? (
+                      <Badge tone="warning" size="sm">
+                        Archived
+                      </Badge>
+                    ) : null}
+                  </span>
                 </TableCell>
                 <TableCell className="text-muted-foreground text-xs capitalize">
                   {obj.source ?? 'native'}

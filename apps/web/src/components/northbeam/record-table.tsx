@@ -33,6 +33,8 @@ interface RecordTableProps {
   rowHeight?: number;
   sort?: ViewSort[];
   onSortChange?: (sort: ViewSort[]) => void;
+  /** Patch one or more fields on a record — enables inline cell editing. */
+  onCellEdit?: (recordId: string, patch: Record<string, unknown>) => void;
 }
 
 export function RecordTable({
@@ -44,6 +46,7 @@ export function RecordTable({
   rowHeight = 36,
   sort,
   onSortChange,
+  onCellEdit,
 }: RecordTableProps) {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(defaultPageSize);
@@ -65,6 +68,7 @@ export function RecordTable({
         height={Math.min(560, 44 + pageSize * rowHeight)}
         sort={sort}
         onSortChange={onSortChange}
+        onCellEdit={onCellEdit}
       />
       <TablePagination
         pageIndex={safePageIndex}

@@ -22,7 +22,7 @@ export type FilterField = { key: string; columnName: string; type: FieldType };
 const col = (name: string): SQL => sql.raw(qid(name));
 
 /** Types stored in a Postgres `numeric`/`bigint` column — compared as numbers. */
-const NUMERIC_TYPES: ReadonlySet<FieldType> = new Set<FieldType>([
+export const NUMERIC_TYPES: ReadonlySet<FieldType> = new Set<FieldType>([
   'number',
   'currency',
   'percent',

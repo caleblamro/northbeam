@@ -32,6 +32,9 @@ export type ViewRendererProps = {
   onRowEdit(row: { id: string; data: Record<string, unknown> }): void;
   /** Click "Delete" in a row menu → confirm + remove. */
   onRowDelete(id: string): void;
+  /** Patch one or more fields on a record (inline cell edit). Renderers treat
+   *  absence as read-only. */
+  onCellEdit?: (recordId: string, patch: Record<string, unknown>) => void;
   /** When the dispatcher is rendering a synthetic / transient overlay (e.g.
    *  `?type=ai` without a persisted view), a renderer can call this to open
    *  the save-view dialog so the user can persist their in-progress state.

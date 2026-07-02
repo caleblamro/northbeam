@@ -213,11 +213,16 @@ export type AddressValue = {
 /** checkbox */
 export type CheckboxFieldConfig = BaseFieldConfig;
 
-/** picklist | multipicklist — `options` is semantically required but kept
- *  optional at the type level so partial in-flight forms compile; runtime
- *  validation rejects an empty picklist via {@link FieldConfigSchemas}. */
+/** picklist | multipicklist — exactly one of `options` (inline) or
+ *  `globalPicklistId` (shared set) is semantically required; both are kept
+ *  optional at the type level so partial in-flight forms compile. Runtime
+ *  validation enforces the XOR via {@link FieldConfigSchemas}. */
 export type PicklistFieldConfig = BaseFieldConfig & {
   options?: PicklistOption[];
+  /** global_picklist.id this field draws its options from. The read path
+   *  hydrates `options` from the set (reference-at-read); the id stays in
+   *  config so the admin UI can show provenance. */
+  globalPicklistId?: string;
   restrictToOptions?: boolean;
   /** Controlling field key for dependent picklists (SF controllerName). */
   controllingField?: string;

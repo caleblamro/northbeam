@@ -23,6 +23,8 @@ export type CellOpts =
       min?: number;
       max?: number;
       step?: number;
+      /** Format the committed value for read display (e.g. currency/percent). */
+      display?: (value: unknown) => string;
     }
   | {
       variant: 'select';
@@ -37,6 +39,8 @@ export type CellOpts =
     }
   | {
       variant: 'date';
+      /** Format the committed value for read display (e.g. long-form dates). */
+      display?: (value: unknown) => string;
     }
   | {
       variant: 'url';

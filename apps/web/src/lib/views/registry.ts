@@ -3,11 +3,13 @@
 
 import { DashboardRenderer } from '@/components/northbeam/views/dashboard-renderer';
 import { ListRenderer } from '@/components/northbeam/views/list-renderer';
+import { ReportRenderer } from '@/components/northbeam/views/report-renderer';
 import type { ViewRenderer, ViewType } from '@/lib/views/types';
 
 export const VIEW_RENDERERS = {
   list: ListRenderer,
   dashboard: DashboardRenderer,
+  report: ReportRenderer,
 } satisfies Partial<Record<ViewType, ViewRenderer>>;
 
 export function getViewRenderer(type: ViewType): ViewRenderer | null {

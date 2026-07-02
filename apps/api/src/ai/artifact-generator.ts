@@ -53,6 +53,8 @@ const SortSchema = z.object({
 const LEAF_COMPONENTS = [
   'PageHeader',
   'MetricGroup',
+  'Metric',
+  'Chart',
   'DescriptionList',
   'EmptyState',
   'Text',
@@ -135,6 +137,20 @@ function buildSystemPrompt(object: ObjectRow, fields: FieldRow[], summary: DataS
 The artifact will be rendered as React components on the user's screen.
 Respond with valid JSON matching the requested schema — no commentary, no markdown fences.
 
+# Layout — the 12-column grid
+
+Top-level components render onto a 12-column grid. Every top-level node may
+set \`props.span\` (integer 1-12; omitted = 12 = full width). Nodes flow
+left-to-right, wrapping when a row fills. Compose like a real dashboard:
+
+- Row 1: PageHeader (no span — full width).
+- Row 2: a KPI row of 3-4 \`Metric\` tiles, each with span 3 (or 4 for three).
+- Row 3: a \`Chart\` with span 7-8 beside a narrower SectionCard (span 4-5)
+  holding a RecordTable with 2-3 columns.
+- Then full-width (span 12) SectionCards with tables.
+
+Children inside a SectionCard stack vertically and ignore span.
+
 # Available components
 
 ## Static (use ONLY these — anything else is dropped)
@@ -147,7 +163,9 @@ Respond with valid JSON matching the requested schema — no commentary, no mark
   children: array of leaf nodes (any component below except SectionCard itself).
   Nest at most one level deep.
 
-- MetricGroup: a row of stat tiles. Use for top-line numbers.
+- MetricGroup: a row of STATIC stat tiles. Prefer live \`Metric\` tiles (below)
+  whenever the number can be computed from records; use MetricGroup only for
+  values that exist nowhere in the data.
   props: { items: { label: string, value?: string, delta?: string }[] }
   Keep items ≤ 4 so the row fits.
 
@@ -161,6 +179,35 @@ Respond with valid JSON matching the requested schema — no commentary, no mark
   props: { value: string, muted?: boolean }
 
 ## Data-querying (these load LIVE records at render time)
+
+- Metric: ONE stat tile computed from live records. Use for KPI rows.
+  props: {
+    label: string,                     // sentence case, e.g. "Open pipeline"
+    objectKey: string,
+    fn: 'count' | 'sum' | 'avg',
+    fieldKey?: string,                 // REQUIRED for sum/avg — a number/currency/percent field key
+    filters?: ArtifactFilter[],
+    delta?: string,                    // optional signed delta text, e.g. "+12% vs last month"
+    span?: number                      // usually 3 (four tiles) or 4 (three tiles)
+  }
+  Omit objectKey/fn to render a static tile via { label, value: string }.
+
+- Chart: an aggregate chart over live records (group + count/sum/avg).
+  props: {
+    title?: string,                    // renders as the panel header
+    objectKey: string,
+    groupBy: string,                   // field key to group on (picklist/reference work best)
+    fn: 'count' | 'sum' | 'avg',
+    measure?: string,                  // REQUIRED for sum/avg — numeric field key
+    chartType: 'bar' | 'donut',
+    filters?: ArtifactFilter[],
+    limit?: number,                    // top-N before folding the tail into "Other" (bar ≤ 12, donut ≤ 5)
+    span?: number
+  }
+  chartType rules: 'bar' for ranked comparisons ("which industry has the
+  most"); 'donut' ONLY for part-to-whole with few groups (≤ 5) and never
+  with fn 'avg'. Don't add a Chart and a MetricGroup restating the same
+  numbers.
 
 - RecordTable: an embedded table of real records. The user can click any
   row to open the record. Use when the dashboard wants to show "the top N
@@ -201,16 +248,19 @@ ${formatDataSummary(summary)}
 
 # Output rules
 
-- Top-level "components" array: 1-6 items in vertical reading order.
-- Lead with a PageHeader. Follow with 1-4 SectionCards.
-- Wrap related blocks (a row of metrics + an explanatory Text + a
-  RecordTable about the same theme) inside one SectionCard.
+- Top-level "components" array: 1-12 items in reading order (the grid
+  flows them left-to-right, top-to-bottom by span).
+- Lead with a PageHeader. Follow with a Metric KPI row, then Chart /
+  SectionCard rows per the layout guidance above.
+- Wrap related blocks (an explanatory Text + a RecordTable about the same
+  theme) inside one SectionCard. Chart and Metric render their own panel —
+  do NOT nest them inside a SectionCard.
 - Use RecordTable / RecordGrid wherever the user's prompt implies "show
   me X" — they load real data and the user can click into rows. Avoid
   faking a table with DescriptionList items if you mean "show me records".
-- Use the live numbers above for MetricGroup values. For anything not in
-  the summary, either note that the value isn't tracked, or write a
-  clearly-marked sample value prefixed with "—".
+- Prefer live Metric / Chart over static numbers. For anything not
+  computable from fields, either note that the value isn't tracked, or
+  write a clearly-marked sample value prefixed with "—".
 - Keep titles ≤ 60 chars, bodies ≤ 280 chars.`;
 }
 

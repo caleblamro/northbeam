@@ -41,7 +41,13 @@ export type FieldDefLite = {
   required?: boolean;
 };
 
-const READONLY: FieldType[] = ['autonumber', 'formula', 'rollup', 'ai'];
+/** Computed field types — never user-editable, anywhere a field is written. */
+export const READONLY_FIELD_TYPES: ReadonlySet<FieldType> = new Set<FieldType>([
+  'autonumber',
+  'formula',
+  'rollup',
+  'ai',
+]);
 
 /** Format a phone number for read display. Accepts a few common storage forms:
  *  E.164-ish ("+14806696775"), bare digits ("14806696775" or "4806696775"), or
@@ -288,9 +294,44 @@ export function FieldInput({
           value={str}
           placeholder={cfg.placeholder}
           onChange={(e) => onChange(e.target.value)}
-          disabled={READONLY.includes(field.type)}
+          disabled={READONLY_FIELD_TYPES.has(field.type)}
         />
       );
+  }
+}
+
+/** Plain-text formatting for numeric/date field values. Shared between
+ *  FieldValue and the data grid's cell variants (their `display` option) so a
+ *  committed cell stays formatted when it isn't being edited. */
+export function formatFieldValueText(field: FieldDefLite, value: unknown): string {
+  const cfg: FieldConfig = field.config ?? {};
+  if (value == null || value === '') return '';
+  switch (field.type) {
+    case 'currency':
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: cfg.currencyCode ?? 'USD',
+        maximumFractionDigits: 0,
+      }).format(Number(value));
+    case 'percent':
+      return `${Number(value)}%`;
+    case 'number':
+      return Number(value).toLocaleString('en-US');
+    case 'date':
+      return formatLongDate(String(value));
+    case 'datetime': {
+      const d = new Date(String(value));
+      if (Number.isNaN(d.getTime())) return String(value);
+      return d.toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+    }
+    default:
+      return String(value);
   }
 }
 
@@ -308,22 +349,12 @@ export function FieldValue({
   if (value == null || value === '') return <span className="text-ink-subtle">—</span>;
 
   switch (field.type) {
-    case 'currency': {
-      const n = Number(value);
-      return (
-        <span className="tabular-nums">
-          {new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: cfg.currencyCode ?? 'USD',
-            maximumFractionDigits: 0,
-          }).format(n)}
-        </span>
-      );
-    }
+    case 'currency':
+      return <span className="tabular-nums">{formatFieldValueText(field, value)}</span>;
     case 'percent':
-      return <span className="num">{Number(value)}%</span>;
+      return <span className="num">{formatFieldValueText(field, value)}</span>;
     case 'number':
-      return <span className="num">{Number(value).toLocaleString('en-US')}</span>;
+      return <span className="num">{formatFieldValueText(field, value)}</span>;
     case 'checkbox':
       return value ? (
         <Check className="size-4 text-primary" />
@@ -386,22 +417,8 @@ export function FieldValue({
     case 'reference':
       return <span>{referenceLabel ?? String(value)}</span>;
     case 'date':
-      return <span className="tabular-nums">{formatLongDate(String(value))}</span>;
-    case 'datetime': {
-      const d = new Date(String(value));
-      if (Number.isNaN(d.getTime())) return <span>{String(value)}</span>;
-      return (
-        <span className="tabular-nums">
-          {d.toLocaleString(undefined, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-          })}
-        </span>
-      );
-    }
+    case 'datetime':
+      return <span className="tabular-nums">{formatFieldValueText(field, value)}</span>;
     case 'duration': {
       const n = typeof value === 'number' ? value : Number(value);
       return (

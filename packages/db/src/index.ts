@@ -40,6 +40,7 @@ export {
 } from './field-types.js';
 export {
   FieldConfigSchemas,
+  PicklistOptionSchema,
   validateFieldConfig,
   safeValidateFieldConfig,
 } from './field-config-schemas.js';
@@ -54,7 +55,13 @@ export type {
   Filter,
   FilterOp,
   FilterValue,
+  FormatTone,
+  FormatRule,
+  ReportAgg,
+  ReportConfig,
 } from './views.js';
+// Metadata key derivation + reserved-key guards.
+export { keyFromLabel, KEY_RE, RESERVED_FIELD_KEYS } from './keys.js';
 export {
   listViewsForUser,
   getView,
@@ -91,6 +98,40 @@ export {
   type AccessLevel,
   type AclContext,
 } from './queries/record-acl.js';
+// Global picklist sets — CRUD, usage lookups, and the read-path option hydrator.
+export {
+  listGlobalPicklists,
+  getGlobalPicklist,
+  createGlobalPicklist,
+  updateGlobalPicklist,
+  deleteGlobalPicklist,
+  globalPicklistUsedBy,
+  globalPicklistUsageCounts,
+  hydratePicklistOptions,
+  type GlobalPicklistRow,
+  type PicklistUsage,
+} from './queries/picklists.js';
+// Record types — per-object segmentation (SF RecordType) CRUD. Live counts +
+// reassignment touch the per-org physical tables and live in dynamic/records.
+export {
+  listRecordTypes,
+  getRecordType,
+  createRecordType,
+  updateRecordType,
+  deleteRecordType,
+  clearDefaultRecordType,
+  type RecordTypeRow,
+} from './queries/record-types.js';
+// Record-write validation — pure required/rule checks + validation_rule CRUD.
+export { requiredIssues, ruleIssues, type ValidationIssue } from './validation.js';
+export {
+  listValidationRules,
+  getValidationRule,
+  createValidationRule,
+  updateValidationRule,
+  deleteValidationRule,
+  type ValidationRuleRow,
+} from './queries/validation-rules.js';
 // Formula engine — tokenize → parse → evaluate. The compute path also calls
 // validateFormula at write time so a malformed expression can't reach storage.
 export {
@@ -109,17 +150,32 @@ export {
   listRecords,
   getRecord,
   countRecords,
+  countByRecordType,
+  reassignRecordType,
   sumField,
   createRecord,
   updateRecord,
   deleteRecord,
   resolveRefLabels,
+  labelsForIds,
   listRelated,
   listChildrenByRef,
+  aclPredicate,
   type RecordRow,
   type RelatedGroup,
 } from './dynamic/records.js';
 export { aggregateChildField } from './dynamic/rollups.js';
+// Report aggregation (group-by buckets over one object) + the type gates the
+// routers validate against before building the query.
+export {
+  aggregateRecords,
+  buildAggregateQuery,
+  GROUPABLE_TYPES,
+  type AggregateBucket,
+  type AggregateFn,
+  type AggregateOpts,
+} from './dynamic/aggregate.js';
+export { NUMERIC_TYPES } from './dynamic/filters-sql.js';
 // Compute orchestration — recompute formulas + rollups (topo-ordered) and the
 // cross-object context builder the pure evaluator reads from.
 export {

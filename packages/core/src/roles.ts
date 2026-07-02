@@ -48,6 +48,9 @@ export const PERMISSIONS = {
   'deal.read': 'viewer',
   'deal.write': 'member',
   'deal.delete': 'admin',
+  // Data model — the single gate for all schema editing: objects, fields,
+  // record types, global picklist sets, validation rules, format rules.
+  'object.manage': 'admin',
   // Migration (the one-click Salesforce import)
   'migration.run': 'admin',
   // API keys
@@ -120,6 +123,18 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'deal.read', label: 'Read deals' },
       { key: 'deal.write', label: 'Create / edit deals' },
       { key: 'deal.delete', label: 'Delete deals' },
+    ],
+  },
+  {
+    id: 'schema',
+    label: 'Data model',
+    permissions: [
+      {
+        key: 'object.manage',
+        label: 'Manage the data model',
+        description:
+          'Create and edit objects, fields, record types, picklist sets, and validation / format rules.',
+      },
     ],
   },
   {

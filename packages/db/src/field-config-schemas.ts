@@ -2,7 +2,7 @@
 // boundary. The structural FieldConfig type in field-types.ts is permissive
 // (all keys optional) so a partial in-flight form compiles; these schemas
 // enforce the semantic requirements at insert/update time:
-//   - picklist  → options must be a non-empty array
+//   - picklist  → exactly one of: non-empty inline options, or a globalPicklistId
 //   - reference → targetObject must be present and non-empty
 //   - formula   → formula expression must be present
 //   - rollup    → rollup descriptor must be present
@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { FIELD_TYPE_IDS, type FieldConfig, type FieldType } from './field-types.js';
 import { validateFormula } from './formula/index.js';
 
-const PicklistOptionSchema = z.object({
+export const PicklistOptionSchema = z.object({
   value: z.string().min(1),
   label: z.string().min(1),
   color: z.string().optional(),
@@ -52,9 +52,28 @@ const CurrencyConfigSchema = NumberConfigSchema.extend({
 });
 
 const PicklistConfigSchema = BaseConfigSchema.extend({
-  options: z.array(PicklistOptionSchema).min(1, 'picklist requires at least one option'),
+  options: z.array(PicklistOptionSchema).min(1, 'picklist requires at least one option').optional(),
+  globalPicklistId: z.string().uuid().optional(),
   restrictToOptions: z.boolean().optional(),
   controllingField: z.string().optional(),
+}).superRefine((cfg, ctx) => {
+  // Exactly one source of options: inline `options` XOR a global set.
+  const inline = (cfg.options?.length ?? 0) > 0;
+  const set = Boolean(cfg.globalPicklistId);
+  if (!inline && !set) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'picklist requires at least one option (inline options or a globalPicklistId)',
+      path: ['options'],
+    });
+  }
+  if (inline && set) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'picklist cannot carry both inline options and a globalPicklistId',
+      path: ['globalPicklistId'],
+    });
+  }
 });
 
 const ReferenceConfigSchema = BaseConfigSchema.extend({

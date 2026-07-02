@@ -5,10 +5,10 @@ import { HidePageHead, PageActions } from '@/components/northbeam/app-shell';
 import { CreateMenu } from '@/components/northbeam/create-menu';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import { EyebrowLabel } from '@/components/northbeam/eyebrow-label';
+import { HomeAttention } from '@/components/northbeam/home-attention';
 import { MetricGroup } from '@/components/northbeam/metric-group';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sparkline, fakeSeries } from '@/components/ui/sparkline';
 import { trpc } from '@/lib/api';
@@ -16,7 +16,6 @@ import { fmtMoney } from '@/lib/mock-crm';
 import {
   ArrowRight,
   Building2,
-  Check,
   CircleDollarSign,
   RefreshCw,
   TrendingUp,
@@ -26,17 +25,8 @@ import {
 import Link from 'next/link';
 
 // Home — refined trading-terminal aesthetic. Hero pipeline number with a
-// trend delta + inline sparkline, a MetricGroup count strip, an onboarding
-// checklist with completion progress, and the recent-activity log.
-
-// TODO(#11): wire real onboarding completion from server state.
-const STEPS = [
-  { href: '/migrate', label: 'Import from Salesforce' },
-  { href: '/contacts', label: 'Add your first contact' },
-  { href: '/deals', label: 'Create a deal' },
-  { href: '/setup/users', label: 'Invite your team' },
-];
-const DONE = 1;
+// trend delta + inline sparkline, a MetricGroup count strip, the needs-
+// attention inbox, and the recent-activity log.
 
 export default function HomePage() {
   const summary = trpc.home.summary.useQuery();
@@ -155,50 +145,8 @@ export default function HomePage() {
           {!loading && activities.length > 0 && <ActivityTimeline items={activities} />}
         </Card>
 
-        <OnboardingChecklist />
+        <HomeAttention />
       </section>
     </div>
-  );
-}
-
-function OnboardingChecklist() {
-  const pct = Math.round((DONE / STEPS.length) * 100);
-  return (
-    <Card className="p-5">
-      <div className="mb-3 flex items-baseline justify-between">
-        <EyebrowLabel>Get started</EyebrowLabel>
-        <span className="font-medium text-muted-foreground text-xs tabular-nums">
-          {DONE}/{STEPS.length}
-        </span>
-      </div>
-      <Progress value={pct} />
-      <ul className="-mx-2 mt-4 flex flex-col">
-        {STEPS.map((step, i) => {
-          const done = i < DONE;
-          return (
-            <li key={step.href}>
-              <Link
-                href={step.href}
-                className="group flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted/40"
-              >
-                <span
-                  className={`grid size-4 place-items-center rounded-full border ${done ? 'border-transparent bg-[var(--success)] text-white' : 'border-muted-foreground/30'}`}
-                >
-                  {done && <Check className="size-2.5" strokeWidth={3} />}
-                </span>
-                <span
-                  className={`flex-1 ${done ? 'text-muted-foreground line-through' : 'text-foreground'}`}
-                >
-                  {step.label}
-                </span>
-                {!done && (
-                  <ArrowRight className="size-3.5 text-muted-foreground/40 transition-all group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
-                )}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
   );
 }

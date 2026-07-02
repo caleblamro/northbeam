@@ -15,8 +15,8 @@ import { fieldColumnName, objectTableName } from './dynamic/identifiers.js';
 import { pgTypeFor } from './dynamic/pgtypes.js';
 import type { FieldConfig, FieldType, ObjectLayout, PicklistOption } from './field-types.js';
 import { getObjectByKey } from './queries/crm.js';
-import { fieldDef, objectDef, view } from './schema.js';
-import type { Filter, ShareTarget, ViewIcon, ViewSort } from './views.js';
+import { fieldDef, globalPicklist, objectDef, validationRule, view } from './schema.js';
+import type { Filter, FormatRule, ShareTarget, ViewIcon, ViewSort } from './views.js';
 
 type SeedView = {
   key: string;
@@ -38,7 +38,7 @@ type SeedView = {
  *  are computed at seed time (`makeStandardViews(today)`) so "Due this week"
  *  and friends reflect the moment the org was created. They don't roll
  *  forward automatically — that's a relative-date filter feature, deferred. */
-function makeStandardViews(now: Date): Record<string, SeedView[]> {
+export function makeStandardViews(now: Date): Record<string, SeedView[]> {
   const iso = (offsetDays: number): string => {
     const d = new Date(now);
     d.setDate(d.getDate() + offsetDays);
@@ -66,13 +66,72 @@ function makeStandardViews(now: Date): Record<string, SeedView[]> {
                 component: 'PageHeader',
                 props: {
                   title: 'Accounts overview',
-                  subtitle:
-                    'Hand-seeded dashboard — proves the artifact format. Edit `view.config.artifact` to change it.',
+                  subtitle: 'The account base at a glance — size, mix, and where the revenue sits.',
+                },
+              },
+              // KPI row — four live Metric tiles, span 3 each.
+              {
+                component: 'Metric',
+                props: { span: 3, label: 'Total accounts', objectKey: 'account', fn: 'count' },
+              },
+              {
+                component: 'Metric',
+                props: {
+                  span: 3,
+                  label: 'Customers',
+                  objectKey: 'account',
+                  fn: 'count',
+                  filters: [{ fieldKey: 'type', op: 'eq', value: 'customer' }],
                 },
               },
               {
+                component: 'Metric',
+                props: {
+                  span: 3,
+                  label: 'Hot accounts',
+                  objectKey: 'account',
+                  fn: 'count',
+                  filters: [{ fieldKey: 'rating', op: 'eq', value: 'hot' }],
+                },
+              },
+              {
+                component: 'Metric',
+                props: {
+                  span: 3,
+                  label: 'Combined annual revenue',
+                  objectKey: 'account',
+                  fn: 'sum',
+                  fieldKey: 'annual_revenue',
+                },
+              },
+              // Chart row — ranked industries beside the rating mix.
+              {
+                component: 'Chart',
+                props: {
+                  span: 8,
+                  title: 'Accounts by industry',
+                  objectKey: 'account',
+                  groupBy: 'industry',
+                  fn: 'count',
+                  chartType: 'bar',
+                  limit: 8,
+                },
+              },
+              {
+                component: 'Chart',
+                props: {
+                  span: 4,
+                  title: 'Rating mix',
+                  objectKey: 'account',
+                  groupBy: 'rating',
+                  fn: 'count',
+                  chartType: 'donut',
+                },
+              },
+              // Full-width table anchors the page.
+              {
                 component: 'SectionCard',
-                props: { title: 'Top accounts by revenue' },
+                props: { span: 12, title: 'Top accounts by revenue' },
                 children: [
                   {
                     component: 'RecordTable',
@@ -80,31 +139,7 @@ function makeStandardViews(now: Date): Record<string, SeedView[]> {
                       objectKey: 'account',
                       sort: [{ fieldKey: 'annual_revenue', direction: 'desc' }],
                       columns: ['industry', 'type', 'employees', 'annual_revenue'],
-                      limit: 5,
-                    },
-                  },
-                ],
-              },
-              {
-                component: 'SectionCard',
-                props: { title: 'Hot accounts' },
-                children: [
-                  {
-                    component: 'Text',
-                    props: {
-                      value:
-                        'Accounts your team flagged hot — usually the ones with expansion or renewal motion in flight.',
-                      muted: true,
-                    },
-                  },
-                  {
-                    component: 'RecordTable',
-                    props: {
-                      objectKey: 'account',
-                      filters: [{ fieldKey: 'rating', op: 'eq', value: 'hot' }],
-                      sort: [{ fieldKey: 'annual_revenue', direction: 'desc' }],
-                      columns: ['industry', 'employees', 'annual_revenue'],
-                      limit: 5,
+                      limit: 8,
                     },
                   },
                 ],
@@ -188,31 +223,81 @@ function makeStandardViews(now: Date): Record<string, SeedView[]> {
                 component: 'PageHeader',
                 props: {
                   title: 'Pipeline snapshot',
-                  subtitle: 'Open pipeline + recent wins + at-risk deals on one page.',
+                  subtitle: 'Open pipeline, stage mix, recent wins, and the deals at risk.',
+                },
+              },
+              // KPI row — four live Metric tiles, span 3 each.
+              {
+                component: 'Metric',
+                props: {
+                  span: 3,
+                  label: 'Open deals',
+                  objectKey: 'deal',
+                  fn: 'count',
+                  filters: [
+                    { fieldKey: 'stage', op: 'neq', value: 'closed_won' },
+                    { fieldKey: 'stage', op: 'neq', value: 'closed_lost' },
+                  ],
+                },
+              },
+              {
+                component: 'Metric',
+                props: {
+                  span: 3,
+                  label: 'Open pipeline value',
+                  objectKey: 'deal',
+                  fn: 'sum',
+                  fieldKey: 'amount',
+                  filters: [
+                    { fieldKey: 'stage', op: 'neq', value: 'closed_won' },
+                    { fieldKey: 'stage', op: 'neq', value: 'closed_lost' },
+                  ],
+                },
+              },
+              {
+                component: 'Metric',
+                props: {
+                  span: 3,
+                  label: 'Average open deal',
+                  objectKey: 'deal',
+                  fn: 'avg',
+                  fieldKey: 'amount',
+                  filters: [
+                    { fieldKey: 'stage', op: 'neq', value: 'closed_won' },
+                    { fieldKey: 'stage', op: 'neq', value: 'closed_lost' },
+                  ],
+                },
+              },
+              {
+                component: 'Metric',
+                props: {
+                  span: 3,
+                  label: 'Deals won',
+                  objectKey: 'deal',
+                  fn: 'count',
+                  filters: [{ fieldKey: 'stage', op: 'eq', value: 'closed_won' }],
+                },
+              },
+              // Chart beside a narrower table.
+              {
+                component: 'Chart',
+                props: {
+                  span: 8,
+                  title: 'Open pipeline by stage',
+                  objectKey: 'deal',
+                  groupBy: 'stage',
+                  fn: 'sum',
+                  measure: 'amount',
+                  chartType: 'bar',
+                  filters: [
+                    { fieldKey: 'stage', op: 'neq', value: 'closed_won' },
+                    { fieldKey: 'stage', op: 'neq', value: 'closed_lost' },
+                  ],
                 },
               },
               {
                 component: 'SectionCard',
-                props: { title: 'Open pipeline — largest deals' },
-                children: [
-                  {
-                    component: 'RecordTable',
-                    props: {
-                      objectKey: 'deal',
-                      filters: [
-                        { fieldKey: 'stage', op: 'neq', value: 'closed_won' },
-                        { fieldKey: 'stage', op: 'neq', value: 'closed_lost' },
-                      ],
-                      sort: [{ fieldKey: 'amount', direction: 'desc' }],
-                      columns: ['account', 'stage', 'amount', 'close_date', 'probability'],
-                      limit: 8,
-                    },
-                  },
-                ],
-              },
-              {
-                component: 'SectionCard',
-                props: { title: 'Recently closed-won' },
+                props: { span: 4, title: 'Recently closed-won' },
                 children: [
                   {
                     component: 'RecordTable',
@@ -220,15 +305,16 @@ function makeStandardViews(now: Date): Record<string, SeedView[]> {
                       objectKey: 'deal',
                       filters: [{ fieldKey: 'stage', op: 'eq', value: 'closed_won' }],
                       sort: [{ fieldKey: 'close_date', direction: 'desc' }],
-                      columns: ['account', 'amount', 'close_date'],
+                      columns: ['account', 'amount'],
                       limit: 5,
                     },
                   },
                 ],
               },
+              // Full-width table anchors the page.
               {
                 component: 'SectionCard',
-                props: { title: 'At risk — probability below 50%' },
+                props: { span: 12, title: 'At risk — probability below 50%' },
                 children: [
                   {
                     component: 'Text',
@@ -373,6 +459,16 @@ type SeedObject = {
   nameExpression: string;
   fields: SeedField[];
   layout: ObjectLayout;
+  /** Demo conditional-formatting rules stored on object_def.format_rules.
+   *  Set on the initial object insert only — never overwritten on re-seed. */
+  formatRules?: FormatRule[];
+  /** Demo validation rules — idempotent via the (objectId, name) unique index. */
+  validationRules?: Array<{
+    name: string;
+    condition: string;
+    errorMessage: string;
+    errorFieldKey?: string;
+  }>;
 };
 
 /* ── shared picklists ─────────────────────────────────────────────────────── */
@@ -410,6 +506,37 @@ const RATING_OPTIONS: PicklistOption[] = [
   { value: 'hot', label: 'Hot', color: '#df1b41' },
   { value: 'warm', label: 'Warm', color: '#9a6800' },
   { value: 'cold', label: 'Cold', color: '#3d5afe' },
+];
+
+/** The shared option arrays above, seeded as org-level global picklist sets.
+ *  Fresh standard-field inserts reference a set via config.globalPicklistId
+ *  (options hydrate at read time); orgs seeded before the sets existed keep
+ *  their inline options — both shapes are valid. */
+const GLOBAL_PICKLIST_SEEDS: Array<{
+  name: string;
+  description: string;
+  values: PicklistOption[];
+}> = [
+  {
+    name: 'Deal stages',
+    description: 'The stages every deal moves through, prospecting to close.',
+    values: STAGE_OPTIONS,
+  },
+  {
+    name: 'Lead sources',
+    description: 'How a person or company first entered your pipeline.',
+    values: LEAD_SOURCE_OPTIONS,
+  },
+  {
+    name: 'Salutations',
+    description: 'Title prefixes for contacts.',
+    values: SALUTATION_OPTIONS,
+  },
+  {
+    name: 'Ratings',
+    description: 'A quick hot / warm / cold qualification read.',
+    values: RATING_OPTIONS,
+  },
 ];
 
 /* ── standard objects ─────────────────────────────────────────────────────── */
@@ -968,6 +1095,23 @@ export const STANDARD_OBJECTS: SeedObject[] = [
         { id: 'notes', label: 'Description', cols: 1, fields: ['description'] },
       ],
     },
+    formatRules: [
+      {
+        id: 'closed_lost',
+        label: 'Closed lost',
+        tone: 'red',
+        filters: [{ fieldKey: 'stage', op: 'eq', value: 'closed_lost' }],
+        active: true,
+      },
+    ],
+    validationRules: [
+      {
+        name: 'Amount must be positive',
+        condition: '{amount} < 0',
+        errorMessage: 'Amount cannot be negative.',
+        errorFieldKey: 'amount',
+      },
+    ],
   },
 
   /* ───────────────────────────── ACTIVITY (Task / Event) ───────────────────────────── */
@@ -1116,6 +1260,20 @@ export const STANDARD_OBJECTS: SeedObject[] = [
   },
 ];
 
+/** Swap a shared inline option array for its global-set reference. Matched by
+ *  array identity, so per-field inline option lists (industry, type, …) pass
+ *  through untouched. Only fresh field inserts see the swap — the insert below
+ *  is onConflictDoNothing, so existing orgs keep their inline options. */
+function withGlobalPicklist(
+  config: FieldConfig,
+  setIds: Map<PicklistOption[], string>,
+): FieldConfig {
+  const setId = config.options ? setIds.get(config.options) : undefined;
+  if (!setId) return config;
+  const { options: _options, ...rest } = config;
+  return { ...rest, globalPicklistId: setId };
+}
+
 /** Idempotently seed the standard objects + fields for an org, and create their
  *  physical tables in the org's Postgres schema. Safe to re-run.
  *
@@ -1125,6 +1283,32 @@ export const STANDARD_OBJECTS: SeedObject[] = [
  *  publicProcedure (no GUC yet) immediately after creating the org. */
 export async function seedStandardObjects(db: DbExecutor, organizationId: string): Promise<void> {
   await ensureSchema(db, organizationId);
+  // Global picklist sets first — fresh standard-field inserts point at them.
+  // Keyed by (org, name); select-then-insert keeps re-runs idempotent.
+  const picklistSetIds = new Map<PicklistOption[], string>();
+  for (const set of GLOBAL_PICKLIST_SEEDS) {
+    const [existing] = await db
+      .select({ id: globalPicklist.id })
+      .from(globalPicklist)
+      .where(
+        and(eq(globalPicklist.organizationId, organizationId), eq(globalPicklist.name, set.name)),
+      )
+      .limit(1);
+    let setId = existing?.id;
+    if (!setId) {
+      const [inserted] = await db
+        .insert(globalPicklist)
+        .values({
+          organizationId,
+          name: set.name,
+          description: set.description,
+          values: set.values,
+        })
+        .returning({ id: globalPicklist.id });
+      setId = inserted?.id;
+    }
+    if (setId) picklistSetIds.set(set.values, setId);
+  }
   // Build the view set fresh per call so date-bearing filters reflect the
   // actual seed-time clock.
   const STANDARD_VIEWS = makeStandardViews(new Date());
@@ -1150,6 +1334,7 @@ export async function seedStandardObjects(db: DbExecutor, organizationId: string
           description: obj.description,
           nameExpression: obj.nameExpression,
           layout: obj.layout,
+          formatRules: obj.formatRules ?? [],
           isSystem: true,
           source: 'system',
         })
@@ -1171,6 +1356,7 @@ export async function seedStandardObjects(db: DbExecutor, organizationId: string
 
     let order = 0;
     for (const f of obj.fields) {
+      const config = withGlobalPicklist(f.config ?? {}, picklistSetIds);
       await db
         .insert(fieldDef)
         .values({
@@ -1178,14 +1364,28 @@ export async function seedStandardObjects(db: DbExecutor, organizationId: string
           objectId,
           key: f.key,
           columnName: fieldColumnName(f.key),
-          pgType: pgTypeFor(f.type, f.config ?? {}),
+          pgType: pgTypeFor(f.type, config),
           label: f.label,
           type: f.type,
-          config: f.config ?? {},
+          config,
           required: f.required ?? false,
           isSystem: true,
           source: 'system',
           orderIndex: order++,
+        })
+        .onConflictDoNothing();
+    }
+
+    for (const rule of obj.validationRules ?? []) {
+      await db
+        .insert(validationRule)
+        .values({
+          organizationId,
+          objectId,
+          name: rule.name,
+          condition: rule.condition,
+          errorMessage: rule.errorMessage,
+          errorFieldKey: rule.errorFieldKey ?? null,
         })
         .onConflictDoNothing();
     }

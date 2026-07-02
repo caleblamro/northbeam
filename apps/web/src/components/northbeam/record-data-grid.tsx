@@ -3,34 +3,42 @@
 // RecordDataGrid — wraps the DataGrid primitive (TanStack Table +
 // virtualization) for displaying a list of records.
 //
-// Current scope (v0):
-//   - Read-only display + per-column sort (DataGrid provides this out of the
-//     box via column.enableSorting + header dropdown).
-//   - Name cell is a Link so clicking it still navigates to the record page.
-//   - Other cells render via FieldValue (display only).
+// Inline editing: when `onCellEdit` is provided, columns whose field type has
+// an editable cell variant (text/number/date/picklist/…) keep a string
+// `header` so the grid renders its variant-based editable cell (double-click
+// or Enter to edit; Tab/Enter/Esc handled inside the variants). The grid's
+// `onDataChange` is diffed against the current rows and each changed cell is
+// reported as a per-record patch. Reference/address/duration and computed
+// fields (READONLY_FIELD_TYPES) always render read-only FieldValue cells via
+// a function `header` — the same trick the Name column uses to keep its Link
+// navigable.
 //
-// Out of scope (deferred to a follow-up):
-//   - Inline cell editing. DataGrid assumes flat row data; our records are
-//     `{ id, name, data: {...} }`, so onDataChange would need a translation
-//     layer back to trpc.record.update. Doable but non-trivial; the existing
-//     RecordFormDrawer covers create/edit for now.
-//   - Per-row actions (delete/duplicate) — pending row-context-menu API.
+// DataGrid assumes flat row data, so RecordRow's nested `data` is flattened
+// into GridRow internally. Field keys can't collide with `id`/`name`: `name`
+// is filtered out of the columns and `id` is a system column, not a field key.
 
 import { DataGrid } from '@/components/data-grid/data-grid';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
-import { FieldValue } from '@/components/northbeam/field-render';
+import {
+  FieldValue,
+  READONLY_FIELD_TYPES,
+  formatFieldValueText,
+} from '@/components/northbeam/field-render';
 import { useDataGrid } from '@/hooks/use-data-grid';
 import type { CellOpts } from '@/types/data-grid';
+import type { FieldType } from '@northbeam/db/field-types';
 import type { ViewSort } from '@northbeam/db/views';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 export type RecordRow = {
   id: string;
   name: string;
   data: Record<string, unknown>;
 };
+
+type GridRow = Record<string, unknown> & { id: string; name: string };
 
 interface RecordDataGridProps {
   columns: FieldDefLite[];
@@ -44,7 +52,20 @@ interface RecordDataGridProps {
    *  in-memory and lost on refresh). */
   sort?: ViewSort[];
   onSortChange?: (sort: ViewSort[]) => void;
+  /** Patch one or more fields on a record. Inline editing is enabled only
+   *  when present — without it every cell is a read-only display cell. */
+  onCellEdit?: (recordId: string, patch: Record<string, unknown>) => void;
 }
+
+// Field types with no editable grid variant: reference needs an async
+// combobox, address/duration have bespoke inputs, and computed types are
+// never writable.
+const GRID_READONLY_TYPES = new Set<FieldType>([
+  ...READONLY_FIELD_TYPES,
+  'reference',
+  'address',
+  'duration',
+]);
 
 function toTanStackSorting(sort: ViewSort[]): SortingState {
   // Special-case the synthetic "name" column key so a saved sort on the
@@ -66,10 +87,10 @@ function fieldToCellOpts(f: FieldDefLite): CellOpts {
     case 'number':
     case 'currency':
     case 'percent':
-      return { variant: 'number' };
+      return { variant: 'number', display: (v) => formatFieldValueText(f, v) };
     case 'date':
     case 'datetime':
-      return { variant: 'date' };
+      return { variant: 'date', display: (v) => formatFieldValueText(f, v) };
     case 'checkbox':
       return { variant: 'checkbox' };
     case 'url':
@@ -91,6 +112,28 @@ function fieldToCellOpts(f: FieldDefLite): CellOpts {
   }
 }
 
+/** Normalise what a cell variant emitted into what record.update stores. */
+function coerceCellValue(field: FieldDefLite, raw: unknown): unknown {
+  switch (field.type) {
+    case 'number':
+    case 'currency':
+    case 'percent': {
+      if (raw == null || raw === '') return null;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    }
+    case 'checkbox':
+      return raw === true;
+    case 'multipicklist':
+      return Array.isArray(raw) ? raw : [];
+    default: {
+      if (raw == null) return null;
+      const s = String(raw).trim();
+      return s === '' ? null : s;
+    }
+  }
+}
+
 export function RecordDataGrid({
   columns: columnFields,
   rows,
@@ -99,9 +142,15 @@ export function RecordDataGrid({
   height = 560,
   sort,
   onSortChange,
+  onCellEdit,
 }: RecordDataGridProps) {
-  const gridColumns = useMemo<ColumnDef<RecordRow>[]>(() => {
-    const nameCol: ColumnDef<RecordRow> = {
+  const gridRows = useMemo<GridRow[]>(
+    () => rows.map((r) => ({ ...r.data, id: r.id, name: r.name })),
+    [rows],
+  );
+
+  const gridColumns = useMemo<ColumnDef<GridRow>[]>(() => {
+    const nameCol: ColumnDef<GridRow> = {
       id: 'name',
       accessorFn: (r) => r.name,
       // header given as a function so DataGrid uses our custom `cell`
@@ -129,37 +178,74 @@ export function RecordDataGrid({
     // the same id and React fires duplicate-key warnings.
     const dataCols = columnFields
       .filter((f) => f.key !== 'name')
-      .map<ColumnDef<RecordRow>>((f) => ({
-        id: f.key,
-        accessorFn: (r) => r.data[f.key],
-        header: f.label,
-        size: 180,
-        enableSorting: true,
-        meta: {
-          label: f.label,
-          cell: fieldToCellOpts(f),
-        },
-        cell: (info) => {
-          const v = info.getValue();
-          return (
-            <FieldValue
-              field={f}
-              value={v}
-              referenceLabel={f.type === 'reference' ? refLabels[String(v)] : undefined}
-            />
-          );
-        },
-      }));
+      .map<ColumnDef<GridRow>>((f) => {
+        const editable = !!onCellEdit && !GRID_READONLY_TYPES.has(f.type);
+        if (editable) {
+          return {
+            id: f.key,
+            accessorFn: (r) => r[f.key],
+            header: f.label,
+            size: 180,
+            enableSorting: true,
+            meta: {
+              label: f.label,
+              cell: fieldToCellOpts(f),
+            },
+          };
+        }
+        return {
+          id: f.key,
+          accessorFn: (r) => r[f.key],
+          header: () => <span>{f.label}</span>,
+          size: 180,
+          enableSorting: true,
+          meta: { label: f.label },
+          cell: (info) => {
+            const v = info.getValue();
+            return (
+              <FieldValue
+                field={f}
+                value={v}
+                referenceLabel={f.type === 'reference' ? refLabels[String(v)] : undefined}
+              />
+            );
+          },
+        };
+      });
 
     return [nameCol, ...dataCols];
-  }, [columnFields, refLabels, objectKey]);
+  }, [columnFields, refLabels, objectKey, onCellEdit]);
+
+  // The grid's cell variants commit through onDataUpdate → onDataChange with
+  // a whole new data array. Diff it against the current rows (unchanged rows
+  // keep their identity) and report each changed cell as a record patch.
+  const handleDataChange = useCallback(
+    (next: GridRow[]) => {
+      if (!onCellEdit) return;
+      for (let i = 0; i < next.length; i++) {
+        const after = next[i];
+        const before = gridRows[i];
+        if (!after || !before || after === before) continue;
+        const patch: Record<string, unknown> = {};
+        for (const f of columnFields) {
+          if (f.key === 'name' || GRID_READONLY_TYPES.has(f.type)) continue;
+          if (!Object.is(after[f.key], before[f.key])) {
+            patch[f.key] = coerceCellValue(f, after[f.key]);
+          }
+        }
+        if (Object.keys(patch).length > 0) onCellEdit(before.id, patch);
+      }
+    },
+    [onCellEdit, gridRows, columnFields],
+  );
 
   const initialSorting = useMemo<SortingState>(() => (sort ? toTanStackSorting(sort) : []), [sort]);
 
-  const grid = useDataGrid<RecordRow>({
-    data: rows,
+  const grid = useDataGrid<GridRow>({
+    data: gridRows,
     columns: gridColumns,
-    readOnly: true,
+    readOnly: !onCellEdit,
+    onDataChange: onCellEdit ? handleDataChange : undefined,
     enableSearch: false,
     enablePaste: false,
     getRowId: (r) => r.id,
@@ -176,5 +262,5 @@ export function RecordDataGrid({
       : undefined,
   });
 
-  return <DataGrid<RecordRow> {...grid} height={height} stretchColumns />;
+  return <DataGrid<GridRow> {...grid} height={height} stretchColumns />;
 }

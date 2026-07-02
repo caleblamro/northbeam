@@ -9,6 +9,7 @@ import {
   NorthbeamError,
   type NorthbeamErrorCode,
   type Permission,
+  ValidationFailedError,
   can,
   logger,
 } from '@northbeam/core';
@@ -26,6 +27,7 @@ const t = initTRPC.context<Context>().create({
       data: {
         ...shape.data,
         zodError: error.cause instanceof ZodError ? error.cause.flatten() : null,
+        validationIssues: error.cause instanceof ValidationFailedError ? error.cause.issues : null,
       },
     };
   },

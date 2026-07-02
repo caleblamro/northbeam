@@ -80,6 +80,30 @@ export function RecordListView({
   const remove = trpc.record.remove.useMutation({
     onSuccess: () => utils.record.list.invalidate(),
   });
+  // Inline cell edits: optimistically patch the exact record.list cache entry
+  // this component queries, roll back on error, then settle with the server
+  // truth (the update may ripple into formulas/rollups/display name).
+  const update = trpc.record.update.useMutation({
+    meta: { context: "Couldn't save the change" },
+    onMutate: async ({ id, data }) => {
+      const input = { objectKey, search: q || undefined };
+      await utils.record.list.cancel(input);
+      const prev = utils.record.list.getData(input);
+      utils.record.list.setData(input, (old) =>
+        old
+          ? {
+              ...old,
+              rows: old.rows.map((r) => (r.id === id ? { ...r, data: { ...r.data, ...data } } : r)),
+            }
+          : old,
+      );
+      return { prev, input };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx) utils.record.list.setData(ctx.input, ctx.prev);
+    },
+    onSettled: () => utils.record.list.invalidate(),
+  });
 
   const fields = (list.data?.fields ?? []) as FieldDefLite[];
   const allRows = list.data?.rows ?? [];
@@ -351,7 +375,10 @@ export function RecordListView({
         <Card className="p-0">
           <LoadingScreen size="md" />
         </Card>
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && activeView.type !== 'report' ? (
+        // Report views aggregate server-side over ALL rows — the client-side
+        // 200-row sample being empty says nothing about the report, so they
+        // skip this empty-state gate and render regardless.
         <Card className="p-0">
           <EmptyState
             icon={UserPlus}
@@ -396,6 +423,7 @@ export function RecordListView({
               onRowOpen={(id) => router.push(`/${objectKey}/${id}`)}
               onRowEdit={(row) => setEditing(row)}
               onRowDelete={(id) => remove.mutate({ objectKey, id })}
+              onCellEdit={(id, patch) => update.mutate({ objectKey, id, data: patch })}
               onSaveView={saveAsNewView}
               sort={effectiveSort}
               onSortChange={setSort}

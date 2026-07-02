@@ -5,6 +5,7 @@ import './globals.css';
 import { Toaster } from '@/components/northbeam/toaster';
 import { ApiProvider } from '@/lib/api';
 import { NO_FLASH_SCRIPT } from '@/lib/theme';
+import { NuqsAdapter } from 'nuqs/adapters/next/app';
 
 const sans = Inter({
   subsets: ['latin'],
@@ -50,10 +51,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
       </head>
       <body>
-        <ApiProvider>
-          {children}
-          <Toaster />
-        </ApiProvider>
+        {/* NuqsAdapter enables useQueryState URL params (e.g. ?tab= on setup pages). */}
+        <NuqsAdapter>
+          <ApiProvider>
+            {children}
+            <Toaster />
+          </ApiProvider>
+        </NuqsAdapter>
       </body>
     </html>
   );

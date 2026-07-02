@@ -87,6 +87,10 @@ export const PAGE_META: Record<string, PageMeta> = {
     title: 'Reports',
     subtitle: 'Ask in plain language. Northbeam builds the report and surfaces what changed.',
   },
+  '/reports/builder': {
+    title: 'Report builder',
+    subtitle: 'Group, measure, and chart any object — then save it as a report.',
+  },
   '/dashboards': { title: 'Dashboards', subtitle: 'Pin the metrics your team watches.' },
   '/migrate': {
     title: 'Migrate from Salesforce',
@@ -104,6 +108,10 @@ export const PAGE_META: Record<string, PageMeta> = {
   '/setup/objects': {
     title: 'Setup',
     subtitle: 'Manage objects, fields, and layouts.',
+  },
+  '/setup/picklists': {
+    title: 'Setup',
+    subtitle: 'Shared picklist value sets used across objects.',
   },
   '/setup/integrations': {
     title: 'Setup',

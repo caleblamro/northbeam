@@ -140,6 +140,12 @@ export const salesforceRouter = router({
             });
           }
         }
+        // Mapping finished for every object — mark the run executable. Runs
+        // left at 'mapping' were interrupted mid-analysis.
+        await ctx.db
+          .update(schema.migrationRun)
+          .set({ status: 'ready' })
+          .where(eq(schema.migrationRun.id, run.id));
         return { runId: run.id };
       } catch (err) {
         await flagIfAuthError(ctx.db, orgId, err);
