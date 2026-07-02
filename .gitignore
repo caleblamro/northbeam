@@ -39,3 +39,6 @@ packages/db/.drizzle/
 **/*.pem
 **/*.key
 .mcp.json
+
+# Salesforce fixture project (local-only test-org source + SFDX state)
+infra/sf-fixture/
