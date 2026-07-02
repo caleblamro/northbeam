@@ -108,11 +108,19 @@ export function DataGrid<TData>({
         }}
         onContextMenu={onDataGridContextMenu}
       >
+        {/* Both rowgroups carry min-width = the columns' total size. Without
+            it, a container narrower than the columns makes every flex row
+            SHRINK its cells — each flooring at its own content's min-width,
+            so column borders drift row by row and the header stops lining up
+            with the body. With it, rows keep their exact widths and the
+            scroll container (overflow-auto above) grows a horizontal
+            scrollbar instead. */}
         <div
           role="rowgroup"
           data-slot="grid-header"
           ref={headerRef}
           className="sticky top-0 z-10 grid border-b bg-background"
+          style={{ minWidth: `${table.getTotalSize()}px` }}
         >
           {table.getHeaderGroups().map((headerGroup, rowIndex) => (
             <div
@@ -153,7 +161,7 @@ export function DataGrid<TData>({
                     }
                     data-slot="grid-header-cell"
                     tabIndex={-1}
-                    className={cn('relative', {
+                    className={cn('relative shrink-0', {
                       grow: stretchColumns && header.column.id !== 'select',
                       'border-e': showEndBorder && header.column.id !== 'select',
                       'border-s': showStartBorder && header.column.id !== 'select',
@@ -163,8 +171,14 @@ export function DataGrid<TData>({
                       width: `calc(var(--header-${header.id}-size) * 1px)`,
                     }}
                   >
+                    {/* A function header opts a column out of the variant-based
+                        editable CELL (see data-grid-row.tsx) — that must not also
+                        cost it the sortable header. Render the full column header
+                        (label from meta.label, sort menu) for every sortable
+                        column; the plain flexRender path is only for
+                        non-sortable function headers (e.g. the select checkbox). */}
                     {header.isPlaceholder ? null : typeof header.column.columnDef.header ===
-                      'function' ? (
+                        'function' && !header.column.getCanSort() ? (
                       <div className="size-full px-3 py-1.5">
                         {flexRender(header.column.columnDef.header, header.getContext())}
                       </div>
@@ -183,6 +197,7 @@ export function DataGrid<TData>({
           className="relative grid"
           style={{
             height: `${virtualTotalSize}px`,
+            minWidth: `${table.getTotalSize()}px`,
             contain: adjustLayout ? 'layout paint' : 'strict',
           }}
         >

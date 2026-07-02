@@ -243,7 +243,7 @@ function DataGridRowImpl<TData>({
             data-highlighted={isCellFocused ? '' : undefined}
             data-slot="grid-cell"
             tabIndex={-1}
-            className={cn({
+            className={cn('shrink-0', {
               grow: stretchColumns && columnId !== 'select',
               'border-e': showEndBorder && columnId !== 'select',
               'border-s': showStartBorder && columnId !== 'select',

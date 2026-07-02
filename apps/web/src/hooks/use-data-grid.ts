@@ -2051,6 +2051,11 @@ function useDataGrid<TData>({
     tableRef.current = table;
   }
 
+  // `columns` must invalidate this memo too: a grid that mounts before its
+  // data arrives (e.g. an embedded artifact table) re-renders with a larger
+  // column set, and a stale memo would leave the new columns without
+  // --col-*-size vars — their `width: calc(var(...))` collapses to auto and
+  // every row flex-sizes by content (misaligned columns).
   // biome-ignore lint/correctness/useExhaustiveDependencies: columnSizingInfo and columnSizing are used for calculating the column size vars
   const columnSizeVars = React.useMemo(() => {
     const headers = table.getFlatHeaders();
@@ -2060,7 +2065,7 @@ function useDataGrid<TData>({
       colSizes[`--col-${header.column.id}-size`] = header.column.getSize();
     }
     return colSizes;
-  }, [table.getState().columnSizingInfo, table.getState().columnSizing]);
+  }, [table.getState().columnSizingInfo, table.getState().columnSizing, columns]);
 
   const isFirefox = React.useSyncExternalStore(
     React.useCallback(() => () => {}, []),
