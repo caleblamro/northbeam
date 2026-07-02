@@ -4,10 +4,14 @@
 // ReportConfig ({ groupBy, measure, chartType }); buckets come from
 // record.aggregate (server-side, same visibility rules as record.list — the
 // view's stored filters apply there too). Renders a header strip (measure
-// summary sentence), the chart per config.chartType, and a buckets table
-// below the chart as its accessibility table-view twin.
+// summary sentence), the chart per config.chartType (bar/line/donut/kpi/
+// table — 'line' sorts buckets chronologically for date group-bys, by group
+// label otherwise), and a buckets table below the chart as its accessibility
+// table-view twin.
 
-import { BarList, Donut, StatTile } from '@/components/northbeam/charts';
+import { AiAffordance } from '@/components/northbeam/ai-affordance';
+import { AIGenerateDialog } from '@/components/northbeam/ai-generate-dialog';
+import { BarList, Donut, LineChart, StatTile } from '@/components/northbeam/charts';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
 import { SectionCard } from '@/components/northbeam/section-card';
@@ -33,7 +37,7 @@ import type { ViewRenderer, ViewRendererProps } from '@/lib/views/types';
 import type { Filter, ReportConfig } from '@northbeam/db/views';
 import { ChartBar } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { z } from 'zod';
 
 /** Grand total across buckets — count/sum add up; avg folds count-weighted. */
@@ -56,6 +60,9 @@ export type ReportResultProps = {
   filters: Filter[];
   /** SectionCard title over the chart. */
   title?: ReactNode;
+  /** SectionCard `action` slot next to the title (e.g. the AI affordance).
+   *  Not rendered for `kpi` reports — those have no SectionCard header. */
+  titleAction?: ReactNode;
   /** Render the grand total as a StatTile above the chart (builder preview).
    *  Skipped for `kpi` — that chart already IS the total tile. */
   totalTile?: boolean;
@@ -68,11 +75,11 @@ export function ReportResult({
   config: cfg,
   filters,
   title,
+  titleAction,
   totalTile,
 }: ReportResultProps) {
   const agg = cfg.measure?.agg ?? 'count';
   // A donut states part-to-whole; averages aren't parts of a whole → bars.
-  // 'line' renders as a ranked BarList at v1 — no time-grain bucketing yet.
   const requested = cfg.chartType ?? 'bar';
   const chartType = requested === 'donut' && agg === 'avg' ? 'bar' : requested;
 
@@ -97,6 +104,30 @@ export function ReportResult({
 
   const data = useMemo(() => {
     if (!query.data) return null;
+    if (chartType === 'line') {
+      // A line reads left-to-right as an ordered series: buckets sort by
+      // their group (chronological for date/datetime group-bys, group label
+      // otherwise) and the tail never folds into "Other" — folding is for
+      // ranked charts, not series.
+      const opts = query.data.options ?? [];
+      const refs = query.data.groupLabels ?? {};
+      const isDate = groupField?.type === 'date' || groupField?.type === 'datetime';
+      const labelOf = (g: AggBucket['group']) => bucketLabel(g, opts, refs);
+      const sorted = [...query.data.buckets].sort((a, b) => {
+        if (isDate) {
+          const ta = Date.parse(String(a.group ?? ''));
+          const tb = Date.parse(String(b.group ?? ''));
+          if (!Number.isNaN(ta) && !Number.isNaN(tb)) return ta - tb;
+        }
+        return labelOf(a.group).localeCompare(labelOf(b.group), 'en-US', { numeric: true });
+      });
+      const items = sorted.map((b) => ({
+        label: labelOf(b.group),
+        value: b.value,
+        display: fmtAggregate(b.value, measureField),
+      }));
+      return { items, totalDisplay: fmtAggregate(totalOf(sorted, agg), measureField) };
+    }
     // Top-N before folding into "Other" — the optional config.limit narrows
     // it; donuts hold ≤ 6 segments (5 + Other) regardless.
     const cap =
@@ -111,7 +142,7 @@ export function ReportResult({
       cap,
       measureField,
     });
-  }, [query.data, chartType, agg, measureField, cfg.limit]);
+  }, [query.data, chartType, agg, measureField, groupField, cfg.limit]);
 
   const measurePhrase =
     agg === 'count'
@@ -127,14 +158,14 @@ export function ReportResult({
 
   if (query.isError) {
     return (
-      <Card className="p-0">
+      <SectionCard padding="none">
         <EmptyState
           icon={ChartBar}
           title="Couldn't run this report"
           body={query.error.message}
           size="sm"
         />
-      </Card>
+      </SectionCard>
     );
   }
 
@@ -157,10 +188,11 @@ export function ReportResult({
     );
   } else if (chartType === 'donut') {
     chart = <Donut segments={data.items} totalDisplay={data.totalDisplay} />;
+  } else if (chartType === 'line') {
+    chart = <LineChart points={data.items} />;
   } else if (chartType === 'table') {
     chart = <BucketsTable {...{ buckets, options, refLabels, agg, groupField, measureField }} />;
   } else {
-    // 'bar' and 'line' — line renders as a BarList at v1 (see note above).
     chart = <BarList items={data.items} />;
   }
 
@@ -191,7 +223,7 @@ export function ReportResult({
           className={cn('transition-opacity', dimmed && 'opacity-60')}
         />
       ) : (
-        <SectionCard title={title}>
+        <SectionCard title={title} action={titleAction}>
           <div className={cn('transition-opacity', dimmed && 'opacity-60')}>{chart}</div>
         </SectionCard>
       )}
@@ -210,15 +242,28 @@ export function ReportResult({
 }
 
 export function ReportView({ view, objectKey, objectLabel, fields }: ViewRendererProps) {
+  // The report header's quiet AI door (brief placement #1) — a shortcut into
+  // the same generate flow the ⌘K palette's "AI" group opens.
+  const [aiOpen, setAiOpen] = useState(false);
   return (
-    <ReportResult
-      objectKey={objectKey}
-      objectLabel={objectLabel}
-      fields={fields}
-      config={(view.config ?? {}) as Partial<ReportConfig> & { limit?: number }}
-      filters={view.filters ?? []}
-      title={view.label}
-    />
+    <>
+      <ReportResult
+        objectKey={objectKey}
+        objectLabel={objectLabel}
+        fields={fields}
+        config={(view.config ?? {}) as Partial<ReportConfig> & { limit?: number }}
+        filters={view.filters ?? []}
+        title={view.label}
+        titleAction={
+          <AiAffordance
+            size="sm"
+            label="Ask AI about this report"
+            onClick={() => setAiOpen(true)}
+          />
+        }
+      />
+      <AIGenerateDialog open={aiOpen} onOpenChange={setAiOpen} initialObjectKey={objectKey} />
+    </>
   );
 }
 

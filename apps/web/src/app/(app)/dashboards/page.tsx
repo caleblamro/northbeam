@@ -5,6 +5,7 @@ import { PageActions } from '@/components/northbeam/app-shell';
 import { CreateCard } from '@/components/northbeam/create-card';
 import { DashboardCard } from '@/components/northbeam/dashboard-card';
 import { EmptyState } from '@/components/northbeam/empty-state';
+import { SectionCard } from '@/components/northbeam/section-card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { trpc } from '@/lib/api';
@@ -31,20 +32,25 @@ export default function DashboardsPage() {
       <PageActions>{newButton}</PageActions>
 
       {loading ? (
-        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {[0, 1, 2].map((i) => (
+        // Skeletons mirror the final tile grid — one row of cards.
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-24 rounded-lg" />
           ))}
         </div>
       ) : dashboards.length === 0 ? (
-        <EmptyState
-          icon={LayoutDashboard}
-          title="No dashboards yet"
-          body="Generate one from a prompt — it saves as a shared view and lands here."
-          action={newButton}
-        />
+        <div className="reveal reveal-1">
+          <SectionCard>
+            <EmptyState
+              icon={LayoutDashboard}
+              title="No dashboards yet"
+              body="Generate one from a prompt — it saves as a shared view and lands here."
+              action={newButton}
+            />
+          </SectionCard>
+        </div>
       ) : (
-        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {dashboards.map((v, i) => (
             <DashboardCard key={v.id} view={v} object={objectById.get(v.objectId)} index={i} />
           ))}

@@ -20,4 +20,5 @@ export {
   can,
   meetsRole,
   rankOf,
+  recordPermissionFor,
 } from './roles.js';

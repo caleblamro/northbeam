@@ -1,6 +1,7 @@
 'use client';
 
-// AIGenerateDialog — the ⌘K palette's "Generate from prompt" target.
+// AIGenerateDialog — the ⌘K palette's "Generate dashboard from prompt" target,
+// also opened by the quiet AiAffordance on dashboard surfaces.
 // Object picker + prompt + inline artifact preview using the same walker
 // that renders saved dashboard views. "Save as view" persists the artifact
 // onto a dashboard view row so the layout is preserved exactly as shown.
@@ -20,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -31,12 +33,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { trpc } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import type { ShareTarget, ViewIcon } from '@northbeam/db/views';
 import { BookmarkPlus, Loader2, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const PLACEHOLDER_PROMPTS = [
   'A workspace snapshot dashboard: total record count, top 4 industries, and a table of the top 5 accounts by revenue.',
@@ -47,9 +51,20 @@ const PLACEHOLDER_PROMPTS = [
 interface AIGenerateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Seed the object picker — a dashboard's "Regenerate with AI" passes the
+   *  view's object so the dialog opens in context. */
+  initialObjectKey?: string;
+  /** Seed the prompt — provenance from a saved dashboard, so regeneration
+   *  starts from the original instruction. */
+  initialPrompt?: string;
 }
 
-export function AIGenerateDialog({ open, onOpenChange }: AIGenerateDialogProps) {
+export function AIGenerateDialog({
+  open,
+  onOpenChange,
+  initialObjectKey,
+  initialPrompt,
+}: AIGenerateDialogProps) {
   const router = useRouter();
   const utils = trpc.useUtils();
   const objects = trpc.object.list.useQuery(undefined, { enabled: open });
@@ -59,12 +74,30 @@ export function AIGenerateDialog({ open, onOpenChange }: AIGenerateDialogProps) 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const objectId = objects.data?.find((o) => o.key === objectKey)?.id ?? null;
 
+  // Seed the prompt once per open; after that the user's edits win.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      seeded.current = false;
+      return;
+    }
+    if (seeded.current) return;
+    seeded.current = true;
+    if (initialPrompt) setPrompt(initialPrompt);
+  }, [open, initialPrompt]);
+
   useEffect(() => {
     if (!open) return;
     if (!objectKey && objects.data && objects.data.length > 0) {
-      setObjectKey(objects.data[0]?.key ?? '');
+      // Prefer the caller-seeded object (a dashboard regenerating itself);
+      // fall back to the first object.
+      const preferred =
+        initialObjectKey && objects.data.some((o) => o.key === initialObjectKey)
+          ? initialObjectKey
+          : (objects.data[0]?.key ?? '');
+      setObjectKey(preferred);
     }
-  }, [open, objectKey, objects.data]);
+  }, [open, objectKey, objects.data, initialObjectKey]);
 
   useEffect(() => {
     if (open) return;
@@ -124,9 +157,13 @@ export function AIGenerateDialog({ open, onOpenChange }: AIGenerateDialogProps) 
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="size-4" />
+            <Sparkles className="size-4 text-muted-foreground" />
             Generate from prompt
           </DialogTitle>
+          <DialogDescription>
+            Describe the dashboard you want against your live data. Preview first — nothing is saved
+            until you say so.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
@@ -176,14 +213,34 @@ export function AIGenerateDialog({ open, onOpenChange }: AIGenerateDialogProps) 
           </div>
         </div>
 
+        {generate.isPending && !artifact && (
+          // Progress state: skeletons mirror the generator's canonical layout
+          // (header, KPI row, chart beside a narrower panel).
+          <div className="-mx-6 border-t bg-muted/20 px-6 py-4">
+            <div className="grid grid-cols-12 gap-4">
+              <Skeleton className="col-span-12 h-8 w-1/3" />
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className="col-span-6 h-20 md:col-span-3" />
+              ))}
+              <Skeleton className="col-span-12 h-40 md:col-span-7" />
+              <Skeleton className="col-span-12 h-40 md:col-span-5" />
+            </div>
+          </div>
+        )}
+
         {artifact && (
-          <div className="-mx-6 max-h-[60vh] overflow-y-auto border-t bg-muted/20 px-6 py-4">
+          <div
+            className={cn(
+              '-mx-6 max-h-[60vh] overflow-y-auto border-t bg-muted/20 px-6 py-4 transition-opacity',
+              generate.isPending && 'opacity-60', // regenerating — hold the last preview, dimmed
+            )}
+          >
             <ArtifactView artifact={artifact} />
           </div>
         )}
 
         <DialogFooter className="border-t px-0 pt-3">
-          <span className="mr-auto text-[10px] text-muted-foreground">
+          <span className="mr-auto text-muted-foreground text-xs">
             Preview is ephemeral. Save persists the exact layout as a dashboard view.
           </span>
           {artifact && (

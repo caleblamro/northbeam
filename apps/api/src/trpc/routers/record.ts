@@ -1,7 +1,7 @@
 // /trpc/record — generic CRUD over records of ANY object, driven by the metadata
 // layer. Every operation is org-scoped. Field values live in `data` (JSONB).
 
-import { ValidationFailedError } from '@northbeam/core';
+import { ValidationFailedError, can, recordPermissionFor } from '@northbeam/core';
 import {
   type FieldRow,
   type FormatRule,
@@ -34,6 +34,7 @@ import {
   sanitizeData,
   updateRecord,
   visibleSharedRecordIds,
+  writeAuditEvent,
 } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -52,6 +53,19 @@ async function requireObject(ctx: Context, key: string, opts?: { forWrite?: bool
     throw new TRPCError({ code: 'FORBIDDEN', message: `object '${key}' is archived` });
   }
   return result;
+}
+
+/** Role gate for record mutations. The permission is per-object where one is
+ *  declared (`contact.write`) and the generic `record.*` fallback otherwise, so
+ *  it depends on the input's objectKey and can't be a static
+ *  `permissionProcedure` — enforce inside the handler, right after
+ *  `requireObject`. */
+function assertRecordPermission(ctx: Context, objectKey: string, verb: 'write' | 'delete'): void {
+  if (!ctx.auth) throw new TRPCError({ code: 'UNAUTHORIZED' });
+  const permission = recordPermissionFor(objectKey, verb);
+  if (!can(ctx.auth.role, permission)) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: `requires '${permission}' permission` });
+  }
 }
 
 /** A recordTypeId sent with a write must be an active type on the object. */
@@ -122,6 +136,12 @@ export const recordRouter = router({
       z.object({
         objectKey: z.string(),
         search: z.string().optional(),
+        // View filters/sort, pushed down to SQL by listRecords so the rows come
+        // back already filtered + ordered (see packages/db dynamic/filters-sql.ts).
+        filters: z.array(FilterSchema).default([]),
+        sort: z
+          .array(z.object({ fieldKey: z.string(), direction: z.enum(['asc', 'desc']) }))
+          .default([]),
         limit: z.number().min(1).max(200).optional(),
         offset: z.number().min(0).optional(),
       }),
@@ -146,6 +166,8 @@ export const recordRouter = router({
         object,
         fields,
         search: input.search,
+        filters: input.filters,
+        sort: input.sort,
         limit: input.limit,
         offset: input.offset,
         acl: {
@@ -334,6 +356,7 @@ export const recordRouter = router({
       const { object, fields: rawFields } = await requireObject(ctx, input.objectKey, {
         forWrite: true,
       });
+      assertRecordPermission(ctx, object.key, 'write');
       if (input.recordTypeId) await assertRecordType(ctx, object, input.recordTypeId);
       const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, rawFields);
       const data = sanitizeData(fields, input.data);
@@ -367,6 +390,17 @@ export const recordRouter = router({
         childData: created.data,
         now,
       });
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'record.created',
+        targetType: 'record',
+        targetId: created.id,
+        meta: {
+          objectKey: object.key,
+          name: displayName(fields, created.data, object.nameExpression),
+        },
+      });
       return { ...created, data: { ...created.data, ...computed } };
     }),
 
@@ -383,6 +417,7 @@ export const recordRouter = router({
       const { object, fields: rawFields } = await requireObject(ctx, input.objectKey, {
         forWrite: true,
       });
+      assertRecordPermission(ctx, object.key, 'write');
       if (input.recordTypeId) await assertRecordType(ctx, object, input.recordTypeId);
       const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, rawFields);
       const existing = await getRecord(ctx.db, {
@@ -406,7 +441,8 @@ export const recordRouter = router({
           throw new TRPCError({ code: 'FORBIDDEN', message: 'no edit access to this record' });
         }
       }
-      const merged = { ...existing.data, ...sanitizeData(fields, input.data) };
+      const patch = sanitizeData(fields, input.data);
+      const merged = { ...existing.data, ...patch };
       const now = new Date();
       // Checks run on the MERGED record so clearing a required field — or
       // patching one field into a state a rule forbids — is caught.
@@ -439,6 +475,23 @@ export const recordRouter = router({
           now,
         });
       }
+      // Only keys whose value actually differs from the stored record count as
+      // changed — a no-op PATCH shouldn't log a misleading field list.
+      const changed = Object.keys(patch).filter(
+        (k) => JSON.stringify(existing.data[k] ?? null) !== JSON.stringify(patch[k] ?? null),
+      );
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'record.updated',
+        targetType: 'record',
+        targetId: input.id,
+        meta: {
+          objectKey: object.key,
+          name: displayName(fields, merged, object.nameExpression),
+          changed,
+        },
+      });
       return row ? { ...row, data: { ...row.data, ...computed } } : row;
     }),
 
@@ -446,6 +499,7 @@ export const recordRouter = router({
     .input(z.object({ objectKey: z.string(), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey, { forWrite: true });
+      assertRecordPermission(ctx, object.key, 'delete');
       // Delete needs the existing row to check the owner.
       const existing = await getRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
@@ -473,6 +527,17 @@ export const recordRouter = router({
         childObjectKey: object.key,
         childData: existing.data,
         now: new Date(),
+      });
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'record.deleted',
+        targetType: 'record',
+        targetId: input.id,
+        meta: {
+          objectKey: object.key,
+          name: displayName(fields, existing.data, object.nameExpression),
+        },
       });
       return { ok: true as const };
     }),
@@ -504,6 +569,7 @@ export const recordRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey);
+      assertRecordPermission(ctx, object.key, 'write');
       const existing = await getRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
@@ -523,6 +589,19 @@ export const recordRouter = router({
         { orgId: ctx.auth.organizationId, userId: ctx.auth.userId, role: ctx.auth.role },
         { objectId: object.id, recordId: input.id, userId: input.userId, level: input.level },
       );
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'record.shared',
+        targetType: 'record',
+        targetId: input.id,
+        meta: {
+          objectKey: object.key,
+          name: displayName(fields, existing.data, object.nameExpression),
+          sharedWith: input.userId,
+          level: input.level,
+        },
+      });
       return { ok: true as const };
     }),
 
@@ -531,6 +610,7 @@ export const recordRouter = router({
     .input(z.object({ objectKey: z.string(), id: z.string(), userId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey);
+      assertRecordPermission(ctx, object.key, 'write');
       const existing = await getRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
@@ -549,6 +629,18 @@ export const recordRouter = router({
         { orgId: ctx.auth.organizationId, userId: ctx.auth.userId, role: ctx.auth.role },
         { objectId: object.id, recordId: input.id, userId: input.userId },
       );
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'record.unshared',
+        targetType: 'record',
+        targetId: input.id,
+        meta: {
+          objectKey: object.key,
+          name: displayName(fields, existing.data, object.nameExpression),
+          unsharedFrom: input.userId,
+        },
+      });
       return { ok: true as const };
     }),
 
@@ -560,6 +652,7 @@ export const recordRouter = router({
     .input(z.object({ objectKey: z.string(), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey);
+      assertRecordPermission(ctx, object.key, 'write');
       const row = await getRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,

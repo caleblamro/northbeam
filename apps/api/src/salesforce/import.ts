@@ -4,9 +4,9 @@
 // salesforce_id in a final set-based pass. Owner mapping matches SF Users to
 // workspace members by email.
 //
-// Runs in-process (kicked from the tRPC `execute` mutation without await) and
-// reports progress by writing migration_run.stats — fine for v1; move behind a
-// queue for production-sized orgs.
+// Runs in a BullMQ worker process (the tRPC `execute` mutation enqueues a job
+// consumed by workers/sf-import-worker.ts) and reports progress by writing
+// migration_run.stats, which the UI polls.
 
 import {
   type Database,

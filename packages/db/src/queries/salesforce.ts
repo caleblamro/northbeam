@@ -77,3 +77,31 @@ export async function setConnectionStatus(
 export async function deleteConnection(db: DbExecutor, orgId: string): Promise<void> {
   await db.delete(salesforceConnection).where(and(eq(salesforceConnection.organizationId, orgId)));
 }
+
+/**
+ * Update only the token fields after a successful OAuth refresh. Narrower than
+ * upsertConnection — avoids overwriting instanceUrl / connectedBy / status with
+ * stale values and avoids the extra SELECT that upsert performs.
+ *
+ * If SF did not rotate the refresh token (refresh_token absent in the response),
+ * omit `refreshTokenEnc` and the column is left unchanged.
+ */
+export async function rotateTokens(
+  db: DbExecutor,
+  orgId: string,
+  opts: {
+    accessTokenEnc: string;
+    /** Pass the new encrypted refresh token only when SF returned a rotated one. */
+    refreshTokenEnc?: string;
+  },
+): Promise<void> {
+  await db
+    .update(salesforceConnection)
+    .set({
+      accessTokenEnc: opts.accessTokenEnc,
+      ...(opts.refreshTokenEnc !== undefined ? { refreshTokenEnc: opts.refreshTokenEnc } : {}),
+      status: 'connected',
+      updatedAt: new Date(),
+    })
+    .where(eq(salesforceConnection.organizationId, orgId));
+}

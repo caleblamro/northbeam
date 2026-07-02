@@ -29,7 +29,6 @@ import { trpc } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { rowPassesFilters, sortRows } from '@/lib/filters';
 import type { Filter, ViewSort } from '@northbeam/db/views';
-import { AlertTriangle } from 'lucide-react';
 import { type ReactNode, useMemo } from 'react';
 
 /** What a single artifact node looks like at runtime. The generator's Zod
@@ -73,20 +72,37 @@ function spanOf(node: ArtifactNode): number {
 
 /** Render the full artifact onto a 12-column grid. Each top-level node honors
  *  `props.span`; missing/unknown spans default to 12 (= the old stacked
- *  layout, so pre-grid saved dashboards render unchanged). */
-export function ArtifactView({ artifact }: { artifact: Artifact }) {
+ *  layout, so pre-grid saved dashboards render unchanged).
+ *
+ *  `headerAction` is the surface's quiet AI affordance (dashboard renderer
+ *  passes it). It rides in the artifact's own PageHeader when one leads the
+ *  tree (the generator's canonical layout); hand-authored artifacts without a
+ *  leading header get it floated over the top-right corner instead. */
+export function ArtifactView({
+  artifact,
+  headerAction,
+}: {
+  artifact: Artifact;
+  headerAction?: ReactNode;
+}) {
+  const headerLeads = artifact.components[0]?.component === 'PageHeader';
   return (
-    <div className="grid grid-cols-12 gap-4">
-      {artifact.components.map((node, i) => (
-        <div key={i} className={cn('col-span-12', SPAN_CLASS[spanOf(node)])}>
-          <RenderNode node={node} />
-        </div>
-      ))}
+    <div className="relative">
+      {headerAction && !headerLeads && (
+        <div className="absolute top-1 right-1 z-10">{headerAction}</div>
+      )}
+      <div className="grid grid-cols-12 gap-4">
+        {artifact.components.map((node, i) => (
+          <div key={i} className={cn('col-span-12', SPAN_CLASS[spanOf(node)])}>
+            <RenderNode node={node} action={i === 0 && headerLeads ? headerAction : undefined} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function RenderNode({ node }: { node: ArtifactNode }): ReactNode {
+function RenderNode({ node, action }: { node: ArtifactNode; action?: ReactNode }): ReactNode {
   if (node.component === 'SectionCard') {
     const props = (node.props ?? {}) as { title?: string };
     return (
@@ -109,10 +125,10 @@ function RenderNode({ node }: { node: ArtifactNode }): ReactNode {
       </div>
     );
   }
-  return <RenderLeaf node={node} />;
+  return <RenderLeaf node={node} action={action} />;
 }
 
-function RenderLeaf({ node }: { node: ArtifactNode }): ReactNode {
+function RenderLeaf({ node, action }: { node: ArtifactNode; action?: ReactNode }): ReactNode {
   const props = (node.props ?? {}) as Record<string, unknown>;
   switch (node.component) {
     case 'PageHeader':
@@ -120,6 +136,7 @@ function RenderLeaf({ node }: { node: ArtifactNode }): ReactNode {
         <PageHeader
           title={(props.title as string | undefined) ?? 'Untitled'}
           subtitle={props.subtitle as string | undefined}
+          actions={action}
         />
       );
     case 'MetricGroup': {
@@ -165,13 +182,13 @@ function RenderLeaf({ node }: { node: ArtifactNode }): ReactNode {
       return <RecordGridNode props={props} />;
     default:
       return (
-        <div className="flex items-start gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs">
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
-          <span className="text-muted-foreground">
-            Unsupported component:{' '}
-            <code className="font-mono text-foreground">{node.component}</code>
-          </span>
-        </div>
+        <UnsupportedNodeNote
+          message={
+            <>
+              Unsupported component: <code className="font-mono">{node.component}</code>
+            </>
+          }
+        />
       );
   }
 }
@@ -548,11 +565,12 @@ function RecordGridNode({ props }: { props: Record<string, unknown> }) {
   );
 }
 
-function UnsupportedNodeNote({ message }: { message: string }) {
+// Deliberately quiet: a drifted or mis-authored node is a soft gap in the
+// grid, not an alarm — muted ink on a dashed hairline, no warning color.
+function UnsupportedNodeNote({ message }: { message: ReactNode }) {
   return (
-    <div className="flex items-start gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs">
-      <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
-      <span className="text-muted-foreground">{message}</span>
-    </div>
+    <p className="rounded-md border border-dashed bg-muted/30 px-3 py-2 text-muted-foreground text-xs">
+      {message}
+    </p>
   );
 }

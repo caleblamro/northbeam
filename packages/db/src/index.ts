@@ -212,6 +212,7 @@ export {
   getConnection,
   upsertConnection,
   setConnectionStatus,
+  rotateTokens,
   deleteConnection,
   type SalesforceConnectionRow,
   type ConnectionStatus,

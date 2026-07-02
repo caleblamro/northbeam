@@ -3,9 +3,10 @@
 //   ?filters=<json>  transient filter overrides on top of the view
 //   ?sort=<json>     transient sort overrides
 //
-// Type switching was removed when kanban / calendar / grid / ai renderers
-// were removed by request — there's only one view type now (`list`), so
-// nothing in the URL needs to remember which type we're on.
+// View type is not stored in the URL — the active view row already carries its
+// type (`list` | `dashboard` | `report`, per ViewType in @northbeam/db/views).
+// Switching views navigates via ?view=<id>, which the dispatcher resolves to
+// the correct renderer; no separate ?type= param is needed.
 
 import { readFiltersFromParams } from '@/lib/filters';
 import type { Filter, ViewSort } from '@northbeam/db/views';

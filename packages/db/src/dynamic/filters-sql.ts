@@ -78,10 +78,12 @@ function predicate(field: FilterField, f: Filter): SQL | null {
       return sql`not ${emptyPredicate(field, c)}`;
     case 'isTrue':
       // Boolean(value) === true  →  only a real TRUE matches (NULL is false).
-      return sql`${c} is true`;
+      // Checkbox-only: `IS TRUE` on any other column type is a Postgres type
+      // error (42804), and opsForType only offers these ops for checkbox.
+      return field.type === 'checkbox' ? sql`${c} is true` : null;
     case 'isFalse':
       // Boolean(value) === false →  NULL and FALSE both match.
-      return sql`${c} is not true`;
+      return field.type === 'checkbox' ? sql`${c} is not true` : null;
   }
 
   // multipicklist 'contains' is array membership (case-insensitive), not substring.
@@ -102,9 +104,20 @@ function predicate(field: FilterField, f: Filter): SQL | null {
   const fv = f.value;
   switch (f.op) {
     case 'eq':
-      return wrap(sql`lower(${c}::text) = lower(${String(fv ?? '')})`);
-    case 'neq':
-      return wrap(sql`lower(${c}::text) <> lower(${String(fv ?? '')})`);
+    case 'neq': {
+      // Numeric columns compare as numbers, not rendered text: numeric(18,2)
+      // stringifies as '5000.00' while the user types '5000', and the web
+      // matcher compares Number-normalized values (fromDb coerces to JS
+      // number). Text equality would silently miss every scaled value.
+      if (NUMERIC_TYPES.has(field.type)) {
+        const n = Number(fv);
+        if (!Number.isFinite(n)) return null;
+        return f.op === 'eq' ? sql`${c}::numeric = ${n}` : sql`${c}::numeric <> ${n}`;
+      }
+      return f.op === 'eq'
+        ? wrap(sql`lower(${c}::text) = lower(${String(fv ?? '')})`)
+        : wrap(sql`lower(${c}::text) <> lower(${String(fv ?? '')})`);
+    }
     case 'contains':
       return wrap(sql`${c}::text ilike ${`%${escapeLike(String(fv ?? ''))}%`}`);
     case 'startsWith':
@@ -115,6 +128,10 @@ function predicate(field: FilterField, f: Filter): SQL | null {
     case 'lt':
     case 'gte':
     case 'lte': {
+      // Numeric-only (mirrors opsForType): `::numeric` on a text/date column
+      // would be a per-row cast error, reachable via crafted URLs or stale
+      // saved views after a field type change.
+      if (!NUMERIC_TYPES.has(field.type)) return null;
       const n = Number(fv);
       if (!Number.isFinite(n)) return null;
       const opSql =
@@ -122,9 +139,20 @@ function predicate(field: FilterField, f: Filter): SQL | null {
       return sql`${c}::numeric ${opSql} ${n}`;
     }
     case 'before':
-      return sql`${c}::timestamptz < ${String(fv)}::timestamptz`;
-    case 'after':
-      return sql`${c}::timestamptz > ${String(fv)}::timestamptz`;
+    case 'after': {
+      // Date columns only, and the value must parse as a date — the
+      // FilterDialog lets an empty value through (`{ op: 'before', value:
+      // null }`), and `'null'::timestamptz` is a query-killing cast error.
+      // The parsed instant is bound as ISO so Postgres sees exactly what the
+      // web matcher's `new Date(...)` resolved.
+      if (!DATE_TYPES.has(field.type)) return null;
+      const t = Date.parse(String(fv ?? ''));
+      if (Number.isNaN(t)) return null;
+      const iso = new Date(t).toISOString();
+      return f.op === 'before'
+        ? sql`${c}::timestamptz < ${iso}::timestamptz`
+        : sql`${c}::timestamptz > ${iso}::timestamptz`;
+    }
     default:
       return null;
   }

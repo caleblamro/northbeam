@@ -6,6 +6,7 @@
 
 import { ObjChip } from '@/components/northbeam/app-bits';
 import { HidePageHead, PageActions } from '@/components/northbeam/app-shell';
+import { ConfirmDialog } from '@/components/northbeam/confirm-dialog';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
 import { FilterDialog } from '@/components/northbeam/filter-bar';
@@ -17,13 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 import { trpc } from '@/lib/api';
-import {
-  type Filter,
-  readFiltersFromParams,
-  rowPassesFilters,
-  sortRows,
-  writeFiltersToParams,
-} from '@/lib/filters';
+import { type Filter, readFiltersFromParams, writeFiltersToParams } from '@/lib/filters';
 import { getViewRenderer } from '@/lib/views/registry';
 import type { ViewRow } from '@/lib/views/types';
 import { readSortFromParams, writeSortToParams } from '@/lib/views/url-state';
@@ -32,7 +27,7 @@ import type { ShareTarget, ViewIcon } from '@northbeam/db/views';
 import type { ViewSort } from '@northbeam/db/views';
 import { AlertCircle, Upload, UserPlus } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export function RecordListView({
   objectKey,
@@ -76,7 +71,76 @@ export function RecordListView({
   );
 
   const utils = trpc.useUtils();
-  const list = trpc.record.list.useQuery({ objectKey, search: q || undefined });
+
+  // The saved-view lookup needs the object id, which only arrives with the
+  // list response — but the list input needs the active view's filters. Break
+  // the cycle by echoing the id into state once known: render 1 fetches the
+  // unfiltered list, the id lands, views load, and the list refetches with the
+  // view's filters applied. Defensive `retry: false` + silent meta means the
+  // page renders fine even if the schema hasn't been pushed yet — the
+  // dispatcher just falls back to a synthetic default below.
+  const [objectId, setObjectId] = useState<string | null>(null);
+  const viewsQ = trpc.view.list.useQuery(
+    { objectId: objectId ?? '' },
+    {
+      enabled: !!objectId,
+      retry: false,
+      meta: { silent: true },
+    },
+  );
+
+  // The stored view the URL (or the default flag) points at, if any. The full
+  // `activeView` — including the synthetic fallback, which needs the object
+  // summary — is derived after the list query below.
+  const storedView: ViewRow | null = useMemo(() => {
+    const explicit = searchParams.get('view');
+    const stored = viewsQ.data ?? [];
+    const found = explicit ? stored.find((v) => v.id === explicit) : null;
+    return found ?? stored.find((v) => v.isDefault) ?? stored[0] ?? null;
+  }, [searchParams, viewsQ.data]);
+
+  // Effective filter set = static (caller-pinned) + view's stored filters
+  // + transient URL overrides. Pushed down to SQL via record.list — the
+  // server's filters-sql.ts mirrors the web matcher in lib/filters.ts, so
+  // rows come back identical to the old client-side pass (which now only
+  // survives for format-rule evaluation).
+  const effectiveFilters = useMemo(
+    () => [...(staticFilters ?? []), ...(storedView?.filters ?? []), ...filters],
+    [staticFilters, storedView?.filters, filters],
+  );
+  // Sort: URL takes precedence (header click writes there), otherwise fall
+  // back to the saved view's sort. Empty URL + empty view = server default
+  // (created_at desc).
+  const urlSort = useMemo(
+    () => readSortFromParams(new URLSearchParams(searchParams.toString())),
+    [searchParams],
+  );
+  const effectiveSort = useMemo<ViewSort[]>(
+    () => (urlSort.length > 0 ? urlSort : (storedView?.sort ?? [])),
+    [urlSort, storedView?.sort],
+  );
+  const setSort = useCallback(
+    (next: ViewSort[]) => {
+      const params = new URLSearchParams(searchParams.toString());
+      writeSortToParams(params, next);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
+
+  const listInput = useMemo(
+    () => ({
+      objectKey,
+      search: q || undefined,
+      filters: effectiveFilters,
+      sort: effectiveSort,
+    }),
+    [objectKey, q, effectiveFilters, effectiveSort],
+  );
+  // Filters/sort are part of the query key, so edits would otherwise blank the
+  // table while the server round-trips — keep the previous page on screen.
+  const list = trpc.record.list.useQuery(listInput, { placeholderData: (prev) => prev });
   const remove = trpc.record.remove.useMutation({
     onSuccess: () => utils.record.list.invalidate(),
   });
@@ -86,7 +150,7 @@ export function RecordListView({
   const update = trpc.record.update.useMutation({
     meta: { context: "Couldn't save the change" },
     onMutate: async ({ id, data }) => {
-      const input = { objectKey, search: q || undefined };
+      const input = listInput;
       await utils.record.list.cancel(input);
       const prev = utils.record.list.getData(input);
       utils.record.list.setData(input, (old) =>
@@ -106,31 +170,22 @@ export function RecordListView({
   });
 
   const fields = (list.data?.fields ?? []) as FieldDefLite[];
-  const allRows = list.data?.rows ?? [];
+  // Rows arrive filtered + sorted by the server — no client-side pass needed.
+  const rows = list.data?.rows ?? [];
   const refLabels = list.data?.refLabels ?? {};
   const object = list.data?.object;
   const objectLabel = object?.label ?? '';
   const objectPlural = object?.labelPlural ?? '';
   const layout = (object?.layout ?? {}) as ObjectLayout;
 
-  // Saved views from the API. Defensive `retry: false` + silent meta means
-  // the page renders fine even if the schema hasn't been pushed yet — the
-  // dispatcher just falls back to a synthetic default below.
-  const viewsQ = trpc.view.list.useQuery(
-    { objectId: object?.id ?? '' },
-    {
-      enabled: !!object?.id,
-      retry: false,
-      meta: { silent: true },
-    },
-  );
+  // Echo the object id into state for the saved-view query above. Cleared
+  // when the objectKey changes (list.data goes undefined while refetching).
+  useEffect(() => {
+    setObjectId(object?.id ?? null);
+  }, [object?.id]);
 
   const activeView: ViewRow = useMemo(() => {
-    const explicit = searchParams.get('view');
-    const stored = viewsQ.data ?? [];
-    const found = explicit ? stored.find((v) => v.id === explicit) : null;
-    const base = found ?? stored.find((v) => v.isDefault) ?? stored[0];
-    if (base) return base;
+    if (storedView) return storedView;
     // Synthetic fallback: a transient "All <object>" list view derived from
     // the object's layout. Used when the view table is empty (pre-seed) or
     // when the schema hasn't been pushed yet. Never written back to the DB.
@@ -155,46 +210,12 @@ export function RecordListView({
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies ViewRow;
-  }, [searchParams, viewsQ.data, object, objectPlural, layout.listColumns]);
-
-  // Effective filter set = static (caller-pinned) + view's stored filters
-  // + transient URL overrides. Client-side filtering for v0; the matcher
-  // mirrors Postgres semantics so server-side pushdown is a swap, not a
-  // redesign.
-  const effectiveFilters = useMemo(
-    () => [...(staticFilters ?? []), ...(activeView.filters ?? []), ...filters],
-    [staticFilters, activeView.filters, filters],
-  );
-  // Sort: URL takes precedence (header click writes there), otherwise fall
-  // back to the saved view's sort. Empty URL + empty view = unsorted.
-  const urlSort = useMemo(
-    () => readSortFromParams(new URLSearchParams(searchParams.toString())),
-    [searchParams],
-  );
-  const effectiveSort = useMemo<ViewSort[]>(
-    () => (urlSort.length > 0 ? urlSort : (activeView.sort ?? [])),
-    [urlSort, activeView.sort],
-  );
-  const setSort = useCallback(
-    (next: ViewSort[]) => {
-      const params = new URLSearchParams(searchParams.toString());
-      writeSortToParams(params, next);
-      const qs = params.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    },
-    [router, pathname, searchParams],
-  );
-  const rows = useMemo(() => {
-    const filtered =
-      effectiveFilters.length === 0
-        ? allRows
-        : allRows.filter((r) => rowPassesFilters(fields, r.data, effectiveFilters));
-    return sortRows(fields, filtered, effectiveSort);
-  }, [allRows, fields, effectiveFilters, effectiveSort]);
+  }, [storedView, object, objectPlural, layout.listColumns]);
 
   // Override detection — the picker uses this to surface "Save as new view…"
-  // when the URL filters diverge from what the active view actually stores.
-  const hasOverrides = filters.length > 0;
+  // when the URL state (filters or sort) diverges from what the active view
+  // stores. A sort-only column-header click counts as an override too.
+  const hasOverrides = filters.length > 0 || urlSort.length > 0;
 
   /** Navigate to a saved view, clearing the transient overrides on the URL
    *  (the view carries them). */
@@ -222,6 +243,10 @@ export function RecordListView({
     meta: { context: "Couldn't delete that view" },
     onSuccess: () => utils.view.list.invalidate({ objectId: object?.id ?? '' }),
   });
+
+  // Confirm dialog state for view deletion. Holds the view pending deletion
+  // so the dialog can show the view label and trigger the mutation on confirm.
+  const [deleteConfirmView, setDeleteConfirmView] = useState<ViewRow | null>(null);
 
   // Dialog state for "Save as new view…". Opened either from the picker
   // (no overrides) or from a renderer that wants to persist its transient
@@ -274,6 +299,7 @@ export function RecordListView({
     [
       activeView,
       createView,
+      effectiveSort,
       filters,
       object?.id,
       pendingSaveOverrides,
@@ -343,15 +369,7 @@ export function RecordListView({
           onSelect={selectView}
           onSaveAsNew={saveAsNewView}
           onSetDefault={(v) => setDefaultView.mutate({ id: v.id })}
-          onDelete={(v) => {
-            if (window.confirm(`Delete "${v.label}"? This can't be undone.`)) {
-              deleteView.mutate({ id: v.id });
-              if (v.id === activeView.id) {
-                // Clear the URL so the dispatcher falls back to a different view.
-                router.replace(pathname, { scroll: false });
-              }
-            }
-          }}
+          onDelete={(v) => setDeleteConfirmView(v)}
         />
       </div>
 
@@ -376,8 +394,8 @@ export function RecordListView({
           <LoadingScreen size="md" />
         </Card>
       ) : rows.length === 0 && activeView.type !== 'report' ? (
-        // Report views aggregate server-side over ALL rows — the client-side
-        // 200-row sample being empty says nothing about the report, so they
+        // Report views aggregate server-side over ALL rows — the list's
+        // max-200-row page being empty says nothing about the report, so they
         // skip this empty-state gate and render regardless.
         <Card className="p-0">
           <EmptyState
@@ -431,6 +449,27 @@ export function RecordListView({
           );
         })()
       )}
+
+      <ConfirmDialog
+        open={!!deleteConfirmView}
+        onOpenChange={(o) => !o && setDeleteConfirmView(null)}
+        title="Delete view"
+        description={
+          deleteConfirmView ? `Delete "${deleteConfirmView.label}"? This can't be undone.` : ''
+        }
+        confirmLabel="Delete"
+        tone="destructive"
+        pending={deleteView.isPending}
+        onConfirm={() => {
+          if (!deleteConfirmView) return;
+          deleteView.mutate({ id: deleteConfirmView.id });
+          if (deleteConfirmView.id === activeView.id) {
+            // Clear the URL so the dispatcher falls back to a different view.
+            router.replace(pathname, { scroll: false });
+          }
+          setDeleteConfirmView(null);
+        }}
+      />
 
       <SaveViewDialog
         open={saveDialogOpen}

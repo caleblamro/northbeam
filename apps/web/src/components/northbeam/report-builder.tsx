@@ -7,6 +7,8 @@
 // `editViewId` (?edit=<viewId>) loads an existing report for round-trip
 // editing: save then patches the view instead of creating a new one.
 
+import { AiAffordance } from '@/components/northbeam/ai-affordance';
+import { AIGenerateDialog } from '@/components/northbeam/ai-generate-dialog';
 import { PageActions } from '@/components/northbeam/app-shell';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import { Field } from '@/components/northbeam/field';
@@ -44,6 +46,7 @@ const MEASURABLE = new Set<FieldType>(['number', 'currency', 'percent', 'autonum
 
 const CHART_TYPES = [
   { value: 'bar', label: 'Bar' },
+  { value: 'line', label: 'Line' },
   { value: 'donut', label: 'Donut' },
   { value: 'kpi', label: 'KPI' },
   { value: 'table', label: 'Table' },
@@ -72,14 +75,11 @@ const DEFAULT_SPEC: Spec = {
 
 function specFromView(view: ViewRow): Spec {
   const cfg = (view.config ?? {}) as Partial<ReportConfig> & { limit?: number };
-  const chartType = cfg.chartType ?? 'kpi';
   return {
     groupBy: cfg.groupBy ?? null,
     agg: cfg.measure?.agg ?? 'count',
     measureFieldKey: cfg.measure?.fieldKey ?? null,
-    // 'line' is storable (AI-authored) but not offered here — it renders as a
-    // ranked bar list anyway, so the builder round-trips it as 'bar'.
-    chartType: chartType === 'line' ? 'bar' : chartType,
+    chartType: cfg.chartType ?? 'kpi',
     limit: cfg.limit ?? null,
     filters: view.filters ?? [],
   };
@@ -140,6 +140,7 @@ function BuilderInner({
   const [objectKey, setObjectKey] = useState(initialObjectKey);
   const [spec, setSpec] = useState<Spec>(editView ? specFromView(editView) : DEFAULT_SPEC);
   const [saveOpen, setSaveOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const object = objects.find((o) => o.key === objectKey);
   const meta = trpc.object.get.useQuery({ key: objectKey }, { enabled: Boolean(objectKey) });
@@ -148,13 +149,17 @@ function BuilderInner({
   const measurable = fields.filter((f) => MEASURABLE.has(f.type));
 
   // A donut states part-to-whole: it needs buckets (groupBy) and an additive
-  // measure (count/sum) — averages aren't parts of a whole.
+  // measure (count/sum) — averages aren't parts of a whole. A line draws an
+  // ordered series across buckets, so it also needs a groupBy (a totals-only
+  // report would be a single point).
   const donutOk = Boolean(spec.groupBy) && spec.agg !== 'avg';
+  const lineOk = Boolean(spec.groupBy);
   const patch = (p: Partial<Spec>) => {
     setSpec((s) => {
       const next = { ...s, ...p };
       const nextDonutOk = Boolean(next.groupBy) && next.agg !== 'avg';
       if (next.chartType === 'donut' && !nextDonutOk) next.chartType = 'bar';
+      if (next.chartType === 'line' && !next.groupBy) next.chartType = 'bar';
       return next;
     });
   };
@@ -221,6 +226,13 @@ function BuilderInner({
   return (
     <>
       <PageActions>
+        {/* Builder-toolbar AI door (brief placement #3) — always visible,
+            same generate flow as the ⌘K palette's "AI" group. */}
+        <AiAffordance
+          size="xs"
+          label="Generate report from prompt"
+          onClick={() => setAiOpen(true)}
+        />
         <Button onClick={() => setSaveOpen(true)} disabled={!object || !specComplete}>
           <Save />
           {editView ? 'Save report' : 'Save report…'}
@@ -331,7 +343,7 @@ function BuilderInner({
             </Field>
 
             <Field label="Chart type">
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 {CHART_TYPES.map((ct) => (
                   <Button
                     key={ct.value}
@@ -339,11 +351,17 @@ function BuilderInner({
                     size="sm"
                     variant={spec.chartType === ct.value ? 'default' : 'outline'}
                     aria-pressed={spec.chartType === ct.value}
-                    disabled={!object || (ct.value === 'donut' && !donutOk)}
+                    disabled={
+                      !object ||
+                      (ct.value === 'donut' && !donutOk) ||
+                      (ct.value === 'line' && !lineOk)
+                    }
                     title={
                       ct.value === 'donut' && !donutOk
                         ? 'Donuts need a group-by and a count or sum measure'
-                        : undefined
+                        : ct.value === 'line' && !lineOk
+                          ? 'Lines need a group-by to draw a series'
+                          : undefined
                     }
                     onClick={() => patch({ chartType: ct.value })}
                   >
@@ -375,18 +393,22 @@ function BuilderInner({
         </SectionCard>
 
         {!object ? (
-          <EmptyState
-            icon={ChartBar}
-            title="Pick an object to start"
-            body="Choose what this report aggregates, then group and measure it."
-          />
+          <SectionCard title="Preview">
+            <EmptyState
+              icon={ChartBar}
+              title="Pick an object to start"
+              body="Choose what this report aggregates, then group and measure it."
+            />
+          </SectionCard>
         ) : !specComplete ? (
-          <EmptyState
-            icon={ChartBar}
-            title="Pick a measure field"
-            body="Sum and average need a numeric field to aggregate."
-            size="sm"
-          />
+          <SectionCard title="Preview">
+            <EmptyState
+              icon={ChartBar}
+              title="Pick a measure field"
+              body="Sum and average need a numeric field to aggregate."
+              size="sm"
+            />
+          </SectionCard>
         ) : meta.isLoading ? (
           <Skeleton className="h-72 rounded-lg" />
         ) : (
@@ -410,6 +432,7 @@ function BuilderInner({
         isSaving={createView.isPending || updateView.isPending}
         onSave={onSave}
       />
+      <AIGenerateDialog open={aiOpen} onOpenChange={setAiOpen} initialObjectKey={objectKey} />
     </>
   );
 }

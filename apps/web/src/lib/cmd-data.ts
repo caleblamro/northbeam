@@ -20,7 +20,7 @@ export const CMD_ITEMS: CmdItem[] = [
     id: 'ai-generate',
     group: 'AI',
     icon: 'sparkle',
-    label: 'Generate from prompt',
+    label: 'Generate dashboard from prompt',
     sub: 'Compose a dashboard against your live data',
   },
   {
@@ -52,6 +52,7 @@ export const CMD_ITEMS: CmdItem[] = [
   { id: 'n2', group: 'Go to', icon: 'buildings', label: 'Accounts', href: '/accounts' },
   { id: 'n3', group: 'Go to', icon: 'currency-circle-dollar', label: 'Deals', href: '/deals' },
   { id: 'n4', group: 'Go to', icon: 'chart-line-up', label: 'Reports', href: '/reports' },
+  { id: 'n6', group: 'Go to', icon: 'squares-four', label: 'Dashboards', href: '/dashboards' },
   { id: 'n5', group: 'Go to', icon: 'gear-six', label: 'Settings', href: '/settings' },
   {
     id: 'r1',

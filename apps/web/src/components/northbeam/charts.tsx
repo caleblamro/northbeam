@@ -1,18 +1,22 @@
 'use client';
 
-// Chart primitives for dashboard artifacts — BarList, Donut, StatTile.
-// Plain HTML/SVG, no chart dependency. Follows the dataviz design method:
+// Chart primitives for dashboard artifacts — BarList, LineChart, Donut,
+// StatTile. Plain HTML/SVG, no chart dependency. Follows the dataviz method:
 //   - BarList: ranked nominal categories, ONE hue for every bar (slot 1),
 //     bars ≤ 24px thick, 4px rounded data-end + square baseline edge,
 //     hairline recessive track, labels/values in text tokens only.
+//   - LineChart: single ordered series (report 'line' chartType), ONE hue
+//     (slot 1) with the Sparkline's 8%-opacity area fill, hairline zero
+//     baseline, sparse x-axis tick labels so dense series stay legible.
 //   - Donut: part-to-whole, ≤ 6 segments, fixed categorical slot order,
 //     2px surface-color gaps between segments (no strokes), total in the
 //     center, legend always present (swatch + label + value).
 //   - StatTile: sentence-case label, semibold PROPORTIONAL-figure value
 //     (tabular-nums is reserved for aligned columns, never big standalone
 //     numbers), signed delta colored by direction, optional 12-pt sparkline.
-// Tooltips enhance, never gate: BarList shows values as direct labels and
-// the Donut legend carries every value, so hover is a convenience.
+// Tooltips enhance, never gate: BarList shows values as direct labels, the
+// Donut legend carries every value, and LineChart's report surface always
+// ships its buckets-table twin — hover is a convenience.
 
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -125,6 +129,144 @@ export function BarList({ items, className }: { items: ChartDatum[]; className?:
           </Tooltip>
         );
       })}
+    </div>
+  );
+}
+
+/* ── LineChart ──────────────────────────────────────────────────────────── */
+
+// Fixed drawing coordinates — the SVG scales uniformly (w-full h-auto), so
+// tick/tooltip positions expressed as % of these match the rendered box.
+const LINE_W = 640;
+const LINE_H = 180;
+const LINE_PAD = 10;
+
+/** Evenly spaced tick indices (always including first + last) so a dense
+ *  series never renders more than `max` overlapping x labels. */
+function tickIndices(n: number, max = 6): number[] {
+  if (n <= max) return Array.from({ length: n }, (_, i) => i);
+  const count = Math.min(n, max);
+  const picked = new Set<number>();
+  for (let t = 0; t < count; t++) picked.add(Math.round((t * (n - 1)) / (count - 1)));
+  return [...picked].sort((a, b) => a - b);
+}
+
+export function LineChart({ points, className }: { points: ChartDatum[]; className?: string }) {
+  const [hover, setHover] = useState<number | null>(null);
+  if (points.length === 0) {
+    return <p className="text-muted-foreground text-sm">No data to chart.</p>;
+  }
+
+  const values = points.map((p) => p.value);
+  const yMax = Math.max(...values, 1);
+  const yMin = Math.min(...values, 0);
+  const range = yMax - yMin || 1;
+  const xOf = (i: number) =>
+    points.length === 1
+      ? LINE_W / 2
+      : LINE_PAD + (i * (LINE_W - LINE_PAD * 2)) / (points.length - 1);
+  const yOf = (v: number) => LINE_H - LINE_PAD - ((v - yMin) / range) * (LINE_H - LINE_PAD * 2);
+  const yBase = yOf(Math.max(yMin, 0)); // zero baseline (yMin is never above 0)
+
+  const pts = points.map((p, i) => `${xOf(i).toFixed(2)},${yOf(p.value).toFixed(2)}`).join(' ');
+  const area = `M${xOf(0).toFixed(2)},${yBase.toFixed(2)} L${pts.split(' ').join(' L')} L${xOf(
+    points.length - 1,
+  ).toFixed(2)},${yBase.toFixed(2)} Z`;
+  const ticks = tickIndices(points.length);
+  const hovered = hover !== null ? points[hover] : undefined;
+
+  return (
+    <div className={cn('nb-chart', className)}>
+      <ChartRampStyle />
+      <div className="relative">
+        <svg
+          viewBox={`0 0 ${LINE_W} ${LINE_H}`}
+          className="block h-auto w-full"
+          role="img"
+          aria-label={`Line chart, ${points.length} point${points.length === 1 ? '' : 's'}`}
+        >
+          {/* Hairline zero baseline — the only chart furniture. */}
+          <line
+            x1={0}
+            y1={yBase}
+            x2={LINE_W}
+            y2={yBase}
+            stroke="var(--border)"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+          <path d={area} fill="var(--nb-chart-1)" opacity={0.08} />
+          {points.length > 1 && (
+            <polyline
+              points={pts}
+              stroke="var(--nb-chart-1)"
+              strokeWidth={1.5}
+              fill="none"
+              vectorEffect="non-scaling-stroke"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          )}
+          {/* Hover/focus targets — a convenience: every value also lives in
+              the report's buckets-table twin, so nothing is gated on hover. */}
+          {points.map((p, i) => (
+            <circle
+              key={`${p.label}-${i}`}
+              cx={xOf(i)}
+              cy={yOf(p.value)}
+              r={3}
+              fill="var(--nb-chart-1)"
+              className="outline-none transition-opacity"
+              opacity={hover === null || hover === i ? 1 : 0.45}
+              tabIndex={0}
+              aria-label={`${p.label}: ${displayOf(p)}`}
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+              onFocus={() => setHover(i)}
+              onBlur={() => setHover(null)}
+            />
+          ))}
+        </svg>
+        {hover !== null && hovered && (
+          <div
+            className="pointer-events-none absolute z-10 w-max rounded-md bg-primary px-2.5 py-1 text-primary-foreground text-xs shadow-md"
+            style={{
+              left: `${(xOf(hover) / LINE_W) * 100}%`,
+              top: `${(yOf(hovered.value) / LINE_H) * 100}%`,
+              transform: 'translate(-50%, calc(-100% - 8px))',
+            }}
+          >
+            <span className="font-semibold tabular-nums">{displayOf(hovered)}</span>{' '}
+            <span className="opacity-80">{hovered.label}</span>
+          </div>
+        )}
+      </div>
+      {/* Sparse x-axis labels — % positions mirror the uniformly-scaled SVG. */}
+      <div className="relative mt-1.5 h-4">
+        {ticks.map((i) => {
+          const p = points[i];
+          if (!p) return null;
+          return (
+            <span
+              key={i}
+              className="absolute top-0 max-w-24 truncate text-[11px] text-muted-foreground"
+              style={{
+                left: `${(xOf(i) / LINE_W) * 100}%`,
+                transform:
+                  points.length === 1
+                    ? 'translateX(-50%)'
+                    : i === 0
+                      ? 'none'
+                      : i === points.length - 1
+                        ? 'translateX(-100%)'
+                        : 'translateX(-50%)',
+              }}
+            >
+              {p.label}
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }

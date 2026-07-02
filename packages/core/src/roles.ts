@@ -38,7 +38,10 @@ export const PERMISSIONS = {
   'org.members.invite': 'admin',
   'org.members.remove': 'admin',
   'org.members.role': 'admin',
-  // CRM records
+  // CRM records — SF-style granular layer for the standard objects. Custom and
+  // imported objects fall back to the generic record.* keys below until the
+  // planned objectPermission table (per-org, per-object, per-role rows plus SF
+  // permission import) lands.
   'contact.read': 'viewer',
   'contact.write': 'member',
   'contact.delete': 'admin',
@@ -48,6 +51,10 @@ export const PERMISSIONS = {
   'deal.read': 'viewer',
   'deal.write': 'member',
   'deal.delete': 'admin',
+  // Generic fallback for objects without object-specific permissions.
+  'record.read': 'viewer',
+  'record.write': 'member',
+  'record.delete': 'admin',
   // Data model — the single gate for all schema editing: objects, fields,
   // record types, global picklist sets, validation rules, format rules.
   'object.manage': 'admin',
@@ -66,6 +73,26 @@ export type Permission = keyof typeof PERMISSIONS;
 /** True if the role can perform the given action. */
 export function can(role: Role, action: Permission): boolean {
   return meetsRole(role, PERMISSIONS[action]);
+}
+
+// Objects with a per-object permission set declared above. Resolution MUST go
+// through this whitelist rather than probing PERMISSIONS at large: object keys
+// are user/import controlled (e.g. Salesforce `View__c` imports as `view`), and
+// a bare `${objectKey}.${verb}` lookup would collide with non-record permissions
+// like 'org.delete' or 'view.write'. Revisit when the objectPermission table
+// (keyed by object id, not key) lands.
+const RECORD_PERMISSION_OBJECTS: ReadonlySet<string> = new Set(['contact', 'account', 'deal']);
+
+/** Resolve the permission gating a record verb for a given object: the
+ *  per-object key (`contact.write`) when one is declared, else the generic
+ *  fallback (`record.write`). */
+export function recordPermissionFor(
+  objectKey: string,
+  verb: 'read' | 'write' | 'delete',
+): Permission {
+  return RECORD_PERMISSION_OBJECTS.has(objectKey)
+    ? (`${objectKey}.${verb}` as Permission)
+    : `record.${verb}`;
 }
 
 // Labels + grouping for permissions — drives the Setup → Permissions matrix
@@ -123,6 +150,21 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'deal.read', label: 'Read deals' },
       { key: 'deal.write', label: 'Create / edit deals' },
       { key: 'deal.delete', label: 'Delete deals' },
+      {
+        key: 'record.read',
+        label: 'Read records',
+        description: 'Default for objects without object-specific permissions.',
+      },
+      {
+        key: 'record.write',
+        label: 'Create / edit records',
+        description: 'Default for objects without object-specific permissions.',
+      },
+      {
+        key: 'record.delete',
+        label: 'Delete records',
+        description: 'Default for objects without object-specific permissions.',
+      },
     ],
   },
   {

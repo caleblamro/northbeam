@@ -14,6 +14,8 @@ import {
   getObjectByKey,
 } from '../queries/crm.js';
 import { fieldDef } from '../schema.js';
+import type { Filter, ViewSort } from '../views.js';
+import { buildFilterPredicates, buildOrderBy } from './filters-sql.js';
 import { SYS, qid, qualified } from './identifiers.js';
 import { COMPUTED, TEXT_TYPES, fromDb, toDb } from './pgtypes.js';
 
@@ -94,6 +96,13 @@ export async function listRecords(
     object: ObjectRow;
     fields: FieldRow[];
     search?: string;
+    /** View filters pushed down to SQL (AND-combined with search + ACL).
+     *  Same Filter model the web matcher uses — see filters-sql.ts. */
+    filters?: Filter[];
+    /** View sort pushed down to SQL. Empty/omitted keeps the historical
+     *  `created_at desc` ordering (buildOrderBy always appends it as the
+     *  tiebreaker). */
+    sort?: ViewSort[];
     limit?: number;
     offset?: number;
     /** ACL gate. When provided AND the object's defaultVisibility is 'private',
@@ -119,9 +128,12 @@ export async function listRecords(
     clauses.push(sql`(${sql.join(ors, sql` or `)})`);
   }
 
+  clauses.push(...buildFilterPredicates(opts.fields, opts.filters ?? []));
+
   const where = clauses.length ? sql`where ${sql.join(clauses, sql` and `)}` : sql``;
+  const orderBy = buildOrderBy(opts.fields, opts.sort ?? []);
   const res = await db.execute(
-    sql`select * from ${tbl} ${where} order by ${col(SYS.createdAt)} desc limit ${opts.limit ?? 100} offset ${opts.offset ?? 0}`,
+    sql`select * from ${tbl} ${where} ${orderBy} limit ${opts.limit ?? 100} offset ${opts.offset ?? 0}`,
   );
   return asRows(res).map((r) => rowToRecord(opts.fields, r));
 }
