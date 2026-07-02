@@ -225,3 +225,13 @@ export {
   type AuditEventWithActor,
   type WriteAuditEventInput,
 } from './queries/audit.js';
+
+// AI composer sessions — personal threads with the dashboard composer.
+export {
+  listAiSessions,
+  upsertAiSession,
+  deleteAiSession,
+  type AiSessionRow,
+  type AiSessionMessage,
+  type UpsertAiSessionInput,
+} from './queries/ai-sessions.js';

@@ -20,8 +20,8 @@ export const CMD_ITEMS: CmdItem[] = [
     id: 'ai-generate',
     group: 'AI',
     icon: 'sparkle',
-    label: 'Generate dashboard from prompt',
-    sub: 'Compose a dashboard against your live data',
+    label: 'Compose with AI',
+    sub: 'Chat a dashboard into the current page against your live data',
   },
   {
     id: 'a1',

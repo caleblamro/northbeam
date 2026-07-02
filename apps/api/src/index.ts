@@ -47,7 +47,10 @@ app.use(
     },
     credentials: true,
     allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cookie'],
+    // trpc-accept: sent by httpBatchStreamLink on EVERY request to negotiate
+    // JSONL streaming (ai.preview) — without it the preflight rejects all
+    // tRPC calls from the web app.
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cookie', 'trpc-accept'],
   }),
 );
 

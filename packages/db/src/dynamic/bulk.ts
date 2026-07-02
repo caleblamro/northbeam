@@ -25,8 +25,21 @@ function bind(field: FieldRow, value: unknown): SQL {
   const dv = toDb(field.type, value);
   if (dv === null) return sql`null`;
   if (field.type === 'reference') return sql`${dv}::uuid`;
-  if (field.type === 'multipicklist') return sql`${dv}::text[]`;
+  if (field.type === 'multipicklist') return multipicklistArray(dv);
   return sql`${dv}`;
+}
+
+/** Build an `array[$1, $2, …]::text[]` literal from a JS string array. Drizzle
+ *  expands a bare `${jsArray}` into a comma-separated `($1, $2)` param LIST, so
+ *  `${arr}::text[]` would compile to the invalid row-cast `($1, $2)::text[]`.
+ *  Emitting an explicit array constructor binds each element as its own param. */
+export function multipicklistArray(dv: unknown): SQL {
+  const arr = (Array.isArray(dv) ? dv : [dv]).map(String);
+  if (arr.length === 0) return sql`array[]::text[]`;
+  return sql`array[${sql.join(
+    arr.map((x) => sql`${x}`),
+    sql`, `,
+  )}]::text[]`;
 }
 
 /** Insert rows in parameter-budget-sized chunks. Returns rows actually inserted

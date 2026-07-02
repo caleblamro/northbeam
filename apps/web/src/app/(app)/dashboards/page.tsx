@@ -1,6 +1,6 @@
 'use client';
 
-import { AIGenerateDialog } from '@/components/northbeam/ai-generate-dialog';
+import { useAiComposer } from '@/components/northbeam/ai-composer';
 import { PageActions } from '@/components/northbeam/app-shell';
 import { CreateCard } from '@/components/northbeam/create-card';
 import { DashboardCard } from '@/components/northbeam/dashboard-card';
@@ -10,10 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { trpc } from '@/lib/api';
 import { LayoutDashboard, Plus } from 'lucide-react';
-import { useState } from 'react';
 
 export default function DashboardsPage() {
-  const [aiOpen, setAiOpen] = useState(false);
+  const composer = useAiComposer();
   const views = trpc.view.list.useQuery({});
   const objects = trpc.object.list.useQuery();
   const objectById = new Map((objects.data ?? []).map((o) => [o.id, o]));
@@ -21,7 +20,7 @@ export default function DashboardsPage() {
   const loading = views.isLoading || objects.isLoading;
 
   const newButton = (
-    <Button onClick={() => setAiOpen(true)}>
+    <Button onClick={() => composer.open()}>
       <Plus />
       New dashboard
     </Button>
@@ -56,13 +55,11 @@ export default function DashboardsPage() {
           ))}
           <CreateCard
             label="Create dashboard"
-            onClick={() => setAiOpen(true)}
+            onClick={() => composer.open()}
             className="min-h-full"
           />
         </div>
       )}
-
-      <AIGenerateDialog open={aiOpen} onOpenChange={setAiOpen} />
     </>
   );
 }

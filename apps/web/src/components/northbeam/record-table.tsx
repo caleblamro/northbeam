@@ -29,6 +29,10 @@ interface RecordTableProps {
   objectKey: string;
   /** Override the initial page size — defaults to 25 to match the list view. */
   defaultPageSize?: number;
+  /** 'auto' hides the pagination footer when everything fits on one page —
+   *  embedded artifact tables use this so a 5-row widget isn't wearing
+   *  full list-view chrome. Default 'always' (the list view). */
+  footer?: 'always' | 'auto';
   /** Optional row-height override; passed through to the data grid. */
   rowHeight?: number;
   sort?: ViewSort[];
@@ -43,6 +47,7 @@ export function RecordTable({
   refLabels,
   objectKey,
   defaultPageSize = 25,
+  footer = 'always',
   rowHeight = 36,
   sort,
   onSortChange,
@@ -70,17 +75,19 @@ export function RecordTable({
         onSortChange={onSortChange}
         onCellEdit={onCellEdit}
       />
-      <TablePagination
-        pageIndex={safePageIndex}
-        pageSize={pageSize}
-        pageCount={pageCount}
-        totalRows={rows.length}
-        onPageChange={setPageIndex}
-        onPageSizeChange={(n) => {
-          setPageSize(n);
-          setPageIndex(0);
-        }}
-      />
+      {(footer === 'always' || pageCount > 1) && (
+        <TablePagination
+          pageIndex={safePageIndex}
+          pageSize={pageSize}
+          pageCount={pageCount}
+          totalRows={rows.length}
+          onPageChange={setPageIndex}
+          onPageSizeChange={(n) => {
+            setPageSize(n);
+            setPageIndex(0);
+          }}
+        />
+      )}
     </>
   );
 }

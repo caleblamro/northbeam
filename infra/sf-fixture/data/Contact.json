@@ -1,0 +1,24 @@
+{
+  "records": [
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef1" }, "FirstName": "Maria", "LastName": "Delgado", "Email": "maria.delgado@example.com", "Phone": "(555) 020-0001", "Title": "Property Manager", "AccountId": "@AccountRef1" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef2" }, "FirstName": "James", "LastName": "Okafor", "Email": "james.okafor@example.com", "Title": "Director of Leasing", "AccountId": "@AccountRef1" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef3" }, "FirstName": "Priya", "LastName": "Natarajan", "Email": "priya.n@example.com", "Phone": "(555) 020-0003", "AccountId": "@AccountRef2" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef4" }, "FirstName": "Tom", "LastName": "Whitfield", "Email": "tom.whitfield@example.com", "Title": "Tenant Relations", "AccountId": "@AccountRef2" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef5" }, "FirstName": "Elena", "LastName": "Rossi", "Email": "elena.rossi@example.com", "Phone": "(555) 020-0005", "AccountId": "@AccountRef3" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef6" }, "FirstName": "David", "LastName": "Kim", "Email": "david.kim@example.com", "Title": "Asset Manager", "AccountId": "@AccountRef3" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef7" }, "FirstName": "Sofia", "LastName": "Marquez", "Email": "sofia.marquez@example.com", "AccountId": "@AccountRef4" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef8" }, "FirstName": "Noah", "LastName": "Bergstrom", "Email": "noah.b@example.com", "Phone": "(555) 020-0008", "AccountId": "@AccountRef4" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef9" }, "FirstName": "Aisha", "LastName": "Rahman", "Email": "aisha.rahman@example.com", "Title": "Leasing Agent", "AccountId": "@AccountRef5" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef10" }, "FirstName": "Lucas", "LastName": "Ferreira", "Email": "lucas.f@example.com", "AccountId": "@AccountRef5" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef11" }, "FirstName": "Hannah", "LastName": "Cho", "Email": "hannah.cho@example.com", "Phone": "(555) 020-0011", "AccountId": "@AccountRef6" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef12" }, "FirstName": "Marcus", "LastName": "Levine", "Email": "marcus.levine@example.com", "Title": "VP Operations", "AccountId": "@AccountRef6" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef13" }, "FirstName": "Ingrid", "LastName": "Sorensen", "Email": "ingrid.s@example.com", "AccountId": "@AccountRef7" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef14" }, "FirstName": "Omar", "LastName": "Haddad", "Email": "omar.haddad@example.com", "Phone": "(555) 020-0014", "AccountId": "@AccountRef7" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef15" }, "FirstName": "Grace", "LastName": "Ellington", "Email": "grace.e@example.com", "Title": "Broker", "AccountId": "@AccountRef8" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef16" }, "FirstName": "Felix", "LastName": "Nguyen", "Email": "felix.nguyen@example.com", "AccountId": "@AccountRef8" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef17" }, "FirstName": "Rosa", "LastName": "Ibarra", "Email": "rosa.ibarra@example.com", "Phone": "(555) 020-0017", "AccountId": "@AccountRef9" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef18" }, "FirstName": "Peter", "LastName": "Vance", "Email": "peter.vance@example.com", "AccountId": "@AccountRef9" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef19" }, "FirstName": "Yuki", "LastName": "Tanaka", "Email": "yuki.tanaka@example.com", "Title": "Facilities Lead", "AccountId": "@AccountRef10" },
+    { "attributes": { "type": "Contact", "referenceId": "ContactRef20" }, "FirstName": "Claire", "LastName": "Dubois", "Email": "claire.dubois@example.com", "Phone": "(555) 020-0020", "AccountId": "@AccountRef10" }
+  ]
+}

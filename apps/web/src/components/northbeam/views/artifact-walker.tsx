@@ -5,45 +5,62 @@
 // authored by the LLM and saved via the dialog ends up matching what the
 // dialog showed in preview.
 //
-// Schema mirrors apps/api/src/ai/artifact-generator.ts. ANY new component
-// added there needs a matching renderer here (and vice versa). Unknown
-// components fall back to a soft "Unsupported component" placeholder so a
-// drift between generator + renderer never crashes a page.
+// The strict schema lives in @northbeam/core/artifact (the generator emits it,
+// view.create validates it). ANY new component added there needs a matching
+// renderer here (and vice versa). Unknown components fall back to a soft
+// "Unsupported component" placeholder so a drift between generator + renderer
+// never crashes a page.
 //
 // Layout: top-level nodes land on a 12-column grid. Every node may carry
 // `props.span` (1-12, default 12) — old artifacts without spans render
 // exactly as before (full-width stack). Children inside a SectionCard keep
 // a plain vertical stack.
 
-import { BarList, type ChartDatum, Donut, StatTile } from '@/components/northbeam/charts';
+import {
+  BarList,
+  type ChartDatum,
+  Donut,
+  LineChart,
+  StatTile,
+} from '@/components/northbeam/charts';
 import { DescriptionList } from '@/components/northbeam/description-list';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
+import { FilterDialog } from '@/components/northbeam/filter-bar';
+import { ListToolbar } from '@/components/northbeam/list-toolbar';
 import { MetricGroup } from '@/components/northbeam/metric-group';
 import { PageHeader } from '@/components/northbeam/page-header';
 import { RecordGrid } from '@/components/northbeam/record-grid';
 import { RecordTable } from '@/components/northbeam/record-table';
 import { SectionCard } from '@/components/northbeam/section-card';
+import { Badge } from '@/components/ui/badge';
+import { Callout } from '@/components/ui/callout';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { trpc } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { rowPassesFilters, sortRows } from '@/lib/filters';
+import { timeAgo } from '@/lib/time';
+import type { ArtifactLike, ArtifactNodeLike } from '@northbeam/core/artifact';
 import type { Filter, ViewSort } from '@northbeam/db/views';
-import { type ReactNode, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import Link from 'next/link';
+import { type ReactNode, useMemo, useState } from 'react';
 
-/** What a single artifact node looks like at runtime. The generator's Zod
- *  schema is the source of truth; we keep this type loose so the renderer
- *  is resilient to format changes from older saved dashboards. */
-export type ArtifactNode = {
-  component: string;
-  props?: Record<string, unknown>;
-  children?: ArtifactNode[];
-};
+/** What a single artifact node looks like at runtime — the deliberately-loose
+ *  `*Like` shape from @northbeam/core/artifact, so the renderer is resilient
+ *  to format changes from older saved dashboards. */
+export type ArtifactNode = ArtifactNodeLike;
 
-export type Artifact = {
-  version: '1';
-  components: ArtifactNode[];
-};
+export type Artifact = ArtifactLike;
 
 /* ── Grid spans ─────────────────────────────────────────────────────────── */
 
@@ -93,9 +110,16 @@ export function ArtifactView({
       )}
       <div className="grid grid-cols-12 gap-4">
         {artifact.components.map((node, i) => (
-          <div key={i} className={cn('col-span-12', SPAN_CLASS[spanOf(node)])}>
+          <motion.div
+            // biome-ignore lint/suspicious/noArrayIndexKey: artifact nodes have no ids; order is the identity
+            key={i}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: Math.min(i * 0.05, 0.4) }}
+            className={cn('col-span-12', SPAN_CLASS[spanOf(node)])}
+          >
             <RenderNode node={node} action={i === 0 && headerLeads ? headerAction : undefined} />
-          </div>
+          </motion.div>
         ))}
       </div>
     </div>
@@ -176,10 +200,66 @@ function RenderLeaf({ node, action }: { node: ArtifactNode; action?: ReactNode }
           {(props.value as string | undefined) ?? ''}
         </p>
       );
+    case 'Callout': {
+      const tone = String(props.tone ?? 'neutral');
+      const variant = (
+        ['info', 'warning', 'success', 'danger', 'neutral'].includes(tone) ? tone : 'neutral'
+      ) as 'info' | 'warning' | 'success' | 'danger' | 'neutral';
+      return (
+        <Callout variant={variant} title={props.title as string | undefined}>
+          {(props.body as string | undefined) ?? ''}
+        </Callout>
+      );
+    }
+    case 'Divider':
+      return <Separator />;
+    case 'Heading':
+      return (
+        <div className="pt-2">
+          <h2 className="font-semibold text-base tracking-tight">
+            {(props.text as string | undefined) ?? ''}
+          </h2>
+          {typeof props.sub === 'string' && (
+            <p className="mt-0.5 text-muted-foreground text-sm">{props.sub}</p>
+          )}
+        </div>
+      );
+    case 'Progress': {
+      const value = Math.min(Math.max(Number(props.value ?? 0), 0), 100);
+      return (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-[13px] text-foreground">
+              {(props.label as string | undefined) ?? ''}
+            </span>
+            <span className="shrink-0 text-[13px] text-muted-foreground tabular-nums">
+              {(props.display as string | undefined) ?? `${value.toLocaleString('en-US')}%`}
+            </span>
+          </div>
+          <Progress value={value} />
+        </div>
+      );
+    }
+    case 'Chips': {
+      const items = ((props.items as { label: string; tone?: string }[] | undefined) ?? []).filter(
+        (c) => typeof c?.label === 'string',
+      );
+      return (
+        <div className="flex flex-wrap gap-1.5">
+          {items.map((c) => (
+            <Badge key={c.label} variant={c.tone === 'outline' ? 'outline' : 'default'}>
+              {c.label}
+            </Badge>
+          ))}
+        </div>
+      );
+    }
     case 'RecordTable':
       return <RecordTableNode props={props} />;
     case 'RecordGrid':
       return <RecordGridNode props={props} />;
+    case 'RecordList':
+      return <RecordListNode props={props} />;
     default:
       return (
         <UnsupportedNodeNote
@@ -340,7 +420,7 @@ type ChartProps = {
   groupBy?: string;
   measure?: string;
   fn?: AggregateFn;
-  chartType?: 'bar' | 'donut';
+  chartType?: 'bar' | 'donut' | 'line' | 'table';
   filters?: Filter[];
   limit?: number;
 };
@@ -349,7 +429,8 @@ function ChartNode({ props }: { props: Record<string, unknown> }) {
   const p = props as ChartProps;
   const fn: AggregateFn = p.fn ?? 'count';
   // A donut states part-to-whole; averages aren't parts of a whole → bars.
-  const chartType = p.chartType === 'donut' && fn !== 'avg' ? 'donut' : 'bar';
+  const requested = p.chartType ?? 'bar';
+  const chartType = requested === 'donut' && fn === 'avg' ? 'bar' : requested;
   const enabled = Boolean(p.objectKey && p.groupBy);
 
   // Server-side group/aggregate over ALL rows. Fetch a deep bucket set (200)
@@ -365,18 +446,41 @@ function ChartNode({ props }: { props: Record<string, unknown> }) {
     },
     { enabled, retry: false, meta: { silent: true } },
   );
-  // Field metadata only shapes the display (currency/percent formatting).
-  const needsField = enabled && fn !== 'count' && Boolean(p.measure);
+  // Field metadata shapes the display: currency/percent formatting for the
+  // measure, and the group column header for table charts. object.get is
+  // deduped by react-query, so sibling nodes share one fetch.
+  const needsMeta = enabled && ((fn !== 'count' && Boolean(p.measure)) || chartType === 'table');
   const meta = trpc.object.get.useQuery(
     { key: p.objectKey ?? '' },
-    { enabled: needsField, retry: false, meta: { silent: true } },
+    { enabled: needsMeta, retry: false, meta: { silent: true } },
   );
-  const measureField = needsField
-    ? ((meta.data?.fields ?? []) as FieldDefLite[]).find((f) => f.key === p.measure)
-    : undefined;
+  const metaFields = (meta.data?.fields ?? []) as FieldDefLite[];
+  const measureField = fn === 'count' ? undefined : metaFields.find((f) => f.key === p.measure);
+  const groupField = metaFields.find((f) => f.key === p.groupBy);
+
+  const buckets = query.data?.buckets ?? [];
+  const options = query.data?.options ?? [];
+  const refLabels = query.data?.groupLabels ?? {};
 
   const data = useMemo(() => {
     if (!query.data) return null;
+    if (chartType === 'line') {
+      // A line reads left-to-right as an ordered series: sort by group label
+      // and never fold the tail into "Other" — folding is for ranked charts.
+      const labelOf = (g: AggBucket['group']) =>
+        bucketLabel(g, query.data.options ?? [], query.data.groupLabels ?? {});
+      const items = [...query.data.buckets]
+        .sort((a, b) =>
+          labelOf(a.group).localeCompare(labelOf(b.group), 'en-US', { numeric: true }),
+        )
+        .map((b) => ({
+          label: labelOf(b.group),
+          value: b.value,
+          display: fmtAggregate(b.value, measureField),
+        }));
+      const total = items.reduce((acc, it) => acc + Math.max(it.value, 0), 0);
+      return { items, totalDisplay: fmtAggregate(total, measureField) };
+    }
     // Top-N, tail folded into "Other". Donuts hold ≤ 6 segments (5 + Other).
     const cap =
       chartType === 'donut'
@@ -404,7 +508,7 @@ function ChartNode({ props }: { props: Record<string, unknown> }) {
   }
 
   let body: ReactNode;
-  if (query.isLoading || (needsField && meta.isLoading)) {
+  if (query.isLoading || (needsMeta && meta.isLoading)) {
     // Skeleton on FIRST load only — refetches hold the previous render dimmed.
     body = (
       <div className="flex flex-col gap-3">
@@ -426,6 +530,10 @@ function ChartNode({ props }: { props: Record<string, unknown> }) {
       <div className={cn('transition-opacity', query.isFetching && 'opacity-60')}>
         {chartType === 'donut' ? (
           <Donut segments={data.items} totalDisplay={data.totalDisplay} />
+        ) : chartType === 'line' ? (
+          <LineChart points={data.items} />
+        ) : chartType === 'table' ? (
+          <BucketsTable {...{ buckets, options, refLabels, agg: fn, groupField, measureField }} />
         ) : (
           <BarList items={data.items} />
         )}
@@ -439,6 +547,55 @@ function ChartNode({ props }: { props: Record<string, unknown> }) {
   );
 }
 
+/** Aggregate buckets as a plain table — Chart `table` type here, and the
+ *  report renderer's accessibility twin below every report chart. */
+export function BucketsTable({
+  buckets,
+  options,
+  refLabels,
+  agg,
+  groupField,
+  measureField,
+}: {
+  buckets: AggBucket[];
+  options: { value: string; label: string }[];
+  refLabels: Record<string, string>;
+  agg: AggregateFn;
+  groupField?: FieldDefLite;
+  measureField?: FieldDefLite;
+}) {
+  const valueHead =
+    agg === 'count' ? 'Count' : `${agg === 'sum' ? 'Sum' : 'Avg'} of ${measureField?.label ?? ''}`;
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{groupField?.label ?? 'Group'}</TableHead>
+          <TableHead className="text-right">{valueHead}</TableHead>
+          {agg !== 'count' && <TableHead className="text-right">Records</TableHead>}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {buckets.map((b, i) => (
+          <TableRow key={`${String(b.group)}-${i}`}>
+            <TableCell>
+              {groupField ? bucketLabel(b.group, options, refLabels) : 'All records'}
+            </TableCell>
+            <TableCell className="text-right tabular-nums">
+              {fmtAggregate(b.value, measureField)}
+            </TableCell>
+            {agg !== 'count' && (
+              <TableCell className="text-right text-muted-foreground tabular-nums">
+                {b.count.toLocaleString('en-US')}
+              </TableCell>
+            )}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
 type RecordTableProps = {
   objectKey?: string;
   filters?: Filter[];
@@ -447,25 +604,71 @@ type RecordTableProps = {
   limit?: number;
 };
 
-function RecordTableNode({ props }: { props: Record<string, unknown> }) {
-  const p = props as RecordTableProps;
+/** The interactive-record plumbing every REAL page gets from RecordListView —
+ *  search box, user-editable filters (layered on top of the artifact's pinned
+ *  ones, exactly like staticFilters on object pages), and sortable headers —
+ *  shared by the embedded RecordTable / RecordGrid nodes so an AI dashboard
+ *  behaves like any other page, not a static snapshot. */
+function useEmbeddedRecords(p: RecordTableProps, defaultLimit: number) {
   const objectKey = p.objectKey;
-  const limit = Math.min(Math.max(p.limit ?? 10, 1), 50);
+  const limit = Math.min(Math.max(p.limit ?? defaultLimit, 1), 50);
+  const [q, setQ] = useState('');
+  const [userFilters, setUserFilters] = useState<Filter[]>([]);
+  const [sort, setSort] = useState<ViewSort[]>(p.sort ?? []);
+
+  // Artifact filters are the widget's pinned scope; the user's own filters
+  // layer on top — same composition RecordListView uses for staticFilters +
+  // view filters + URL filters.
+  const effectiveFilters = useMemo(
+    () => [...(p.filters ?? []), ...userFilters],
+    [p.filters, userFilters],
+  );
+  // The widget's `limit` is its resting size. Once the user starts slicing,
+  // fetch a real working set so search/filter results aren't capped at the
+  // widget height (client-side pagination takes over via footer='auto').
+  const interacting = q.trim().length > 0 || userFilters.length > 0;
+  const fetchLimit = interacting ? Math.max(limit, 50) : limit;
 
   const query = trpc.record.list.useQuery(
-    { objectKey: objectKey ?? '', limit: 200 },
-    { enabled: Boolean(objectKey), retry: false, meta: { silent: true } },
+    {
+      objectKey: objectKey ?? '',
+      search: q.trim() || undefined,
+      filters: effectiveFilters,
+      sort,
+      limit: fetchLimit,
+    },
+    { enabled: Boolean(objectKey), retry: false, meta: { silent: true }, placeholderData: (d) => d },
   );
 
   const fields = (query.data?.fields ?? []) as FieldDefLite[];
-  const refLabels = query.data?.refLabels ?? {};
-  const rows = useMemo(() => {
-    const all = query.data?.rows ?? [];
-    const filters = p.filters ?? [];
-    const filtered =
-      filters.length === 0 ? all : all.filter((r) => rowPassesFilters(fields, r.data, filters));
-    return sortRows(fields, filtered, p.sort ?? []).slice(0, limit);
-  }, [query.data, fields, p.filters, p.sort, limit]);
+  const toolbar = objectKey ? (
+    <ListToolbar
+      className="mb-2"
+      searchValue={q}
+      onSearchChange={setQ}
+      searchPlaceholder={`Search ${query.data?.object.labelPlural.toLowerCase() ?? 'records'}…`}
+      actions={<FilterDialog fields={fields} filters={userFilters} onChange={setUserFilters} />}
+    />
+  ) : null;
+
+  return {
+    objectKey,
+    limit,
+    query,
+    fields,
+    refLabels: query.data?.refLabels ?? {},
+    rows: query.data?.rows ?? [],
+    sort,
+    setSort,
+    interacting,
+    toolbar,
+  };
+}
+
+function RecordTableNode({ props }: { props: Record<string, unknown> }) {
+  const p = props as RecordTableProps;
+  const { objectKey, limit, query, fields, refLabels, rows, sort, setSort, interacting, toolbar } =
+    useEmbeddedRecords(p, 10);
 
   const columnKeys =
     p.columns && p.columns.length > 0 ? p.columns : fields.slice(0, 4).map((f) => f.key);
@@ -479,27 +682,36 @@ function RecordTableNode({ props }: { props: Record<string, unknown> }) {
   if (query.isError) {
     return (
       <UnsupportedNodeNote
-        message={`RecordTable: couldn't load '${objectKey}' (unknown object?).`}
-      />
-    );
-  }
-  if (rows.length === 0 && !query.isLoading) {
-    return (
-      <EmptyState
-        title={`No ${objectKey}s match`}
-        body="No records satisfy the filters this section uses."
-        size="sm"
+        message={`RecordTable: couldn't load '${objectKey}' (unknown object or invalid filters?).`}
       />
     );
   }
   return (
-    <RecordTable
-      columns={columns}
-      rows={rows}
-      refLabels={refLabels}
-      objectKey={objectKey}
-      defaultPageSize={limit}
-    />
+    <div>
+      {toolbar}
+      {rows.length === 0 && !query.isLoading ? (
+        <EmptyState
+          title={`No ${objectKey}s match`}
+          body={
+            interacting
+              ? 'Nothing matches your search / filters.'
+              : 'No records satisfy the filters this section uses.'
+          }
+          size="sm"
+        />
+      ) : (
+        <RecordTable
+          columns={columns}
+          rows={rows}
+          refLabels={refLabels}
+          objectKey={objectKey}
+          defaultPageSize={limit}
+          footer="auto"
+          sort={sort}
+          onSortChange={setSort}
+        />
+      )}
+    </div>
   );
 }
 
@@ -509,23 +721,7 @@ type RecordGridProps = RecordTableProps & {
 
 function RecordGridNode({ props }: { props: Record<string, unknown> }) {
   const p = props as RecordGridProps;
-  const objectKey = p.objectKey;
-  const limit = Math.min(Math.max(p.limit ?? 12, 1), 50);
-
-  const query = trpc.record.list.useQuery(
-    { objectKey: objectKey ?? '', limit: 200 },
-    { enabled: Boolean(objectKey), retry: false, meta: { silent: true } },
-  );
-
-  const fields = (query.data?.fields ?? []) as FieldDefLite[];
-  const refLabels = query.data?.refLabels ?? {};
-  const rows = useMemo(() => {
-    const all = query.data?.rows ?? [];
-    const filters = p.filters ?? [];
-    const filtered =
-      filters.length === 0 ? all : all.filter((r) => rowPassesFilters(fields, r.data, filters));
-    return sortRows(fields, filtered, p.sort ?? []).slice(0, limit);
-  }, [query.data, fields, p.filters, p.sort, limit]);
+  const { objectKey, query, fields, refLabels, rows, toolbar } = useEmbeddedRecords(p, 12);
 
   const fieldKeys =
     p.columns && p.columns.length > 0 ? p.columns : fields.slice(0, 3).map((f) => f.key);
@@ -541,11 +737,89 @@ function RecordGridNode({ props }: { props: Record<string, unknown> }) {
   if (query.isError) {
     return (
       <UnsupportedNodeNote
-        message={`RecordGrid: couldn't load '${objectKey}' (unknown object?).`}
+        message={`RecordGrid: couldn't load '${objectKey}' (unknown object or invalid filters?).`}
       />
     );
   }
-  if (rows.length === 0 && !query.isLoading) {
+  return (
+    <div>
+      {toolbar}
+      {rows.length === 0 && !query.isLoading ? (
+        <EmptyState
+          title={`No ${objectKey}s match`}
+          body="No records satisfy the filters this section uses."
+          size="sm"
+        />
+      ) : (
+        <RecordGrid
+          fields={cardFields}
+          rows={rows}
+          refLabels={refLabels}
+          objectKey={objectKey}
+          columns={columnsCount}
+        />
+      )}
+    </div>
+  );
+}
+
+type RecordListProps = {
+  objectKey?: string;
+  filters?: Filter[];
+  sort?: ViewSort[];
+  /** Field key rendered as the muted second line under the record name. */
+  secondaryField?: string;
+  limit?: number;
+};
+
+/** Compact clickable record rows — name, one secondary field, relative time.
+ *  The "recent X" / "top X at a glance" primitive, quieter than a table. */
+function RecordListNode({ props }: { props: Record<string, unknown> }) {
+  const p = props as RecordListProps;
+  const objectKey = p.objectKey;
+  const limit = Math.min(Math.max(p.limit ?? 6, 1), 20);
+
+  const query = trpc.record.list.useQuery(
+    { objectKey: objectKey ?? '', filters: p.filters ?? [], sort: p.sort ?? [], limit },
+    { enabled: Boolean(objectKey), retry: false, meta: { silent: true } },
+  );
+
+  const fields = (query.data?.fields ?? []) as FieldDefLite[];
+  const refLabels = query.data?.refLabels ?? {};
+  const rows = query.data?.rows ?? [];
+  const secondary = p.secondaryField ? fields.find((f) => f.key === p.secondaryField) : undefined;
+
+  const secondaryText = (row: (typeof rows)[number]): string | null => {
+    if (!secondary) return null;
+    const v = row.data[secondary.key];
+    if (v == null || v === '') return null;
+    if (secondary.type === 'reference') return refLabels[String(v)] ?? null;
+    if (secondary.type === 'currency' || secondary.type === 'number') {
+      return fmtAggregate(Number(v), secondary);
+    }
+    return String(v);
+  };
+
+  if (!objectKey) {
+    return <UnsupportedNodeNote message="RecordList: missing objectKey." />;
+  }
+  if (query.isError) {
+    return (
+      <UnsupportedNodeNote
+        message={`RecordList: couldn't load '${objectKey}' (unknown object or invalid filters?).`}
+      />
+    );
+  }
+  if (query.isLoading) {
+    return (
+      <div className="flex flex-col gap-3">
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="h-9" />
+        ))}
+      </div>
+    );
+  }
+  if (rows.length === 0) {
     return (
       <EmptyState
         title={`No ${objectKey}s match`}
@@ -555,13 +829,30 @@ function RecordGridNode({ props }: { props: Record<string, unknown> }) {
     );
   }
   return (
-    <RecordGrid
-      fields={cardFields}
-      rows={rows}
-      refLabels={refLabels}
-      objectKey={objectKey}
-      columns={columnsCount}
-    />
+    <div className="-my-1 divide-y">
+      {rows.map((row) => (
+        <Link
+          key={row.id}
+          href={`/${objectKey}/${row.id}`}
+          className="group flex items-center gap-3 py-2.5"
+        >
+          <span className="grid size-7 shrink-0 place-items-center rounded-md bg-muted font-medium text-muted-foreground text-xs uppercase">
+            {(row.name || '·').slice(0, 1)}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium text-sm transition-colors group-hover:text-link">
+              {row.name || 'Untitled'}
+            </span>
+            {secondaryText(row) && (
+              <span className="block truncate text-muted-foreground text-xs">
+                {secondaryText(row)}
+              </span>
+            )}
+          </span>
+          <span className="shrink-0 text-muted-foreground text-xs">{timeAgo(row.updatedAt)}</span>
+        </Link>
+      ))}
+    </div>
   );
 }
 

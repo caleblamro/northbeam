@@ -1,0 +1,10 @@
+[
+  {
+    "sobject": "Account",
+    "files": ["Account.json"]
+  },
+  {
+    "sobject": "Contact",
+    "files": ["Contact.json"]
+  }
+]

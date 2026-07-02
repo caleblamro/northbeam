@@ -23,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Sparkline } from '@/components/ui/sparkline';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/cn';
+import { motion } from 'framer-motion';
 import { type ReactNode, useState } from 'react';
 
 /* ── Chart ramp ──────────────────────────────────────────────────────────────
@@ -112,10 +113,14 @@ export function BarList({ items, className }: { items: ChartDatum[]; className?:
                     hue (slot 1), 8px thick, 4px rounded data-end, square
                     baseline edge. "Other" wears the de-emphasis hue. */}
                 <div className="mt-1 h-2 w-full rounded-r-[4px] bg-muted">
-                  <div
-                    className="h-full rounded-r-[4px] transition-[width] duration-300"
+                  {/* Bars grow in on mount (staggered top-down), then width
+                      transitions handle later data changes. */}
+                  <motion.div
+                    className="h-full rounded-r-[4px]"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${pct}%` }}
+                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: i * 0.04 }}
                     style={{
-                      width: `${pct}%`,
                       background: d.isOther ? 'var(--nb-chart-other)' : 'var(--nb-chart-1)',
                     }}
                   />

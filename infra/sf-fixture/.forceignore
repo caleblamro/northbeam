@@ -1,0 +1,3 @@
+# sf project deploy: nothing to ignore yet; file exists so the CLI never
+# falls back to legacy defaults.
+package.xml

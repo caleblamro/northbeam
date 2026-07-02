@@ -1,0 +1,13 @@
+# Salesforce CLI / scratch-org state — never commit
+.sf/
+.sfdx/
+.localdevserver/
+*.log
+
+# Auth artifacts (access tokens, sfdxAuthUrl)
+**/authFiles/
+*.key
+
+# Deploy/retrieve scratch output
+.deploy/
+force-app/main/default/**/*.orgcache

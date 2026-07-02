@@ -6,7 +6,7 @@
 // API origin, so RSC can't read it) — no session → /sign-in, session but no
 // org → /create-org.
 
-import { trpc } from '@/lib/api';
+import { type RouterOutputs, trpc } from '@/lib/api';
 import type { CmdItem } from '@/lib/cmd-data';
 import { pageMetaFor } from '@/lib/nav';
 import { MotionConfig, motion } from 'framer-motion';
@@ -20,7 +20,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { AIGenerateDialog } from './ai-generate-dialog';
+import {
+  AiComposerDrawer,
+  AiComposerScope,
+  AiComposerSurface,
+  COMPOSER_WIDTH,
+  useAiComposer,
+} from './ai-composer';
 import { AppTopbar } from './app-topbar';
 import { CommandPalette } from './command-legacy';
 import { Spinner } from './primitives';
@@ -63,19 +69,51 @@ function FullScreenSpinner() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const [palette, setPalette] = useState(false);
-  const [aiDialog, setAiDialog] = useState(false);
   const boot = trpc.me.bootstrap.useQuery();
-  const [actions, setActions] = useState<ReactNode>(null);
-  const [hideHead, setHideHead] = useState(false);
-  const meta = pageMetaFor(pathname);
 
   useEffect(() => {
     if (!boot.data) return;
     if (!boot.data.session) router.replace('/sign-in');
     else if (!boot.data.activeOrg) router.replace('/create-org');
   }, [boot.data, router]);
+
+  if (boot.isLoading || !boot.data || !boot.data.session || !boot.data.activeOrg) {
+    return <FullScreenSpinner />;
+  }
+  const { session, activeOrg } = boot.data;
+
+  return (
+    <MotionConfig reducedMotion="user">
+      <AiComposerScope>
+        <ShellFrame session={session} activeOrg={activeOrg}>
+          {children}
+        </ShellFrame>
+      </AiComposerScope>
+    </MotionConfig>
+  );
+}
+
+/** The chrome + content frame. Separate from AppShell so it can read the AI
+ *  composer context (the content column shifts left while the drawer is
+ *  docked, and the page body swaps for the live preview). */
+type Boot = RouterOutputs['me']['bootstrap'];
+
+function ShellFrame({
+  session,
+  activeOrg,
+  children,
+}: {
+  session: NonNullable<Boot['session']>;
+  activeOrg: NonNullable<Boot['activeOrg']>;
+  children: ReactNode;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [palette, setPalette] = useState(false);
+  const [actions, setActions] = useState<ReactNode>(null);
+  const [hideHead, setHideHead] = useState(false);
+  const meta = pageMetaFor(pathname);
+  const composer = useAiComposer();
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -88,57 +126,56 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', h);
   }, []);
 
-  if (boot.isLoading || !boot.data || !boot.data.session || !boot.data.activeOrg) {
-    return <FullScreenSpinner />;
-  }
-  const { session, activeOrg } = boot.data;
   const onSelect = (item: CmdItem) => {
     if (item.id === 'ai-generate') {
-      setAiDialog(true);
+      composer.open();
       return;
     }
     if (item.href) router.push(item.href);
   };
 
   return (
-    <MotionConfig reducedMotion="user">
-      <div className="app">
-        <div className="app-chrome">
-          <AppTopbar
-            orgName={activeOrg.name}
-            userName={session.name}
-            userEmail={session.email}
-            onOpenSearch={() => setPalette(true)}
-          />
-        </div>
-        <div className="app-content">
-          <div className="app-wrap app-wrap--wide">
-            {!hideHead && (
-              <div className="page-head">
-                <div className="page-head__text" style={{ minWidth: 0 }}>
-                  <h1>{meta.title}</h1>
-                  {meta.subtitle && <p>{meta.subtitle}</p>}
-                </div>
-                {actions && <div className="page-head__actions">{actions}</div>}
-              </div>
-            )}
-            <HideHeadContext.Provider value={setHideHead}>
-              <PageActionsContext.Provider value={setActions as (n: ReactNode) => void}>
-                <motion.div
-                  key={pathname}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                >
-                  {children}
-                </motion.div>
-              </PageActionsContext.Provider>
-            </HideHeadContext.Provider>
-          </div>
-        </div>
-        <CommandPalette open={palette} onClose={() => setPalette(false)} onSelect={onSelect} />
-        <AIGenerateDialog open={aiDialog} onOpenChange={setAiDialog} />
+    <div
+      className="app transition-[padding-right] duration-200"
+      style={{ paddingRight: composer.isOpen ? COMPOSER_WIDTH : 0 }}
+    >
+      <div className="app-chrome">
+        <AppTopbar
+          orgName={activeOrg.name}
+          userName={session.name}
+          userEmail={session.email}
+          onOpenSearch={() => setPalette(true)}
+        />
       </div>
-    </MotionConfig>
+      <div className="app-content">
+        <div className="app-wrap app-wrap--wide">
+          {/* The AI preview brings its own PageHeader — suppress the layout's
+              page-head while one is active so titles don't stack. */}
+          {!hideHead && !composer.preview && (
+            <div className="page-head">
+              <div className="page-head__text" style={{ minWidth: 0 }}>
+                <h1>{meta.title}</h1>
+                {meta.subtitle && <p>{meta.subtitle}</p>}
+              </div>
+              {actions && <div className="page-head__actions">{actions}</div>}
+            </div>
+          )}
+          <HideHeadContext.Provider value={setHideHead}>
+            <PageActionsContext.Provider value={setActions as (n: ReactNode) => void}>
+              <motion.div
+                key={pathname}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <AiComposerSurface>{children}</AiComposerSurface>
+              </motion.div>
+            </PageActionsContext.Provider>
+          </HideHeadContext.Provider>
+        </div>
+      </div>
+      <CommandPalette open={palette} onClose={() => setPalette(false)} onSelect={onSelect} />
+      <AiComposerDrawer />
+    </div>
   );
 }

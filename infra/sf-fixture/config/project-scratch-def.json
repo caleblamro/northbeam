@@ -1,0 +1,22 @@
+{
+  "orgName": "Northbeam Fixture",
+  "edition": "Developer",
+  "description": "Realistic fixture org for validating Northbeam's one-click Salesforce migration (describe -> auto-map -> import).",
+  "features": ["EnableSetPasswordInApi"],
+  "settings": {
+    "lightningExperienceSettings": {
+      "enableS1DesktopEnabled": true
+    },
+    "securitySettings": {
+      "sessionSettings": {
+        "sessionTimeout": "TwelveHours"
+      }
+    },
+    "flowSettings": {
+      "enableFlowDeployAsActiveEnabled": true
+    },
+    "mobileSettings": {
+      "enableS1EncryptedStoragePref2": false
+    }
+  }
+}

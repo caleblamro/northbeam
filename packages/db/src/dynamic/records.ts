@@ -16,6 +16,7 @@ import {
 import { fieldDef } from '../schema.js';
 import type { Filter, ViewSort } from '../views.js';
 import { buildFilterPredicates, buildOrderBy } from './filters-sql.js';
+import { multipicklistArray } from './bulk.js';
 import { SYS, qid, qualified } from './identifiers.js';
 import { COMPUTED, TEXT_TYPES, fromDb, toDb } from './pgtypes.js';
 
@@ -63,7 +64,10 @@ function bindValue(field: FieldRow, value: unknown): SQL {
   const dv = toDb(field.type, value);
   if (dv === null) return sql`null`;
   if (field.type === 'reference') return sql`${dv}::uuid`;
-  if (field.type === 'multipicklist') return sql`${dv}::text[]`;
+  // Explicit array constructor — a bare `${jsArray}::text[]` compiles to the
+  // invalid row-cast `($1, $2)::text[]` (Drizzle expands arrays into a param
+  // list). See multipicklistArray in bulk.ts.
+  if (field.type === 'multipicklist') return multipicklistArray(dv);
   return sql`${dv}`;
 }
 

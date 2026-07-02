@@ -284,3 +284,49 @@
 ::view-transition-new(root) {
   z-index: 9999;
 }
+
+/* ─── AI composer ────────────────────────────────────────────────────────────
+   Motion vocabulary for the composer drawer (components/northbeam/ai-composer):
+   the header "activity beam" sweeps while a generation streams, the empty-state
+   rings breathe, the streaming caret blinks, and the preview status dot pulses.
+   All chroma comes from --accent — the drawer stays on the one-chromatic-note
+   rule like the rest of the system. */
+@keyframes composer-beam {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+@keyframes composer-ring {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+@keyframes composer-caret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+@keyframes composer-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Total_Monthly_Rent__c</fullName>
+    <externalId>false</externalId>
+    <label>Total Monthly Rent</label>
+    <summarizedField>Lease__c.Monthly_Rent__c</summarizedField>
+    <summaryForeignKey>Lease__c.Property__c</summaryForeignKey>
+    <summaryOperation>sum</summaryOperation>
+    <type>Summary</type>
+</CustomField>

@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./roles": "./src/roles.ts",
-    "./errors": "./src/errors.ts"
+    "./errors": "./src/errors.ts",
+    "./artifact": "./src/artifact.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -16,6 +17,7 @@
   },
   "dependencies": {
     "@northbeam/db": "workspace:*",
-    "pino": "9.14.0"
+    "pino": "9.14.0",
+    "zod": "4.4.3"
   }
 }

@@ -2,6 +2,7 @@
 // query helper (listViewsForUser) so the same access rules apply here, in
 // background jobs, and in any future server actions.
 
+import { ArtifactSchema } from '@northbeam/core';
 import {
   type Filter,
   GROUPABLE_TYPES,
@@ -166,6 +167,28 @@ async function assertReportConfig(
   }
 }
 
+/** `dashboard` view configs carry the artifact tree the walker renders (and
+ *  ai.preview refines), so what gets stored must conform to the shared
+ *  ArtifactSchema. Validation only — the ORIGINAL config is what's persisted,
+ *  so passthrough content the schema doesn't model (provenance keys, walker
+ *  extensions like MetricGroup children) survives untouched. */
+const DashboardConfigSchema = z
+  .object({ artifact: ArtifactSchema.optional() })
+  .passthrough()
+  .nullable();
+
+export function assertDashboardConfig(config: unknown): void {
+  const parsed = DashboardConfigSchema.safeParse(config ?? {});
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const at = issue && issue.path.length > 0 ? ` at ${issue.path.join('.')}` : '';
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `invalid dashboard config${at}: ${issue?.message ?? 'malformed'}`,
+    });
+  }
+}
+
 export const viewRouter = router({
   /** All views the caller can see, optionally narrowed to one object. */
   list: protectedProcedure
@@ -206,6 +229,9 @@ export const viewRouter = router({
     .mutation(async ({ ctx, input }) => {
       if (input.type === 'report') {
         await assertReportConfig(ctx, input.objectId, input.config, input.filters);
+      }
+      if (input.type === 'dashboard') {
+        assertDashboardConfig(input.config);
       }
       const shared =
         input.sharedWith.length > 0
@@ -263,6 +289,11 @@ export const viewRouter = router({
           input.config !== undefined ? input.config : existing.config,
           input.filters ?? existing.filters,
         );
+      }
+      if ((input.type ?? existing.type) === 'dashboard' && input.config !== undefined) {
+        // Only newly-written configs are validated — a label-only patch on a
+        // legacy dashboard with drifted artifact JSON must not start failing.
+        assertDashboardConfig(input.config);
       }
       const { id, ...patch } = input;
       const [row] = await ctx.db

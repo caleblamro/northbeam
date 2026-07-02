@@ -8,7 +8,7 @@
 // editing: save then patches the view instead of creating a new one.
 
 import { AiAffordance } from '@/components/northbeam/ai-affordance';
-import { AIGenerateDialog } from '@/components/northbeam/ai-generate-dialog';
+import { useAiComposer } from '@/components/northbeam/ai-composer';
 import { PageActions } from '@/components/northbeam/app-shell';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import { Field } from '@/components/northbeam/field';
@@ -140,7 +140,7 @@ function BuilderInner({
   const [objectKey, setObjectKey] = useState(initialObjectKey);
   const [spec, setSpec] = useState<Spec>(editView ? specFromView(editView) : DEFAULT_SPEC);
   const [saveOpen, setSaveOpen] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
+  const composer = useAiComposer();
 
   const object = objects.find((o) => o.key === objectKey);
   const meta = trpc.object.get.useQuery({ key: objectKey }, { enabled: Boolean(objectKey) });
@@ -230,8 +230,8 @@ function BuilderInner({
             same generate flow as the ⌘K palette's "AI" group. */}
         <AiAffordance
           size="xs"
-          label="Generate report from prompt"
-          onClick={() => setAiOpen(true)}
+          label="Compose from prompt"
+          onClick={() => composer.open({ objectKey })}
         />
         <Button onClick={() => setSaveOpen(true)} disabled={!object || !specComplete}>
           <Save />
@@ -432,7 +432,6 @@ function BuilderInner({
         isSaving={createView.isPending || updateView.isPending}
         onSave={onSave}
       />
-      <AIGenerateDialog open={aiOpen} onOpenChange={setAiOpen} initialObjectKey={objectKey} />
     </>
   );
 }

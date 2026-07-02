@@ -17,14 +17,28 @@ if (!orgId) {
   process.exit(1);
 }
 
-const out = JSON.parse(
-  execSync(`sf org display --target-org ${alias} --json`, { encoding: 'utf8' }),
-) as { result?: { accessToken?: string; instanceUrl?: string } };
+// Modern `sf` CLI masks the access token as "[REDACTED] Use 'sf org auth
+// show-access-token'…" everywhere in `org display` (even with --verbose), so we
+// must fetch the real token via the dedicated command. `--json` also bypasses
+// its interactive "you're about to reveal the access token" confirmation.
+// `org display` still returns the (non-secret) instanceUrl unmasked.
+const tokenOut = JSON.parse(
+  execSync(`sf org auth show-access-token --target-org ${alias} --json`, { encoding: 'utf8' }),
+) as { result?: string | { accessToken?: string } };
+const accessToken =
+  typeof tokenOut.result === 'string' ? tokenOut.result : tokenOut.result?.accessToken;
 
-const accessToken = out.result?.accessToken;
-const instanceUrl = out.result?.instanceUrl;
+const displayOut = JSON.parse(
+  execSync(`sf org display --target-org ${alias} --json`, { encoding: 'utf8' }),
+) as { result?: { instanceUrl?: string } };
+const instanceUrl = displayOut.result?.instanceUrl;
+
 if (!accessToken || !instanceUrl) {
-  console.error('could not read accessToken/instanceUrl from sf CLI', out);
+  console.error('could not read accessToken/instanceUrl from sf CLI', { tokenOut, displayOut });
+  process.exit(1);
+}
+if (accessToken.startsWith('[REDACTED')) {
+  console.error('sf CLI returned a masked access token');
   process.exit(1);
 }
 

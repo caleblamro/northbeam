@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -447,6 +448,49 @@ export const auditLog = pgTable(
   },
   (t) => ({
     orgTime: uniqueIndex('audit_log_org_created_idx').on(t.organizationId, t.createdAt),
+  }),
+);
+
+/* ────────────────────────────────────────────────────────────────────────────
+   AI COMPOSER SESSIONS — a user's conversations with the dashboard composer.
+   Personal (never shared): each row is one thread — the messages, the latest
+   composed artifact, and the target object — so a user can reopen the drawer
+   and pick up where they left off. Saving a dashboard still goes through the
+   `view` table; sessions are the working drafts.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/** One chat turn persisted on an aiSession row. Mirrors the composer's
+ *  in-memory shape minus transient flags (pending). */
+export type AiSessionMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+  /** Repair-pass notes attached to an assistant turn. */
+  repairs?: string[];
+};
+
+export const aiSession = pgTable(
+  'ai_session',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    /** Object key the session composes against ('deal', 'account', …). */
+    objectKey: text('object_key').notNull(),
+    /** First user prompt, trimmed — the list label. */
+    title: text('title').notNull(),
+    messages: jsonb('messages').$type<AiSessionMessage[]>().notNull().default([]),
+    /** Latest composed artifact tree (config.artifact shape), null before the
+     *  first completed generation. */
+    artifact: jsonb('artifact').$type<unknown>(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    ownerRecency: index('ai_session_owner_recency_idx').on(t.organizationId, t.userId, t.updatedAt),
   }),
 );
 

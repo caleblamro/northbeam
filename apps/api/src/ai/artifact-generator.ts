@@ -6,93 +6,101 @@
 // so a dashboard authored by the LLM and saved via the dialog renders
 // identically to one authored by hand.
 //
-// Schema is intentionally NON-recursive — Vercel AI SDK's JSON-schema
-// converter can't represent z.lazy self-references. We model the tree as
-// two flat shapes:
-//   - LeafNode: a single component with no children (most of them)
-//   - SectionNode: a SectionCard that wraps an array of LeafNodes
-// One level of nesting only.
+// The Artifact schema itself lives in @northbeam/core/artifact — shared with
+// the view router (validates config.artifact on save) and mirrored by the web
+// walker. Generation streams: streamArtifact returns the partial-object
+// stream plus a promise for the final schema-validated result. The model
+// emits { note, artifact } — note FIRST so the composer's chat bubble starts
+// filling before the components arrive.
 
 import { anthropic } from '@ai-sdk/anthropic';
 import { loadEnv } from '@northbeam/config';
+import {
+  ARTIFACT_FILTER_OPS,
+  ARTIFACT_LEAF_COMPONENTS,
+  type Artifact,
+  type ArtifactLike,
+  ArtifactSchema,
+} from '@northbeam/core';
 import type { FieldRow, ObjectRow } from '@northbeam/db';
-import { generateObject } from 'ai';
+import { jsonSchema, streamObject } from 'ai';
 import { z } from 'zod';
 
-const FILTER_OPS = [
-  'eq',
-  'neq',
-  'contains',
-  'startsWith',
-  'endsWith',
-  'gt',
-  'lt',
-  'gte',
-  'lte',
-  'before',
-  'after',
-  'isTrue',
-  'isFalse',
-  'isEmpty',
-  'isSet',
-] as const;
+export type { Artifact, ArtifactLike };
 
-const FilterSchema = z.object({
-  fieldKey: z.string().min(1),
-  op: z.enum(FILTER_OPS),
-  value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
+export type ObjectContext = { object: ObjectRow; fields: FieldRow[] };
+
+const GenerationSchema = z.object({
+  /** One conversational sentence for the chat thread — what was built or
+   *  changed and why. Declared before `artifact` so it streams first. */
+  note: z.string(),
+  artifact: ArtifactSchema,
 });
 
-const SortSchema = z.object({
-  fieldKey: z.string().min(1),
-  direction: z.enum(['asc', 'desc']),
-});
+export type Generation = z.infer<typeof GenerationSchema>;
 
-/* ── Leaf nodes ─────────────────────────────────────────────────────────── */
-
-const LEAF_COMPONENTS = [
-  'PageHeader',
-  'MetricGroup',
-  'Metric',
-  'Chart',
-  'DescriptionList',
-  'EmptyState',
-  'Text',
-  'RecordTable',
-  'RecordGrid',
-] as const;
-
-const LeafNodeSchema = z.object({
-  component: z.enum(LEAF_COMPONENTS),
-  props: z.record(z.string(), z.unknown()).optional(),
-});
-
-/* ── Section node (one level of nesting) ────────────────────────────────── */
-
-const SectionNodeSchema = z.object({
-  component: z.literal('SectionCard'),
-  props: z
-    .object({
-      title: z.string().optional(),
-    })
-    .passthrough()
-    .optional(),
-  children: z.array(LeafNodeSchema).optional(),
-});
-
-const ArtifactNodeSchema = z.union([LeafNodeSchema, SectionNodeSchema]);
-
-const ArtifactSchema = z.object({
-  version: z.literal('1'),
-  components: z.array(ArtifactNodeSchema).min(1).max(20),
-});
-
-export type Artifact = z.infer<typeof ArtifactSchema>;
-export type ArtifactLeafNode = z.infer<typeof LeafNodeSchema>;
-export type ArtifactSectionNode = z.infer<typeof SectionNodeSchema>;
-export type ArtifactNode = z.infer<typeof ArtifactNodeSchema>;
-export type ArtifactFilter = z.infer<typeof FilterSchema>;
-export type ArtifactSort = z.infer<typeof SortSchema>;
+// The JSON schema the PROVIDER sees is hand-authored: the AI SDK's zod
+// converter (addAdditionalPropertiesToJsonSchema) rewrites every object to
+// `additionalProperties: false`, which turns the free-form `props` record
+// into "no properties allowed" — the model then emits `props: {}` for every
+// component and the dashboard renders empty. Runtime validation still runs
+// the zod GenerationSchema via the `validate` callback, so nothing invalid
+// gets past this file either way.
+const OPEN_PROPS = { type: 'object', additionalProperties: true } as const;
+const LEAF_NODE_JSON = {
+  type: 'object',
+  properties: {
+    component: { type: 'string', enum: [...ARTIFACT_LEAF_COMPONENTS] },
+    props: OPEN_PROPS,
+  },
+  required: ['component'],
+  additionalProperties: false,
+} as const;
+const SECTION_NODE_JSON = {
+  type: 'object',
+  properties: {
+    component: { type: 'string', enum: ['SectionCard'] },
+    props: OPEN_PROPS,
+    children: { type: 'array', items: LEAF_NODE_JSON },
+  },
+  required: ['component'],
+  additionalProperties: false,
+} as const;
+const generationProviderSchema = jsonSchema<Generation>(
+  {
+    type: 'object',
+    properties: {
+      note: {
+        type: 'string',
+        description: 'One conversational sentence (≤ 280 chars) for the chat thread.',
+      },
+      artifact: {
+        type: 'object',
+        properties: {
+          version: { type: 'string', enum: ['1'] },
+          components: {
+            type: 'array',
+            items: { anyOf: [LEAF_NODE_JSON, SECTION_NODE_JSON] },
+            minItems: 1,
+            maxItems: 20,
+          },
+        },
+        required: ['version', 'components'],
+        additionalProperties: false,
+      },
+    },
+    required: ['note', 'artifact'],
+    additionalProperties: false,
+  },
+  {
+    validate: (value) => {
+      const result = GenerationSchema.safeParse(value);
+      return result.success
+        ? { success: true, value: result.data }
+        : { success: false, error: result.error };
+    },
+  },
+);
 
 /* ── Preflight summary ──────────────────────────────────────────────────── */
 
@@ -125,62 +133,133 @@ function formatDataSummary(summary: DataSummary): string {
 
 /* ── System prompt ──────────────────────────────────────────────────────── */
 
-function buildSystemPrompt(object: ObjectRow, fields: FieldRow[], summary: DataSummary): string {
-  const fieldLines = fields
+function fieldLinesFor(fields: FieldRow[], cap: number): string {
+  return fields
     .filter((f) => !f.isSystem || f.key === 'name')
-    .slice(0, 40)
+    .slice(0, cap)
     .map((f) => `- ${f.label} (${f.key}, type: ${f.type})`)
     .join('\n');
+}
 
-  return `You are composing a structured dashboard artifact for a CRM workspace inside Northbeam.
+/** Pure prompt assembly — exported so tests can assert the contract (field
+ *  cap, data-summary injection, cross-object context, refinement section)
+ *  without an API call. */
+export function buildSystemPrompt(
+  object: ObjectRow,
+  fields: FieldRow[],
+  summary: DataSummary,
+  currentArtifact?: ArtifactLike,
+  otherObjects: ObjectContext[] = [],
+): string {
+  const fieldLines = fieldLinesFor(fields, 40);
 
-The artifact will be rendered as React components on the user's screen.
+  const otherObjectLines = otherObjects
+    .filter((o) => o.object.key !== object.key)
+    .map(
+      (o) =>
+        `## ${o.object.label} (key: \`${o.object.key}\`)\n${fieldLinesFor(o.fields, 20) || '- (no fields surfaced)'}`,
+    )
+    .join('\n\n');
+
+  const refinement = currentArtifact
+    ? `
+
+# Refinement mode
+
+The user already has a dashboard and is asking for a change. Current artifact:
+
+${JSON.stringify(currentArtifact)}
+
+Treat the user's message as an edit instruction against this artifact, NOT a
+new dashboard request. Return the FULL updated artifact: keep every node the
+instruction doesn't touch exactly as-is (same component, same props, same
+order), and only add / remove / modify what the instruction requires.`
+    : '';
+
+  return `You are Northbeam's dashboard composer — a product designer who turns one sentence of
+intent into a live, data-backed dashboard. Northbeam's design language is Stripe-grade
+restraint: ink on hairlines, tabular numbers, one indigo accent, no decoration that
+doesn't carry information. You compose with React components that query the workspace's
+REAL data at render time.
+
 Respond with valid JSON matching the requested schema — no commentary, no markdown fences.
+Two keys, in order:
+- "note": ONE conversational sentence (≤ 280 chars) for the chat thread — what you built
+  or changed, citing 1-2 real numbers from the data summary. Plain text.
+- "artifact": the component tree described below.
 
-# Layout — the 12-column grid
+# How to read a request
 
-Top-level components render onto a 12-column grid. Every top-level node may
-set \`props.span\` (integer 1-12; omitted = 12 = full width). Nodes flow
-left-to-right, wrapping when a row fills. Compose like a real dashboard:
+First decide what QUESTION the user is really asking — "how is my pipeline doing?"
+"which accounts matter?" "what changed this week?" — then compose the dashboard so the
+answer is visible in the first two rows without scrolling. Everything below the fold is
+supporting evidence: distributions, then individual records.
 
-- Row 1: PageHeader (no span — full width).
-- Row 2: a KPI row of 3-4 \`Metric\` tiles, each with span 3 (or 4 for three).
-- Row 3: a \`Chart\` with span 7-8 beside a narrower SectionCard (span 4-5)
-  holding a RecordTable with 2-3 columns.
-- Then full-width (span 12) SectionCards with tables.
+# Design principles
 
-Children inside a SectionCard stack vertically and ignore span.
+1. Answer first. Row 2 is a KPI strip whose numbers directly answer the headline
+   question. If the user asks about value, lead with sums; if about volume, counts.
+2. Every row fills 12 columns. Top-level nodes carry \`props.span\` (1-12, omitted = 12)
+   and flow left-to-right, wrapping when a row fills. Legal row shapes: 12 · 6+6 ·
+   7+5 · 8+4 · 4+4+4 · 3+3+3+3 · 3+3+6. NEVER leave a row partially filled — a span-7
+   chart MUST have a span-5 companion (a RecordList or SectionCard) beside it.
+3. One hero. Exactly one visualization dominates (the Chart most relevant to the
+   question, span 7-8). Secondary evidence is smaller: a RecordList, a Progress stack,
+   a compact table.
+4. Every component earns its place. 5-9 top-level nodes. Never restate the same number
+   in two components. Never pad with Text that describes what a chart already shows.
+5. Live over static. Metric/Chart/RecordTable/RecordGrid/RecordList query real records
+   at render time — always prefer them. Static values are a last resort for things the
+   data can't express, marked with a leading "—".
+6. One accent moment, maximum. At most one Callout, and only when the data summary
+   reveals something genuinely worth flagging (a concentration, a gap, a milestone).
+7. Records are the destination. Users click through to real records — end most
+   dashboards with a full-width RecordTable (or RecordList in a side column) so the
+   numbers above have somewhere to go.
 
-# Available components
+# Component gallery
 
-## Static (use ONLY these — anything else is dropped)
+## Structure & text (static)
 
-- PageHeader: hero at the top of the dashboard.
+- PageHeader — the hero. ALWAYS first, full width.
   props: { title: string, subtitle?: string }
+  Title names the dashboard ("Pipeline overview"), subtitle states scope in one clause.
 
-- SectionCard: a bordered panel that holds children.
-  props: { title?: string }
-  children: array of leaf nodes (any component below except SectionCard itself).
-  Nest at most one level deep.
+- Heading — a quiet section break WITHOUT a card. Use between dashboard regions
+  instead of stacking SectionCards.
+  props: { text: string, sub?: string }
 
-- MetricGroup: a row of STATIC stat tiles. Prefer live \`Metric\` tiles (below)
-  whenever the number can be computed from records; use MetricGroup only for
-  values that exist nowhere in the data.
-  props: { items: { label: string, value?: string, delta?: string }[] }
-  Keep items ≤ 4 so the row fits.
+- SectionCard — a bordered panel holding children (stacked vertically, spans ignored).
+  props: { title?: string }, children: leaf nodes (never another SectionCard).
+  Use to group a Text/RecordList/Progress cluster under one title. Chart and Metric
+  render their own panel — NEVER nest them in a SectionCard.
 
-- DescriptionList: a compact label / value list.
+- Text — one short paragraph. props: { value: string, muted?: boolean }
+  Seasoning, not filler. Skip it if a title already says it.
+
+- Callout — one tinted insight block. props: { title?: string, body: string,
+  tone?: 'info' | 'warning' | 'success' | 'danger' | 'neutral' }
+
+- Divider — hairline between regions. props: {} (span only)
+
+- DescriptionList — label/value pairs for facts that aren't record data.
   props: { items: { label: string, value: string }[] }
 
-- EmptyState: a placeholder block.
-  props: { title: string, body?: string }
+- Chips — a small badge row for enumerations (stages, categories, statuses).
+  props: { items: { label: string, tone?: 'default' | 'outline' }[] }  (≤ 8 items)
 
-- Text: a plain paragraph.
-  props: { value: string, muted?: boolean }
+- MetricGroup — STATIC stat tiles; only for values no query can produce.
+  props: { items: { label: string, value?: string, delta?: string }[] }  (≤ 4)
 
-## Data-querying (these load LIVE records at render time)
+- EmptyState — placeholder. props: { title: string, body?: string }
 
-- Metric: ONE stat tile computed from live records. Use for KPI rows.
+- Progress — a labelled ratio bar. Compute value (0-100) from the data summary
+  (e.g. a stage's share of total records). Stack 2-4 inside one SectionCard.
+  props: { label: string, value: number, display?: string }
+
+## Live data (these run real queries when the dashboard renders)
+
+- Metric — ONE stat tile: count, sum, or avg over an object, with optional filters.
   props: {
     label: string,                     // sentence case, e.g. "Open pipeline"
     objectKey: string,
@@ -188,49 +267,64 @@ Children inside a SectionCard stack vertically and ignore span.
     fieldKey?: string,                 // REQUIRED for sum/avg — a number/currency/percent field key
     filters?: ArtifactFilter[],
     delta?: string,                    // optional signed delta text, e.g. "+12% vs last month"
-    span?: number                      // usually 3 (four tiles) or 4 (three tiles)
+    span?: number                      // 3 (four tiles) or 4 (three tiles)
   }
-  Omit objectKey/fn to render a static tile via { label, value: string }.
 
-- Chart: an aggregate chart over live records (group + count/sum/avg).
+- Chart — grouped aggregate over live records.
   props: {
-    title?: string,                    // renders as the panel header
+    title?: string,
     objectKey: string,
-    groupBy: string,                   // field key to group on (picklist/reference work best)
+    groupBy: string,                   // picklist / reference / checkbox / text field key (dates can't bucket yet)
     fn: 'count' | 'sum' | 'avg',
     measure?: string,                  // REQUIRED for sum/avg — numeric field key
-    chartType: 'bar' | 'donut',
+    chartType: 'bar' | 'donut' | 'line' | 'table',
     filters?: ArtifactFilter[],
-    limit?: number,                    // top-N before folding the tail into "Other" (bar ≤ 12, donut ≤ 5)
+    limit?: number,                    // top-N before the tail folds into "Other" (bar ≤ 12, donut ≤ 5)
     span?: number
   }
-  chartType rules: 'bar' for ranked comparisons ("which industry has the
-  most"); 'donut' ONLY for part-to-whole with few groups (≤ 5) and never
-  with fn 'avg'. Don't add a Chart and a MetricGroup restating the same
-  numbers.
+  Choosing chartType: 'bar' answers "which X has the most" (ranked); 'donut' ONLY for
+  part-to-whole with ≤ 5 groups, never with avg; 'line' for an ordered series read
+  left-to-right; 'table' when exact numbers matter more than shape.
 
-- RecordTable: an embedded table of real records. The user can click any
-  row to open the record. Use when the dashboard wants to show "the top N
-  X" or "X matching criteria".
+- RecordTable — real records in columns; rows click through to the record.
   props: {
-    objectKey: string,                 // 'account' | 'contact' | 'deal' | 'activity' | another seeded object key
-    filters?: ArtifactFilter[],        // see Filter schema below
-    sort?: ArtifactSort[],             // see Sort schema below
-    columns?: string[],                // field keys to display, 2-5 entries
+    objectKey: string,
+    filters?: ArtifactFilter[],
+    sort?: ArtifactSort[],
+    columns?: string[],                // 2-5 field keys; lead with name-like, end with the number
     limit?: number                     // default 10, max 50
   }
+  The workhorse for "show me the top N X" / "X matching criteria". Best full-width.
+  Renders with a search box, user-editable filters, and click-to-sort headers
+  automatically (your \`filters\` stay pinned underneath) — never add Text or
+  Chips explaining how to filter or sort.
 
-- RecordGrid: card / tile presentation of real records.
-  props: same as RecordTable, plus optional { columnsCount?: 1|2|3|4 }
+- RecordList — compact clickable record rows: name, one secondary field, relative
+  time. The span-4/5 companion piece ("recent deals", "top accounts at a glance") —
+  quieter than a table, perfect beside a hero Chart.
+  props: { objectKey: string, filters?: ArtifactFilter[], sort?: ArtifactSort[],
+           secondaryField?: string, limit?: number /* default 6, max 20 */ }
+
+- RecordGrid — card presentation of records; for visual browsing, not rankings.
+  props: same as RecordTable, plus { columnsCount?: 1|2|3|4 }
 
 # Filter / Sort schema
 
 ArtifactFilter = { fieldKey: string, op: Op, value?: string | number | boolean | null }
   - fieldKey MUST come from the field list below for the matching objectKey.
-  - Op is one of: ${FILTER_OPS.join(', ')}
+  - Op is one of: ${ARTIFACT_FILTER_OPS.join(', ')}
   - The unary ops (isEmpty, isSet, isTrue, isFalse) take no value.
 
 ArtifactSort = { fieldKey: string, direction: 'asc' | 'desc' }
+
+# Layout recipes (adapt, don't copy blindly)
+
+- Overview ("how is X doing"): PageHeader → 3-4 Metric (span 3/4) → Chart span 7 +
+  RecordList span 5 → RecordTable span 12.
+- Ranked question ("which/top X"): PageHeader → 2-3 Metric → hero bar Chart span 8 +
+  SectionCard span 4 (Progress shares or Chips) → RecordTable span 12 sorted by the metric.
+- Digest ("what's new/recent"): PageHeader → Metric row → RecordList span 6 + Chart
+  span 6 → Callout if something stands out.
 
 # Object context
 
@@ -238,49 +332,77 @@ You are composing for the **${object.label}** object (key: \`${object.key}\`).
 
 Fields available to reference:
 ${fieldLines || '- (no fields surfaced)'}
+${
+  otherObjectLines
+    ? `
+# Other objects in this workspace
 
+Data-querying components may also target these objects (set their
+\`objectKey\` accordingly). Use ONLY the field keys listed — anything else
+fails at render time.
+
+${otherObjectLines}
+`
+    : ''
+}
 # Live data summary
 
-Came from a real query against the workspace's data — use these numbers
-for matching metrics; don't invent values for the same metrics.
+Came from a real query against the workspace's data — use these numbers for matching
+metrics and Progress values; don't invent values for covered metrics.
 
 ${formatDataSummary(summary)}
 
-# Output rules
+# Final checks before you answer
 
-- Top-level "components" array: 1-12 items in reading order (the grid
-  flows them left-to-right, top-to-bottom by span).
-- Lead with a PageHeader. Follow with a Metric KPI row, then Chart /
-  SectionCard rows per the layout guidance above.
-- Wrap related blocks (an explanatory Text + a RecordTable about the same
-  theme) inside one SectionCard. Chart and Metric render their own panel —
-  do NOT nest them inside a SectionCard.
-- Use RecordTable / RecordGrid wherever the user's prompt implies "show
-  me X" — they load real data and the user can click into rows. Avoid
-  faking a table with DescriptionList items if you mean "show me records".
-- Prefer live Metric / Chart over static numbers. For anything not
-  computable from fields, either note that the value isn't tracked, or
-  write a clearly-marked sample value prefixed with "—".
-- Keep titles ≤ 60 chars, bodies ≤ 280 chars.`;
+- PageHeader first; KPI row second; rows sum to 12; no half-filled rows.
+- Every fieldKey/groupBy/measure/column exists in the field lists above.
+- No number appears twice; titles ≤ 60 chars; bodies ≤ 280 chars.
+- The note cites real numbers and reads like a colleague, not a changelog.${refinement}`;
 }
 
-/** Generate an artifact from a natural-language prompt + object context +
- *  the live data summary. Throws when ANTHROPIC_API_KEY isn't configured. */
-export async function generateArtifact(opts: {
+export type GenerationPartial = { note?: string; artifact?: unknown };
+
+/** Stream a generation from a natural-language prompt + object context + the
+ *  live data summary. `partialStream` yields progressively-complete
+ *  { note?, artifact? } snapshots (the note streams first); `result` resolves
+ *  once the full object has been generated AND validated against
+ *  GenerationSchema (it rejects if the model can't conform). Pass
+ *  `currentArtifact` to refine an existing dashboard instead of composing
+ *  from scratch, and `otherObjects` so cross-object components use real field
+ *  keys. Throws when ANTHROPIC_API_KEY isn't configured. */
+export function streamArtifact(opts: {
   prompt: string;
   object: ObjectRow;
   fields: FieldRow[];
   summary: DataSummary;
-}): Promise<Artifact> {
+  currentArtifact?: ArtifactLike;
+  otherObjects?: ObjectContext[];
+}): { partialStream: AsyncIterable<GenerationPartial>; result: Promise<Generation> } {
   const env = loadEnv();
   if (!env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY is not configured');
   }
-  const result = await generateObject({
+  const result = streamObject({
     model: anthropic(env.ANTHROPIC_MODEL),
-    system: buildSystemPrompt(opts.object, opts.fields, opts.summary),
+    system: buildSystemPrompt(
+      opts.object,
+      opts.fields,
+      opts.summary,
+      opts.currentArtifact,
+      opts.otherObjects ?? [],
+    ),
     prompt: opts.prompt,
-    schema: ArtifactSchema,
+    schema: generationProviderSchema,
+    providerOptions: {
+      // Native structured outputs sanitize the schema to closed objects
+      // (additionalProperties: false everywhere) — incompatible with the
+      // free-form `props` record. jsonTool mode passes the schema to a tool
+      // input verbatim, so open props survive.
+      anthropic: { structuredOutputMode: 'jsonTool' },
+    },
   });
-  return result.object;
+  return {
+    partialStream: result.partialObjectStream as AsyncIterable<GenerationPartial>,
+    result: result.object,
+  };
 }

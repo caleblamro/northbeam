@@ -9,12 +9,12 @@ const EnvSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(16),
   BETTER_AUTH_URL: z.string().url(),
   // Optional — AI artifact generation (#11). Missing key disables the
-  // `ai.generate` procedure with a friendly tRPC error rather than failing
+  // `ai.preview` procedure with a friendly tRPC error rather than failing
   // at boot, so local dev without an Anthropic key still runs.
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   /** Anthropic model id used by the artifact generator. Override for fast /
    *  cheap iterations or to A/B a newer model. */
-  ANTHROPIC_MODEL: z.string().default('claude-opus-4-7'),
+  ANTHROPIC_MODEL: z.string().default('claude-opus-4-8'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

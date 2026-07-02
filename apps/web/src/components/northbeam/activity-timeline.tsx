@@ -12,6 +12,7 @@ import {
   TimelineItem,
 } from '@/components/ui/timeline';
 import { cn } from '@/lib/cn';
+import { timeAgo } from '@/lib/time';
 import {
   Calendar,
   CheckCircle2,
@@ -38,18 +39,8 @@ export type ActivityRow = {
   subtype?: string | null;
 };
 
-function defaultTimeAgo(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  const ms = Date.now() - d.getTime();
-  const m = Math.floor(ms / 60_000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const days = Math.floor(h / 24);
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString();
-}
+// Compact relative-time formatting lives in @/lib/time — shared with the
+// artifact walker's RecordList and the AI composer's session history.
 
 interface ActivityTimelineProps {
   items: ActivityRow[];
@@ -63,7 +54,7 @@ interface ActivityTimelineProps {
 export function ActivityTimeline({
   items,
   icons,
-  formatTime = defaultTimeAgo,
+  formatTime = timeAgo,
   className,
 }: ActivityTimelineProps) {
   return (

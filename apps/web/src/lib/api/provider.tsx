@@ -13,7 +13,7 @@
 
 import { formatError, isSilentlyHandledCode, notifyError } from '@/lib/api/errors';
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { httpBatchLink } from '@trpc/client';
+import { httpBatchStreamLink } from '@trpc/client';
 import { useState } from 'react';
 import superjson from 'superjson';
 import { trpc } from './trpc';
@@ -62,7 +62,9 @@ export function ApiProvider({ children }: { children: React.ReactNode }) {
   const [trpcClient] = useState(() =>
     trpc.createClient({
       links: [
-        httpBatchLink({
+        // Stream-capable superset of httpBatchLink — regular procedures behave
+        // identically; async-generator procedures (ai.preview) stream JSONL.
+        httpBatchStreamLink({
           url: `${API_URL}/trpc`,
           // Session cookie has to ride along on cross-origin requests.
           fetch: (url, options) => fetch(url, { ...options, credentials: 'include' }),

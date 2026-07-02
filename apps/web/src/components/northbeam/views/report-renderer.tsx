@@ -10,34 +10,27 @@
 // table-view twin.
 
 import { AiAffordance } from '@/components/northbeam/ai-affordance';
-import { AIGenerateDialog } from '@/components/northbeam/ai-generate-dialog';
+import { useAiComposer } from '@/components/northbeam/ai-composer';
 import { BarList, Donut, LineChart, StatTile } from '@/components/northbeam/charts';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
 import { SectionCard } from '@/components/northbeam/section-card';
 import {
   type AggBucket,
+  BucketsTable,
   bucketLabel,
   fmtAggregate,
   foldBuckets,
 } from '@/components/northbeam/views/artifact-walker';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { trpc } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { ViewRenderer, ViewRendererProps } from '@/lib/views/types';
 import type { Filter, ReportConfig } from '@northbeam/db/views';
 import { ChartBar } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { z } from 'zod';
 
 /** Grand total across buckets — count/sum add up; avg folds count-weighted. */
@@ -243,74 +236,24 @@ export function ReportResult({
 
 export function ReportView({ view, objectKey, objectLabel, fields }: ViewRendererProps) {
   // The report header's quiet AI door (brief placement #1) — a shortcut into
-  // the same generate flow the ⌘K palette's "AI" group opens.
-  const [aiOpen, setAiOpen] = useState(false);
+  // the same composer the ⌘K palette's "AI" group opens.
+  const composer = useAiComposer();
   return (
-    <>
-      <ReportResult
-        objectKey={objectKey}
-        objectLabel={objectLabel}
-        fields={fields}
-        config={(view.config ?? {}) as Partial<ReportConfig> & { limit?: number }}
-        filters={view.filters ?? []}
-        title={view.label}
-        titleAction={
-          <AiAffordance
-            size="sm"
-            label="Ask AI about this report"
-            onClick={() => setAiOpen(true)}
-          />
-        }
-      />
-      <AIGenerateDialog open={aiOpen} onOpenChange={setAiOpen} initialObjectKey={objectKey} />
-    </>
-  );
-}
-
-function BucketsTable({
-  buckets,
-  options,
-  refLabels,
-  agg,
-  groupField,
-  measureField,
-}: {
-  buckets: AggBucket[];
-  options: { value: string; label: string }[];
-  refLabels: Record<string, string>;
-  agg: ReportConfig['measure']['agg'];
-  groupField?: FieldDefLite;
-  measureField?: FieldDefLite;
-}) {
-  const valueHead =
-    agg === 'count' ? 'Count' : `${agg === 'sum' ? 'Sum' : 'Avg'} of ${measureField?.label ?? ''}`;
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>{groupField?.label ?? 'Group'}</TableHead>
-          <TableHead className="text-right">{valueHead}</TableHead>
-          {agg !== 'count' && <TableHead className="text-right">Records</TableHead>}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {buckets.map((b, i) => (
-          <TableRow key={`${String(b.group)}-${i}`}>
-            <TableCell>
-              {groupField ? bucketLabel(b.group, options, refLabels) : 'All records'}
-            </TableCell>
-            <TableCell className="text-right tabular-nums">
-              {fmtAggregate(b.value, measureField)}
-            </TableCell>
-            {agg !== 'count' && (
-              <TableCell className="text-right text-muted-foreground tabular-nums">
-                {b.count.toLocaleString('en-US')}
-              </TableCell>
-            )}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <ReportResult
+      objectKey={objectKey}
+      objectLabel={objectLabel}
+      fields={fields}
+      config={(view.config ?? {}) as Partial<ReportConfig> & { limit?: number }}
+      filters={view.filters ?? []}
+      title={view.label}
+      titleAction={
+        <AiAffordance
+          size="sm"
+          label="Ask AI about this report"
+          onClick={() => composer.open({ objectKey })}
+        />
+      }
+    />
   );
 }
 

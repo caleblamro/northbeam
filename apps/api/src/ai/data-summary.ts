@@ -1,20 +1,26 @@
 // Preflight data summary for the AI artifact generator. Pulls the real
 // numbers from the workspace's data so Claude can compose its tiles
 // against truth instead of guessing. Cheap by design — bounded queries,
-// no scans bigger than the visible record count.
+// one aggregate per summarized field.
 
-import { type FieldRow, type ObjectRow, countRecords, listRecords, sumField } from '@northbeam/db';
-import type { Database } from '@northbeam/db';
+import {
+  type DbExecutor,
+  type FieldRow,
+  type ObjectRow,
+  aggregateRecords,
+  countRecords,
+  sumField,
+} from '@northbeam/db';
 import type { DataSummary } from './artifact-generator.js';
 
 const PICKLIST_GROUPS_TO_INCLUDE = 2;
-const SAMPLE_ROWS_FOR_GROUPBY = 500;
+const BUCKETS_PER_GROUP = 8;
 
 /** Build a DataSummary for the given object. Errors are surfaced — the
  *  caller wraps in try/catch and falls back to an empty summary so a flaky
  *  query never blocks generation. */
 export async function buildDataSummary(
-  db: Database,
+  db: DbExecutor,
   opts: { orgId: string; object: ObjectRow; fields: FieldRow[] },
 ): Promise<DataSummary> {
   const recordCount = await countRecords(db, {
@@ -22,33 +28,27 @@ export async function buildDataSummary(
     object: opts.object,
   });
 
-  // Picklist group-by counts. We sample the first N rows (cap to keep this
-  // bounded on big workspaces) and tally in JS — the dynamic record layer
-  // doesn't have a generic GROUP BY helper yet, and a sample is enough for
-  // a CRM dashboard prompt.
+  // Picklist group-by counts — a real SQL GROUP BY per field (same
+  // aggregateRecords helper record.aggregate uses), top buckets only to keep
+  // the prompt budget bounded.
   const picklists = opts.fields
     .filter((f) => f.type === 'picklist')
     .slice(0, PICKLIST_GROUPS_TO_INCLUDE);
   const picklistCounts: DataSummary['picklistCounts'] = [];
-  if (picklists.length > 0) {
-    const rows = await listRecords(db, {
+  for (const f of picklists) {
+    const buckets = await aggregateRecords(db, {
       orgId: opts.orgId,
       object: opts.object,
       fields: opts.fields,
-      limit: SAMPLE_ROWS_FOR_GROUPBY,
+      groupBy: f,
+      measure: { fn: 'count' },
+      filters: [],
+      limit: BUCKETS_PER_GROUP,
     });
-    for (const f of picklists) {
-      const tally = new Map<string, number>();
-      for (const r of rows) {
-        const v = r.data[f.key];
-        if (typeof v !== 'string' || v.length === 0) continue;
-        tally.set(v, (tally.get(v) ?? 0) + 1);
-      }
-      const counts = [...tally.entries()]
-        .map(([value, count]) => ({ value, count }))
-        .sort((a, b) => b.count - a.count);
-      picklistCounts.push({ fieldKey: f.key, fieldLabel: f.label, counts });
-    }
+    const counts = buckets
+      .filter((b) => typeof b.group === 'string' && b.group.length > 0)
+      .map((b) => ({ value: String(b.group), count: b.count }));
+    picklistCounts.push({ fieldKey: f.key, fieldLabel: f.label, counts });
   }
 
   // First currency / number → sum + average.

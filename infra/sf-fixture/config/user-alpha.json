@@ -1,0 +1,8 @@
+{
+  "FirstName": "Ada",
+  "LastName": "Alpha",
+  "Email": "nb-fixture-alpha@example.com",
+  "profileName": "Standard User",
+  "permsets": ["Northbeam_Fixture"],
+  "generatePassword": false
+}
