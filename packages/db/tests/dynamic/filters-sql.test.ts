@@ -293,7 +293,12 @@ describe('buildFilterPredicates — OR groups', () => {
   it('AND-combines groups with sibling leaves', () => {
     const preds = buildFilterPredicates(FIELDS, [
       { fieldKey: 'stage', op: 'eq', value: 'Won' },
-      { any: [{ fieldKey: 'amount', op: 'gt', value: 1 }, { fieldKey: 'amount', op: 'lt', value: -1 }] },
+      {
+        any: [
+          { fieldKey: 'amount', op: 'gt', value: 1 },
+          { fieldKey: 'amount', op: 'lt', value: -1 },
+        ],
+      },
     ]);
     expect(preds).toHaveLength(2);
   });

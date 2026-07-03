@@ -21,14 +21,7 @@ import { type ResolvedRefPath, planRefJoins } from './ref-joins.js';
 
 export type { DateGrain } from '../views.js';
 
-export type AggregateFn =
-  | 'count'
-  | 'sum'
-  | 'avg'
-  | 'min'
-  | 'max'
-  | 'countDistinct'
-  | 'median';
+export type AggregateFn = 'count' | 'sum' | 'avg' | 'min' | 'max' | 'countDistinct' | 'median';
 
 /** Bucket-level threshold ("only groups where …"). `target: 'count'` gates on
  *  the bucket's record count, `'value'` on the measure. Ignored when there

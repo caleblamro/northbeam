@@ -201,7 +201,8 @@ export function resolveQuerySpec(
       continue;
     }
     const f = m.fieldKey ? byKey.get(m.fieldKey) : undefined;
-    const ok = fn === 'countDistinct' ? f && f.type !== 'multipicklist' : f && NUMERIC_TYPES.has(f.type);
+    const ok =
+      fn === 'countDistinct' ? f && f.type !== 'multipicklist' : f && NUMERIC_TYPES.has(f.type);
     if (!ok) {
       return { ok: false, message: `measure '${m.id}': '${m.fieldKey ?? ''}' can't be ${fn}'d` };
     }
@@ -394,8 +395,12 @@ export function buildQuery(orgId: string, plan: ResolvedQueryPlan, acl: QueryAcl
 
   // Select list: groups g/g2, measures by POSITIONAL alias (m0, m1 — measure
   // ids never reach SQL as identifiers), plus the bucket count.
-  const g1 = groups[0] ? groupExpr(groups[0], groups[0].via ? refPlan.exprFor(groups[0].via.key) : null) : null;
-  const g2 = groups[1] ? groupExpr(groups[1], groups[1].via ? refPlan.exprFor(groups[1].via.key) : null) : null;
+  const g1 = groups[0]
+    ? groupExpr(groups[0], groups[0].via ? refPlan.exprFor(groups[0].via.key) : null)
+    : null;
+  const g2 = groups[1]
+    ? groupExpr(groups[1], groups[1].via ? refPlan.exprFor(groups[1].via.key) : null)
+    : null;
   const selects: SQL[] = [];
   if (g1) selects.push(sql`${g1} as g`);
   if (g2) selects.push(sql`${g2} as g2`);

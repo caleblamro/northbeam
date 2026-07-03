@@ -271,13 +271,31 @@ svg.i {
 .pill.plain::before {
   display: none;
 }
-.pill.success { color: var(--success); background: var(--success-bg); }
-.pill.warning { color: var(--warning); background: var(--warning-bg); }
-.pill.danger  { color: var(--danger);  background: var(--danger-bg); }
-.pill.info    { color: var(--info);    background: var(--info-bg); }
-.pill.neutral { color: var(--neutralchip); background: var(--neutralchip-bg); }
+.pill.success {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.pill.warning {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+.pill.danger {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+.pill.info {
+  color: var(--info);
+  background: var(--info-bg);
+}
+.pill.neutral {
+  color: var(--neutralchip);
+  background: var(--neutralchip-bg);
+}
 /* tokens.css defines no dark values for --neutralchip*; fall back to surface tokens */
-:root[data-theme="dark"] .pill.neutral { color: var(--ink-secondary); background: var(--surface-active); }
+:root[data-theme="dark"] .pill.neutral {
+  color: var(--ink-secondary);
+  background: var(--surface-active);
+}
 
 /* ---- Object chip (gradient square w/ letter) ---- */
 .obj-chip {
@@ -342,7 +360,8 @@ svg.i {
   font-weight: var(--fw-medium);
   color: var(--ink);
 }
-.tbl td.muted, .muted {
+.tbl td.muted,
+.muted {
   color: var(--ink-muted);
 }
 .subtle {
@@ -351,14 +370,30 @@ svg.i {
 
 /* ---- Reveal animation (matches app's staggered load) ---- */
 @keyframes nb-reveal {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
-.reveal   { animation: nb-reveal 0.5s var(--ease-out) both; }
-.reveal-1 { animation-delay: 0.02s; }
-.reveal-2 { animation-delay: 0.08s; }
-.reveal-3 { animation-delay: 0.14s; }
-.reveal-4 { animation-delay: 0.2s; }
+.reveal {
+  animation: nb-reveal 0.5s var(--ease-out) both;
+}
+.reveal-1 {
+  animation-delay: 0.02s;
+}
+.reveal-2 {
+  animation-delay: 0.08s;
+}
+.reveal-3 {
+  animation-delay: 0.14s;
+}
+.reveal-4 {
+  animation-delay: 0.2s;
+}
 
 /* ---- Variant badge ---- */
 .variant-badge {

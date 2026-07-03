@@ -205,9 +205,7 @@ export function buildFilterPredicates(fields: FilterField[], filters: FilterEntr
   const out: SQL[] = [];
   for (const entry of filters) {
     if (isFilterGroup(entry)) {
-      const parts = entry.any
-        .map((f) => leaf(f))
-        .filter((p): p is SQL => p !== null);
+      const parts = entry.any.map((f) => leaf(f)).filter((p): p is SQL => p !== null);
       if (parts.length === 1 && parts[0]) out.push(parts[0]);
       else if (parts.length > 1) out.push(sql`(${sql.join(parts, sql` or `)})`);
       continue;

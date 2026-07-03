@@ -37,7 +37,4 @@ export const FilterGroupSchema: z.ZodType<FilterGroup> = z.object({
 /** Query-input filter entry: leaf or OR group. Saved-view rows still store
  *  leaf-only arrays (the filter UI edits leaves); groups arrive from the AI
  *  artifact path and API callers. A leaf-only array parses unchanged. */
-export const FilterEntrySchema: z.ZodType<FilterEntry> = z.union([
-  FilterSchema,
-  FilterGroupSchema,
-]);
+export const FilterEntrySchema: z.ZodType<FilterEntry> = z.union([FilterSchema, FilterGroupSchema]);

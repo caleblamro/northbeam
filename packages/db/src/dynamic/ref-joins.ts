@@ -98,8 +98,8 @@ export function planRefJoins(orgId: string, paths: ResolvedRefPath[]): RefJoinPl
 
   const joinParts: SQL[] = [];
   for (const lateral of lateralByRef.values()) {
-    const cols = [...lateral.cols.entries()].map(
-      ([targetCol, exposed]) => sql.raw(`t.${qid(targetCol)} as ${qid(exposed)}`),
+    const cols = [...lateral.cols.entries()].map(([targetCol, exposed]) =>
+      sql.raw(`t.${qid(targetCol)} as ${qid(exposed)}`),
     );
     joinParts.push(
       sql` left join lateral (select ${sql.join(cols, sql`, `)} from ${sql.raw(

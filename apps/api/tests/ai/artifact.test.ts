@@ -584,7 +584,10 @@ describe('repairArtifact — ActionBar', () => {
   });
 
   it('removes an ActionBar whose actions all fail (falls into EmptyState alone)', () => {
-    const r = repairArtifact(actionBar([{ kind: 'navigate', label: 'x', objectKey: 'nope' }]), objectsByKey);
+    const r = repairArtifact(
+      actionBar([{ kind: 'navigate', label: 'x', objectKey: 'nope' }]),
+      objectsByKey,
+    );
     expect(r.artifact.components[0]?.component).toBe('EmptyState');
   });
 });

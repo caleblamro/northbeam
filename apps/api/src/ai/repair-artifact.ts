@@ -215,7 +215,12 @@ const ROW_ACTION_FIELD_TYPES: ReadonlySet<string> = new Set(['picklist', 'checkb
 /** Keep `props.rowAction` only when it can actually run: known field of a
  *  settable type, and (picklist) a value that is a real option — the model
  *  must never invent picklist values. */
-function cleanRowAction(props: Props, byKey: Map<string, FieldRow>, notes: string[], where: string) {
+function cleanRowAction(
+  props: Props,
+  byKey: Map<string, FieldRow>,
+  notes: string[],
+  where: string,
+) {
   if (props.rowAction === undefined) return;
   const parsed = ArtifactRowActionSchema.safeParse(props.rowAction);
   const field = parsed.success ? byKey.get(parsed.data.fieldKey) : undefined;

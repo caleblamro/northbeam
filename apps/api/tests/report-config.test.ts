@@ -184,8 +184,10 @@ describe('resolveReportSpec — countDistinct / median gates', () => {
 
   it('median requires a numeric field', () => {
     expect(
-      resolveReportSpec(fields, { groupBy: 'stage', measure: { agg: 'median', fieldKey: 'amount' } })
-        .ok,
+      resolveReportSpec(fields, {
+        groupBy: 'stage',
+        measure: { agg: 'median', fieldKey: 'amount' },
+      }).ok,
     ).toBe(true);
     expect(
       resolveReportSpec(fields, { groupBy: 'stage', measure: { agg: 'median', fieldKey: 'stage' } })

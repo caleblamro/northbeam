@@ -35,7 +35,12 @@ const deal: ObjectWithFields = {
 const activity: ObjectWithFields = {
   object: object('activity', 't_activity'),
   fields: [
-    field({ key: 'deal', columnName: 'f_deal', type: 'reference', config: { targetObject: 'deal' } }),
+    field({
+      key: 'deal',
+      columnName: 'f_deal',
+      type: 'reference',
+      config: { targetObject: 'deal' },
+    }),
     field({ key: 'subject', columnName: 'f_subject', type: 'text' }),
   ],
 };
@@ -55,9 +60,9 @@ describe('resolveQuerySpec', () => {
       expect(r.ok).toBe(false);
       return r.ok ? '' : r.message;
     };
-    expect(bad({ objectKey: 'deal', measures: [{ id: 'm', fn: 'sum', fieldKey: 'ghost' }] })).toContain(
-      "can't be sum'd",
-    );
+    expect(
+      bad({ objectKey: 'deal', measures: [{ id: 'm', fn: 'sum', fieldKey: 'ghost' }] }),
+    ).toContain("can't be sum'd");
     expect(
       bad({
         objectKey: 'deal',

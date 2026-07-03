@@ -7,24 +7,9 @@ import type { ChartDatum } from '@/components/northbeam/charts';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
 import type { DateGrain } from '@northbeam/db/views';
 
-export type AggregateFn =
-  | 'count'
-  | 'sum'
-  | 'avg'
-  | 'min'
-  | 'max'
-  | 'countDistinct'
-  | 'median';
+export type AggregateFn = 'count' | 'sum' | 'avg' | 'min' | 'max' | 'countDistinct' | 'median';
 
-const AGG_FNS: readonly string[] = [
-  'count',
-  'sum',
-  'avg',
-  'min',
-  'max',
-  'countDistinct',
-  'median',
-];
+const AGG_FNS: readonly string[] = ['count', 'sum', 'avg', 'min', 'max', 'countDistinct', 'median'];
 
 /** Aggregates that are NOT part-to-whole safe — a donut/funnel of medians or
  *  distinct counts reads as nonsense. Used by chart-type coercion. */
@@ -124,7 +109,10 @@ export const COMPARE_PERIODS: readonly string[] = ['week', 'month', 'quarter'];
 
 /** Start of the current period and of the one before it (UTC). Current runs
  *  period-to-date; previous is the full window [prev, curr). */
-export function periodStarts(period: ComparePeriod, now: Date = new Date()): {
+export function periodStarts(
+  period: ComparePeriod,
+  now: Date = new Date(),
+): {
   curr: Date;
   prev: Date;
 } {

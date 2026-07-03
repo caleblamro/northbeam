@@ -131,14 +131,7 @@ export type FormatRule = {
    fields, a measure, and a chart type. Lives in `view.config`; the shared
    filters/sort slots on the view row still apply. Every key added after v1
    is optional so saved configs keep validating without a migration. */
-export type ReportAgg =
-  | 'count'
-  | 'sum'
-  | 'avg'
-  | 'min'
-  | 'max'
-  | 'countDistinct'
-  | 'median';
+export type ReportAgg = 'count' | 'sum' | 'avg' | 'min' | 'max' | 'countDistinct' | 'median';
 
 /** "Only show groups where …" — a bucket-count or measure-value threshold,
  *  executed as a HAVING clause. Ignored on ungrouped (single-total) reports. */
