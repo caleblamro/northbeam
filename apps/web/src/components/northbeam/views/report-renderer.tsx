@@ -1,27 +1,21 @@
 'use client';
 
 // ReportRenderer — saved `report` views. The view row's `config` holds a
-// ReportConfig ({ groupBy, measure, chartType }); buckets come from
-// record.aggregate (server-side, same visibility rules as record.list — the
-// view's stored filters apply there too). Renders a header strip (measure
-// summary sentence), the chart per config.chartType (bar/line/donut/kpi/
-// table — 'line' sorts buckets chronologically for date group-bys, by group
-// label otherwise), and a buckets table below the chart as its accessibility
-// table-view twin.
+// ReportConfig ({ groupBy(+grain), groupBy2(+grain), measure, chartType,
+// stacked }); buckets come from record.aggregate (server-side, one native
+// GROUP BY — same visibility rules as record.list; the view's stored filters
+// apply there too). Renders a header strip (measure summary sentence), the
+// chart via the shared AggChart switch (also used by dashboard Chart nodes),
+// and a buckets table below the chart as its accessibility table-view twin.
 
 import { AiAffordance } from '@/components/northbeam/ai-affordance';
 import { useAiComposer } from '@/components/northbeam/ai-composer';
-import { BarList, Donut, LineChart, StatTile } from '@/components/northbeam/charts';
+import { StatTile } from '@/components/northbeam/charts';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
 import { SectionCard } from '@/components/northbeam/section-card';
-import {
-  type AggBucket,
-  BucketsTable,
-  bucketLabel,
-  fmtAggregate,
-  foldBuckets,
-} from '@/components/northbeam/views/artifact-walker';
+import { AggChart, coerceChartType } from '@/components/northbeam/views/agg-chart';
+import { type AggBucket, fmtAggregate, totalOf } from '@/components/northbeam/views/aggregate-data';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { trpc } from '@/lib/api';
@@ -30,15 +24,14 @@ import type { ViewRenderer, ViewRendererProps } from '@/lib/views/types';
 import type { Filter, ReportConfig } from '@northbeam/db/views';
 import { ChartBar } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useMemo } from 'react';
 import { z } from 'zod';
 
-/** Grand total across buckets — count/sum add up; avg folds count-weighted. */
-function totalOf(buckets: AggBucket[], agg: ReportConfig['measure']['agg']): number {
-  if (agg !== 'avg') return buckets.reduce((acc, b) => acc + b.value, 0);
-  const n = buckets.reduce((acc, b) => acc + b.count, 0);
-  return n > 0 ? buckets.reduce((acc, b) => acc + b.value * b.count, 0) / n : 0;
-}
+const AGG_WORD: Record<string, string> = {
+  sum: 'Sum',
+  avg: 'Average',
+  min: 'Minimum',
+  max: 'Maximum',
+};
 
 /** Props for the standalone report surface — shared by the saved-view
  *  renderer below AND the report builder's live preview, so the builder shows
@@ -72,78 +65,46 @@ export function ReportResult({
   totalTile,
 }: ReportResultProps) {
   const agg = cfg.measure?.agg ?? 'count';
-  // A donut states part-to-whole; averages aren't parts of a whole → bars.
-  const requested = cfg.chartType ?? 'bar';
-  const chartType = requested === 'donut' && agg === 'avg' ? 'bar' : requested;
+  const hasGroup2 = Boolean(cfg.groupBy && cfg.groupBy2);
+  // Shape mismatches degrade (donut+avg → bar, matrix w/o groupBy2 → table…)
+  // — same coercions the dashboard Chart node applies.
+  const chartType = coerceChartType(cfg.chartType, {
+    agg,
+    hasGroup: Boolean(cfg.groupBy),
+    hasGroup2,
+  });
 
   const query = trpc.record.aggregate.useQuery(
     {
       objectKey,
       groupBy: cfg.groupBy ?? null,
+      groupByGrain: cfg.groupByGrain,
+      groupBy2: hasGroup2 ? cfg.groupBy2 : undefined,
+      groupBy2Grain: cfg.groupBy2Grain,
       measure: { agg, fieldKey: cfg.measure?.fieldKey },
       filters,
-      limit: 200,
+      limit: hasGroup2 ? 1000 : 200,
     },
     { retry: false, meta: { silent: true } },
   );
 
   const groupField = cfg.groupBy ? fields.find((f) => f.key === cfg.groupBy) : undefined;
+  const group2Field = cfg.groupBy2 ? fields.find((f) => f.key === cfg.groupBy2) : undefined;
   const measureField =
     agg === 'count' ? undefined : fields.find((f) => f.key === cfg.measure?.fieldKey);
 
-  const buckets = query.data?.buckets ?? [];
-  const options = query.data?.options ?? [];
-  const refLabels = query.data?.groupLabels ?? {};
-
-  const data = useMemo(() => {
-    if (!query.data) return null;
-    if (chartType === 'line') {
-      // A line reads left-to-right as an ordered series: buckets sort by
-      // their group (chronological for date/datetime group-bys, group label
-      // otherwise) and the tail never folds into "Other" — folding is for
-      // ranked charts, not series.
-      const opts = query.data.options ?? [];
-      const refs = query.data.groupLabels ?? {};
-      const isDate = groupField?.type === 'date' || groupField?.type === 'datetime';
-      const labelOf = (g: AggBucket['group']) => bucketLabel(g, opts, refs);
-      const sorted = [...query.data.buckets].sort((a, b) => {
-        if (isDate) {
-          const ta = Date.parse(String(a.group ?? ''));
-          const tb = Date.parse(String(b.group ?? ''));
-          if (!Number.isNaN(ta) && !Number.isNaN(tb)) return ta - tb;
-        }
-        return labelOf(a.group).localeCompare(labelOf(b.group), 'en-US', { numeric: true });
-      });
-      const items = sorted.map((b) => ({
-        label: labelOf(b.group),
-        value: b.value,
-        display: fmtAggregate(b.value, measureField),
-      }));
-      return { items, totalDisplay: fmtAggregate(totalOf(sorted, agg), measureField) };
-    }
-    // Top-N before folding into "Other" — the optional config.limit narrows
-    // it; donuts hold ≤ 6 segments (5 + Other) regardless.
-    const cap =
-      chartType === 'donut'
-        ? Math.min(Math.max(cfg.limit ?? 5, 1), 5)
-        : Math.min(Math.max(cfg.limit ?? 12, 1), 12);
-    return foldBuckets({
-      buckets: query.data.buckets,
-      options: query.data.options,
-      refLabels: query.data.groupLabels,
-      agg,
-      cap,
-      measureField,
-    });
-  }, [query.data, chartType, agg, measureField, groupField, cfg.limit]);
+  const buckets = (query.data?.buckets ?? []) as AggBucket[];
 
   const measurePhrase =
     agg === 'count'
       ? `Count of ${objectLabel.toLowerCase() || 'record'} records`
-      : `${agg === 'sum' ? 'Sum' : 'Average'} of ${measureField?.label ?? cfg.measure?.fieldKey ?? '—'}`;
-  const summary = groupField ? `${measurePhrase} by ${groupField.label}` : measurePhrase;
+      : `${AGG_WORD[agg] ?? agg} of ${measureField?.label ?? cfg.measure?.fieldKey ?? '—'}`;
+  const summary = groupField
+    ? `${measurePhrase} by ${groupField.label}${group2Field ? ` and ${group2Field.label}` : ''}`
+    : measurePhrase;
   const total = totalOf(buckets, agg);
   const totalDisplay = fmtAggregate(total, measureField);
+  const totalWord = agg === 'min' ? 'min' : agg === 'max' ? 'max' : 'total';
 
   // Refetches hold the previous render at reduced opacity (skeleton is for
   // the FIRST load only) — same behavior as the dashboard Chart nodes.
@@ -162,6 +123,22 @@ export function ReportResult({
     );
   }
 
+  const chartProps = {
+    agg,
+    buckets,
+    options: query.data?.options,
+    refLabels: query.data?.groupLabels,
+    options2: query.data?.options2,
+    group2Labels: query.data?.group2Labels,
+    groupField,
+    group2Field,
+    grain: cfg.groupByGrain,
+    grain2: cfg.groupBy2Grain,
+    hasGroup2,
+    stacked: cfg.stacked,
+    measureField,
+  } as const;
+
   let chart: ReactNode;
   if (query.isLoading) {
     chart = (
@@ -171,7 +148,7 @@ export function ReportResult({
         <Skeleton className="h-4 w-2/3" />
       </div>
     );
-  } else if (!data || data.items.length === 0) {
+  } else if (buckets.length === 0) {
     chart = (
       <EmptyState
         title="No data to chart"
@@ -179,14 +156,14 @@ export function ReportResult({
         size="sm"
       />
     );
-  } else if (chartType === 'donut') {
-    chart = <Donut segments={data.items} totalDisplay={data.totalDisplay} />;
-  } else if (chartType === 'line') {
-    chart = <LineChart points={data.items} />;
-  } else if (chartType === 'table') {
-    chart = <BucketsTable {...{ buckets, options, refLabels, agg, groupField, measureField }} />;
   } else {
-    chart = <BarList items={data.items} />;
+    chart = (
+      <AggChart
+        {...chartProps}
+        chartType={chartType === 'kpi' ? 'table' : chartType}
+        limit={cfg.limit}
+      />
+    );
   }
 
   return (
@@ -195,13 +172,15 @@ export function ReportResult({
       <Card className="flex-row items-center justify-between gap-3 px-5 py-3">
         <span className="text-muted-foreground text-sm">{summary}</span>
         {!query.isLoading && (
-          <span className="shrink-0 font-medium text-foreground text-sm">{totalDisplay} total</span>
+          <span className="shrink-0 font-medium text-foreground text-sm">
+            {totalDisplay} {totalWord}
+          </span>
         )}
       </Card>
 
       {totalTile && chartType !== 'kpi' && (
         <StatTile
-          label="Total"
+          label={agg === 'min' ? 'Minimum' : agg === 'max' ? 'Maximum' : 'Total'}
           value={totalDisplay}
           loading={query.isLoading}
           className={cn('transition-opacity', dimmed && 'opacity-60')}
@@ -222,14 +201,17 @@ export function ReportResult({
       )}
 
       {/* The chart's table-view twin — every bucket, value, and record count
-          in plain text. Skipped when the chart already IS the table. */}
-      {chartType !== 'table' && !query.isLoading && buckets.length > 0 && (
-        <SectionCard title="Report data" padding="none">
-          <div className={cn('transition-opacity', dimmed && 'opacity-60')}>
-            <BucketsTable {...{ buckets, options, refLabels, agg, groupField, measureField }} />
-          </div>
-        </SectionCard>
-      )}
+          in plain text. Skipped when the chart already IS a table. */}
+      {chartType !== 'table' &&
+        chartType !== 'matrix' &&
+        !query.isLoading &&
+        buckets.length > 0 && (
+          <SectionCard title="Report data" padding="none">
+            <div className={cn('transition-opacity', dimmed && 'opacity-60')}>
+              <AggChart {...chartProps} chartType="table" />
+            </div>
+          </SectionCard>
+        )}
     </div>
   );
 }
@@ -257,16 +239,31 @@ export function ReportView({ view, objectKey, objectLabel, fields }: ViewRendere
   );
 }
 
-// Client-side mirror of the server's ReportConfigSchema (view.ts router) —
-// the server re-validates on save, so this only guards the save dialog.
+// Client-side mirror of the server's ReportConfigSchema (trpc/report-config.ts)
+// — the server re-validates on save, so this only guards the save dialog.
+const DateGrainSchema = z.enum(['day', 'week', 'month', 'quarter', 'year']);
 const ReportConfigSchema = z
   .object({
     groupBy: z.string().nullable(),
+    groupByGrain: DateGrainSchema.optional(),
+    groupBy2: z.string().nullable().optional(),
+    groupBy2Grain: DateGrainSchema.optional(),
     measure: z.object({
-      agg: z.enum(['count', 'sum', 'avg']),
+      agg: z.enum(['count', 'sum', 'avg', 'min', 'max']),
       fieldKey: z.string().optional(),
     }),
-    chartType: z.enum(['bar', 'donut', 'line', 'kpi', 'table']),
+    chartType: z.enum([
+      'bar',
+      'line',
+      'area',
+      'donut',
+      'scatter',
+      'funnel',
+      'kpi',
+      'table',
+      'matrix',
+    ]),
+    stacked: z.boolean().optional(),
   })
   .passthrough();
 

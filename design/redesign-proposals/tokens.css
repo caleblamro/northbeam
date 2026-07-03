@@ -1,0 +1,280 @@
+/* ============================================================
+   CRM Design System — Foundations
+   Modern minimalist: near-black primary, single indigo accent,
+   flat surfaces, typography-driven hierarchy.
+   ============================================================ */
+
+/* ---- Tweakable knobs (overridden by Tweaks panel) ---- */
+:root {
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, monospace;
+
+  /* brand = primary action (Linear/Vercel pattern: near-black on white).
+     Brand is NOT the accent. Accents only appear as focus rings, link color,
+     active tab underline, and tone-pill dot prefixes. */
+  --brand: #0a0e1a;
+  --brand-hover: #1a1f2e;
+  --brand-active: #000000;
+  --brand-ring: rgba(10, 14, 26, 0.18);
+  --brand-contrast: #ffffff;
+  --on-brand-shadow: rgba(10, 14, 26, 0.12);
+
+  /* accent = the only chromatic note in the system. Used sparingly:
+     focus rings, links, active-state indicators, AI-feature highlights. */
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-active: #3730a3;
+  --accent-ring: rgba(79, 70, 229, 0.28);
+  --accent-soft: rgba(79, 70, 229, 0.08);
+
+  /* radius scale — Stripe-inspired soft corners */
+  --radius-base: 6px;
+  --radius-xs: 3px;
+  --radius-sm: calc(var(--radius-base) - 2px);
+  --radius-md: var(--radius-base);
+  --radius-lg: calc(var(--radius-base) + 3px);
+  --radius-xl: calc(var(--radius-base) + 8px);
+  --radius-full: 999px;
+
+  /* control heights (density scales these) — slightly more breathing room */
+  --h-sm: 32px;
+  --h-md: 40px;
+  --h-lg: 48px;
+  --pad-x-sm: 10px;
+  --pad-x-md: 14px;
+  --pad-x-lg: 18px;
+  --row-gap: 14px;
+
+  /* spacing scale (4px base) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* type scale */
+  --text-xs: 11.5px;
+  --text-sm: 12.5px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 25px;
+  --text-3xl: 32px;
+  --text-display: 46px;
+
+  --lh-tight: 1.15;
+  --lh-snug: 1.4;
+  --lh-base: 1.55;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---- Density variants ---- */
+:root[data-density="compact"] {
+  --h-sm: 28px;
+  --h-md: 34px;
+  --h-lg: 42px;
+  --pad-x-sm: 8px;
+  --pad-x-md: 11px;
+  --pad-x-lg: 15px;
+  --row-gap: 10px;
+}
+:root[data-density="spacious"] {
+  --h-sm: 36px;
+  --h-md: 46px;
+  --h-lg: 54px;
+  --pad-x-sm: 13px;
+  --pad-x-md: 18px;
+  --pad-x-lg: 22px;
+  --row-gap: 18px;
+}
+
+/* ============================================================
+   LIGHT THEME (default)
+   ============================================================ */
+:root,
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-page: #fafafa;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f7f7f8;
+  --surface-hover: #f5f5f7;
+  --surface-active: #ececef;
+  --overlay: rgba(10, 14, 26, 0.4);
+
+  --border: #ececef;
+  --border-strong: #d4d4d8;
+  --border-field: #dcdce0;
+  --divider: #f1f1f3;
+
+  --ink: #0a0e1a;
+  --ink-secondary: #3f3f46;
+  --ink-muted: #71717a;
+  --ink-subtle: #9ca3af;
+  --ink-disabled: #c1c1c7;
+  --ink-onfill: #ffffff;
+
+  --field-bg: #ffffff;
+  --field-bg-disabled: #f7f7f8;
+  --placeholder: #a1a1aa;
+
+  --success: #16a34a;
+  --success-bg: #ecfdf3;
+  --success-border: #bbf7d0;
+  --warning: #b45309;
+  --warning-bg: #fef3c7;
+  --warning-border: #fde68a;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-active: #991b1b;
+  --danger-ring: rgba(220, 38, 38, 0.25);
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --info: #4f46e5;
+  --info-bg: #eef2ff;
+  --neutralchip: #71717a;
+  --neutralchip-bg: #f4f4f5;
+  --lilac: #7c3aed;
+  --lilac-bg: #f5f3ff;
+
+  /* Shadows: barely-there. Reserved for floating overlays only;
+     cards/buttons stay flat with hairline borders. */
+  --shadow-xs: 0 1px 1px rgba(10, 14, 26, 0.04);
+  --shadow-sm: 0 1px 2px rgba(10, 14, 26, 0.05);
+  --shadow-md: 0 2px 6px -2px rgba(10, 14, 26, 0.08), 0 1px 2px rgba(10, 14, 26, 0.04);
+  --shadow-lg: 0 8px 20px -8px rgba(10, 14, 26, 0.12), 0 2px 6px -2px rgba(10, 14, 26, 0.06);
+  --shadow-pop: 0 6px 16px -6px rgba(10, 14, 26, 0.12), 0 2px 4px -2px rgba(10, 14, 26, 0.06);
+  --shadow-btn: 0 1px 1px rgba(10, 14, 26, 0.04);
+  --shadow-btn-brand: 0 1px 1px rgba(10, 14, 26, 0.06);
+  --ring-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent-ring);
+  --inset-hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* ============================================================
+   DARK THEME — deep navy slate
+   ============================================================ */
+:root[data-theme="dark"] {
+  --bg: #0a0a0c;
+  --bg-page: #08080a;
+  --surface: #101012;
+  --surface-raised: #161618;
+  --surface-sunken: #0a0a0c;
+  --surface-hover: #161618;
+  --surface-active: #1f1f22;
+  --overlay: rgba(0, 0, 0, 0.6);
+
+  --border: #1f1f22;
+  --border-strong: #2c2c30;
+  --border-field: #28282c;
+  --divider: #18181b;
+
+  --ink: #fafafa;
+  --ink-secondary: #c9c9ce;
+  --ink-muted: #8a8a92;
+  --ink-subtle: #6a6a72;
+  --ink-disabled: #44444a;
+  --ink-onfill: #0a0a0c;
+
+  /* Field bg matches DiceUI Input's rendered look (~bg-card + bg-input/30
+     overlay). Keeps legacy .combo / .field controls visually consistent with
+     the DiceUI Input/Textarea/Select in the same form. */
+  --field-bg: #161618;
+  --field-bg-disabled: #131316;
+  --placeholder: #5e5e66;
+
+  /* Primary flips to near-white on dark (Linear/Vercel pattern). */
+  --brand: #fafafa;
+  --brand-hover: #ffffff;
+  --brand-active: #e5e5e5;
+  --brand-ring: rgba(250, 250, 250, 0.16);
+  --brand-contrast: #0a0a0c;
+  --on-brand-shadow: rgba(0, 0, 0, 0.3);
+
+  /* Accent stays indigo, slightly brighter for dark-mode contrast. */
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-active: #6366f1;
+  --accent-ring: rgba(129, 140, 248, 0.3);
+  --accent-soft: rgba(129, 140, 248, 0.12);
+
+  --success: #34d399;
+  --success-bg: #0a1f17;
+  --success-border: #1a3a2a;
+  --warning: #fbbf24;
+  --warning-bg: #1f1810;
+  --warning-border: #3a2e1a;
+  --danger: #f87171;
+  --danger-hover: #fca5a5;
+  --danger-active: #ef4444;
+  --danger-ring: rgba(248, 113, 113, 0.28);
+  --danger-bg: #1f1112;
+  --danger-border: #3a1d20;
+  --info: #818cf8;
+  --info-bg: #15172e;
+
+  --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.25);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 2px 6px -2px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 20px -8px rgba(0, 0, 0, 0.55), 0 2px 6px -2px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 6px 16px -6px rgba(0, 0, 0, 0.55), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-btn: 0 1px 1px rgba(0, 0, 0, 0.4);
+  --shadow-btn-brand: 0 1px 1px rgba(0, 0, 0, 0.4);
+  --ring-focus: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent-ring);
+  --inset-hairline: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* ============================================================
+   BASE
+   ============================================================ */
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--lh-base);
+  color: var(--ink);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv05" 1, "cv08" 1, "ss01" 1;
+  transition: background 0.25s var(--ease), color 0.25s var(--ease);
+}
+::selection {
+  background: var(--brand-ring);
+}
+*:focus-visible {
+  outline: none;
+}
+
+/* thin scrollbars inside the doc */
+.ds-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.ds-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 3px solid var(--surface);
+}
+.ds-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}

@@ -58,7 +58,7 @@ const CHART_RAMP_CSS = `
 }
 `;
 
-const SLOT_COLORS = [
+export const SLOT_COLORS = [
   'var(--nb-chart-1)',
   'var(--nb-chart-2)',
   'var(--nb-chart-3)',
@@ -66,8 +66,10 @@ const SLOT_COLORS = [
   'var(--nb-chart-5)',
 ] as const;
 
-/** De-duplicated (React hoists by href) style carrying the validated ramp. */
-function ChartRampStyle() {
+/** De-duplicated (React hoists by href) style carrying the validated ramp.
+ *  Exported so the Recharts-backed charts (charts-recharts.tsx) share the
+ *  exact same validated ramp. */
+export function ChartRampStyle() {
   return (
     <style href="nb-chart-ramp" precedence="medium">
       {CHART_RAMP_CSS}

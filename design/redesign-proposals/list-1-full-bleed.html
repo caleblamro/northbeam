@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en" data-density="compact">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deals · Full-bleed grid — Northbeam redesign L1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  body { background: var(--bg); }
+  .page.wide { display: flex; flex-direction: column; padding-bottom: 0; padding-top: 0; }
+
+  /* ONE control row: identity + views + tools */
+  .controls {
+    display: flex; align-items: center; gap: var(--sp-3);
+    padding: 10px var(--sp-5);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .ident { display: flex; align-items: center; gap: 10px; }
+  .ident h1 { margin: 0; font-size: var(--text-md); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+  .ident .count { font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+
+  .views { display: flex; align-self: stretch; margin-left: var(--sp-4); }
+  .view { position: relative; display: flex; align-items: center; padding: 0 11px; font-size: var(--text-sm); font-weight: var(--fw-medium); color: var(--ink-muted); }
+  .view:hover { color: var(--ink); }
+  .view[aria-current] { color: var(--ink); }
+  .view[aria-current]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -11px; height: 2px; border-radius: 999px; background: var(--accent); }
+  .view.add { color: var(--ink-subtle); }
+
+  .tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .tool-search { display: flex; align-items: center; gap: 7px; height: var(--h-sm); width: 210px; padding: 0 10px; border: 1px solid var(--border-field); border-radius: var(--radius-md); background: var(--field-bg); color: var(--placeholder); font-size: var(--text-sm); }
+  .fchip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: var(--radius-full); border: 1px dashed var(--border-strong); font-size: var(--text-xs); color: var(--ink-muted); }
+  .fchip.on { border-style: solid; border-color: var(--accent-ring); background: var(--accent-soft); color: var(--accent); }
+
+  /* Edge-to-edge grid */
+  .gridwrap { flex: 1; overflow: auto; }
+  .tbl { font-size: var(--text-sm); }
+  .tbl thead th { position: sticky; top: 0; z-index: 5; background: var(--bg); box-shadow: inset 0 -1px 0 var(--border); border-bottom: 0; padding: 7px 14px; }
+  .tbl th:first-child, .tbl td:first-child { width: 36px; padding-right: 0; padding-left: var(--sp-5); }
+  .tbl td { padding: 7px 14px; }
+  .tbl tbody tr { height: 38px; }
+  input[type="checkbox"] { accent-color: var(--brand); width: 14px; height: 14px; cursor: pointer; }
+  tr.sel { background: var(--accent-soft); }
+  tr.sel:hover { background: var(--accent-soft); }
+
+  .name a { font-weight: var(--fw-medium); color: var(--ink); }
+  .name a:hover { color: var(--accent); }
+  .acct { color: var(--ink-muted); }
+
+  /* hover quick actions */
+  .rowacts { display: flex; justify-content: flex-end; gap: 2px; opacity: 0; transition: opacity 0.12s var(--ease); }
+  tr:hover .rowacts { opacity: 1; }
+  .rowacts button { display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-sm); color: var(--ink-muted); }
+  .rowacts button:hover { background: var(--surface-active); color: var(--ink); }
+  .rowacts svg { width: 13px; height: 13px; }
+
+  /* Aggregate footer */
+  .agg {
+    position: sticky; bottom: 0;
+    display: flex; align-items: center; gap: var(--sp-6);
+    padding: 9px var(--sp-5);
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+    font-size: var(--text-sm); color: var(--ink-muted);
+  }
+  .agg b { color: var(--ink); font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; }
+  .agg .pg { margin-left: auto; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
+
+  /* Floating selection bar */
+  .selbar {
+    position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%); z-index: 60;
+    display: flex; align-items: center; gap: var(--sp-3);
+    padding: 8px 8px 8px 14px;
+    border-radius: var(--radius-xl);
+    background: var(--brand); color: var(--brand-contrast);
+    box-shadow: var(--shadow-lg);
+    font-size: var(--text-sm); font-weight: var(--fw-medium);
+  }
+  .selbar .n { font-variant-numeric: tabular-nums; }
+  .selbar button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--radius-md); background: color-mix(in srgb, var(--brand-contrast) 12%, transparent); }
+  .selbar button:hover { background: color-mix(in srgb, var(--brand-contrast) 20%, transparent); }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Deals');</script>
+
+<main class="page wide">
+  <!-- Single control row -->
+  <div class="controls reveal reveal-1">
+    <div class="ident">
+      <span class="obj-chip">D</span>
+      <h1>Deals</h1>
+      <span class="count">34</span>
+    </div>
+    <nav class="views">
+      <a class="view" aria-current="page" href="#">All open</a>
+      <a class="view" href="#">My deals</a>
+      <a class="view" href="#">Closing this month</a>
+      <a class="view" href="#">Won · Q2</a>
+      <a class="view add" href="#">＋</a>
+    </nav>
+    <div class="tools">
+      <span class="fchip on"><svg class="i" data-icon="filter" style="width:11px;height:11px"></svg> Stage is open ×</span>
+      <span class="fchip">＋ Filter</span>
+      <span class="tool-search"><svg class="i" data-icon="search" style="width:13px;height:13px"></svg> Search deals…</span>
+      <button class="btn primary"><svg class="i" data-icon="plus"></svg> New deal</button>
+    </div>
+  </div>
+
+  <!-- Edge-to-edge table -->
+  <div class="gridwrap ds-scroll reveal reveal-2">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th><input type="checkbox" /></th>
+          <th>Name</th>
+          <th>Account</th>
+          <th>Stage</th>
+          <th class="right">Amount</th>
+          <th class="right">Close date</th>
+          <th>Owner</th>
+          <th class="right">Last activity</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><input type="checkbox" /></td>
+          <td class="name"><a href="#">Halcyon Aero — Fleet telemetry rollout</a></td>
+          <td class="acct">Halcyon Aero</td>
+          <td><span class="pill info">Negotiation</span></td>
+          <td class="right num">$530,000</td>
+          <td class="right num">Sep 4, 2026</td>
+          <td class="muted">Caleb Lamro</td>
+          <td class="right num muted">5h ago</td>
+          <td><span class="rowacts"><button title="Peek"><svg class="i" data-icon="eye"></svg></button><button title="Edit"><svg class="i" data-icon="pencil"></svg></button><button title="Delete"><svg class="i" data-icon="trash"></svg></button></span></td>
+        </tr>
+        <tr class="sel">
+          <td><input type="checkbox" checked /></td>
+          <td class="name"><a href="#">Acme Robotics — Enterprise expansion</a></td>
+          <td class="acct">Acme Robotics</td>
+          <td><span class="pill info">Negotiation</span></td>
+          <td class="right num">$420,000</td>
+          <td class="right num">Jul 18, 2026</td>
+          <td class="muted">Caleb Lamro</td>
+          <td class="right num muted">14d ago</td>
+          <td><span class="rowacts"><button title="Peek"><svg class="i" data-icon="eye"></svg></button><button title="Edit"><svg class="i" data-icon="pencil"></svg></button><button title="Delete"><svg class="i" data-icon="trash"></svg></button></span></td>
+        </tr>
+        <tr>
+          <td><input type="checkbox" /></td>
+          <td class="name"><a href="#">Meridian Health — Platform migration</a></td>
+          <td class="acct">Meridian Health</td>
+          <td><span class="pill warning">Proposal</span></td>
+          <td class="right num">$285,000</td>
+          <td class="right num">Jul 31, 2026</td>
+          <td class="muted">Ana Ferreira</td>
+          <td class="right num muted">2h ago</td>
+          <td><span class="rowacts"><button title="Peek"><svg class="i" data-icon="eye"></svg></button><button title="Edit"><svg class="i" data-icon="pencil"></svg></button><button title="Delete"><svg class="i" data-icon="trash"></svg></button></span></td>
+        </tr>
+        <tr class="sel">
+          <td><input type="checkbox" checked /></td>
+          <td class="name"><a href="#">Statler Financial — Compliance suite</a></td>
+          <td class="acct">Statler Financial</td>
+          <td><span class="pill neutral">Qualification</span></td>
+          <td class="right num">$210,000</td>
+          <td class="right num">Aug 20, 2026</td>
+          <td class="muted">Caleb Lamro</td>
+          <td class="right num muted">2d ago</td>
+          <td><span class="rowacts"><button title="Peek"><svg class="i" data-icon="eye"></svg></button><button title="Edit"><svg class="i" data-icon="pencil"></svg></button><button title="Delete"><svg class="i" data-icon="trash"></svg></button></span></td>
+        </tr>
+        <tr>
+          <td><input type="checkbox" /></td>
+          <td class="name"><a href="#">Northwind Logistics — Renewal + upsell</a></td>
+          <td class="acct">Northwind Logistics</td>
+          <td><span class="pill neutral">Qualification</span></td>
+          <td class="right num">$150,000</td>
+          <td class="right num">Aug 12, 2026</td>
+          <td class="muted">Ana Ferreira</td>
+          <td class="right num muted">3d ago</td>
+          <td><span class="rowacts"><button title="Peek"><svg class="i" data-icon="eye"></svg></button><button title="Edit"><svg class="i" data-icon="pencil"></svg></button><button title="Delete"><svg class="i" data-icon="trash"></svg></button></span></td>
+        </tr>
+        <tr>
+          <td><input type="checkbox" /></td>
+          <td class="name"><a href="#">Vela Analytics — Starter plan upgrade</a></td>
+          <td class="acct">Vela Analytics</td>
+          <td><span class="pill success">Discovery</span></td>
+          <td class="right num">$96,500</td>
+          <td class="right num">Aug 25, 2026</td>
+          <td class="muted">Jon Mistry</td>
+          <td class="right num muted">1d ago</td>
+          <td><span class="rowacts"><button title="Peek"><svg class="i" data-icon="eye"></svg></button><button title="Edit"><svg class="i" data-icon="pencil"></svg></button><button title="Delete"><svg class="i" data-icon="trash"></svg></button></span></td>
+        </tr>
+        <tr>
+          <td><input type="checkbox" /></td>
+          <td class="name"><a href="#">Orbital Freight — Route optimization</a></td>
+          <td class="acct">Orbital Freight</td>
+          <td><span class="pill success">Discovery</span></td>
+          <td class="right num">$77,000</td>
+          <td class="right num">Sep 15, 2026</td>
+          <td class="muted">Jon Mistry</td>
+          <td class="right num muted">4d ago</td>
+          <td><span class="rowacts"><button title="Peek"><svg class="i" data-icon="eye"></svg></button><button title="Edit"><svg class="i" data-icon="pencil"></svg></button><button title="Delete"><svg class="i" data-icon="trash"></svg></button></span></td>
+        </tr>
+        <tr>
+          <td><input type="checkbox" /></td>
+          <td class="name"><a href="#">Copper &amp; Pine — POS integration</a></td>
+          <td class="acct">Copper &amp; Pine</td>
+          <td><span class="pill warning">Proposal</span></td>
+          <td class="right num">$64,000</td>
+          <td class="right num" style="color:var(--danger);font-weight:var(--fw-medium)">Jul 9, 2026</td>
+          <td class="muted">Caleb Lamro</td>
+          <td class="right num muted">1d ago</td>
+          <td><span class="rowacts"><button title="Peek"><svg class="i" data-icon="eye"></svg></button><button title="Edit"><svg class="i" data-icon="pencil"></svg></button><button title="Delete"><svg class="i" data-icon="trash"></svg></button></span></td>
+        </tr>
+        <tr>
+          <td><input type="checkbox" /></td>
+          <td class="name"><a href="#">Brightloom Retail — Loyalty platform</a></td>
+          <td class="acct">Brightloom Retail</td>
+          <td><span class="pill success">Discovery</span></td>
+          <td class="right num">$38,000</td>
+          <td class="right num">Sep 30, 2026</td>
+          <td class="muted">Ana Ferreira</td>
+          <td class="right num muted">6d ago</td>
+          <td><span class="rowacts"><button title="Peek"><svg class="i" data-icon="eye"></svg></button><button title="Edit"><svg class="i" data-icon="pencil"></svg></button><button title="Delete"><svg class="i" data-icon="trash"></svg></button></span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Aggregate footer -->
+  <div class="agg reveal reveal-3">
+    <span>Σ Amount <b>$1,870,500</b></span>
+    <span>Avg <b>$207,833</b></span>
+    <span>Count <b>9</b></span>
+    <span class="pg">1–9 of 34 <button class="btn ghost">‹</button><button class="btn ghost">›</button></span>
+  </div>
+</main>
+
+<!-- Floating selection bar -->
+<div class="selbar">
+  <span class="n">2 selected</span>
+  <button><svg class="i" data-icon="pencil"></svg> Edit stage</button>
+  <button><svg class="i" data-icon="user"></svg> Assign</button>
+  <button><svg class="i" data-icon="trash"></svg> Delete</button>
+  <button style="padding:0 8px"><svg class="i" data-icon="x"></svg></button>
+</div>
+
+<script>nbBadge('L1', 'Full-bleed grid');</script>
+</body>
+</html>

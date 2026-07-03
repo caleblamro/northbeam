@@ -1,21 +1,20 @@
 'use client';
 
-// Generic list view for any object — toolbar + filter bar + table + row→record-
-// page navigation + create/edit drawer + delete. One component backs Contacts/
-// Accounts/Deals/Activities on real data.
+// Generic list view for any object — a single control row (identity + saved-
+// view tabs + filter chips + search + create) over a full-bleed table with a
+// sticky aggregate footer. One component backs Contacts/Accounts/Deals/
+// Activities on real data; presentation dispatches through the view-renderer
+// registry so dashboards/reports render through the same chrome.
 
-import { ObjChip } from '@/components/northbeam/app-bits';
-import { HidePageHead, PageActions } from '@/components/northbeam/app-shell';
+import { HidePageHead } from '@/components/northbeam/app-shell';
 import { ConfirmDialog } from '@/components/northbeam/confirm-dialog';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
-import { FilterDialog } from '@/components/northbeam/filter-bar';
-import { ListToolbar } from '@/components/northbeam/list-toolbar';
+import { formatFieldValueText } from '@/components/northbeam/field-render';
+import { ListControlBar } from '@/components/northbeam/list-control-bar';
 import { RecordFormDrawer } from '@/components/northbeam/record-form';
 import { SaveViewDialog } from '@/components/northbeam/save-view-dialog';
-import { ViewPicker } from '@/components/northbeam/view-picker';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 import { trpc } from '@/lib/api';
 import { type Filter, readFiltersFromParams, writeFiltersToParams } from '@/lib/filters';
@@ -25,21 +24,17 @@ import { readSortFromParams, writeSortToParams } from '@/lib/views/url-state';
 import type { ObjectLayout } from '@northbeam/db/field-types';
 import type { ShareTarget, ViewIcon } from '@northbeam/db/views';
 import type { ViewSort } from '@northbeam/db/views';
-import { AlertCircle, Upload, UserPlus } from 'lucide-react';
+import { AlertCircle, UserPlus } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export function RecordListView({
   objectKey,
   newLabel,
-  showImport = true,
-  standalone = false,
   staticFilters,
 }: {
   objectKey: string;
   newLabel?: string;
-  showImport?: boolean;
-  standalone?: boolean;
   /** Always-applied filters that aren't user-editable and don't appear in the
    *  URL. Use to scope a derived list (e.g. a saved view that pins
    *  type=customer). The user's own filters layer on top via the FilterBar. */
@@ -169,11 +164,17 @@ export function RecordListView({
     onSettled: () => utils.record.list.invalidate(),
   });
 
-  const fields = (list.data?.fields ?? []) as FieldDefLite[];
+  // `placeholderData` keeps the PREVIOUS response on screen while a refetch
+  // runs. That's right for filter/sort edits (same object), but navigating
+  // between objects would briefly render another object's fields/rows against
+  // this object's view + sort — which trips the grid ("column does not
+  // exist"). Treat cross-object placeholders as still-loading instead.
+  const isStale = !!list.data && list.data.object.key !== objectKey;
+  const fields = (isStale ? [] : (list.data?.fields ?? [])) as FieldDefLite[];
   // Rows arrive filtered + sorted by the server — no client-side pass needed.
-  const rows = list.data?.rows ?? [];
-  const refLabels = list.data?.refLabels ?? {};
-  const object = list.data?.object;
+  const rows = isStale ? [] : (list.data?.rows ?? []);
+  const refLabels = (isStale ? {} : (list.data?.refLabels ?? {})) as Record<string, string>;
+  const object = isStale ? undefined : list.data?.object;
   const objectLabel = object?.label ?? '';
   const objectPlural = object?.labelPlural ?? '';
   const layout = (object?.layout ?? {}) as ObjectLayout;
@@ -212,9 +213,34 @@ export function RecordListView({
     } satisfies ViewRow;
   }, [storedView, object, objectPlural, layout.listColumns]);
 
-  // Override detection — the picker uses this to surface "Save as new view…"
-  // when the URL state (filters or sort) diverges from what the active view
-  // stores. A sort-only column-header click counts as an override too.
+  // True record count for the control bar + footer. The list page caps at 200
+  // rows, so rows.length lies for big objects — record.aggregate counts the
+  // whole filtered set server-side (same ACL as the list). Search is a
+  // list-only param, so while searching the footer falls back to page counts.
+  const countQ = trpc.record.aggregate.useQuery(
+    {
+      objectKey,
+      groupBy: null,
+      measure: { agg: 'count' },
+      filters: effectiveFilters,
+    },
+    { enabled: !!object, retry: false, meta: { silent: true } },
+  );
+  const serverCount = countQ.data ? Number(countQ.data.buckets[0]?.value ?? 0) : null;
+
+  // First money-like visible column drives the Σ/avg footer aggregates.
+  const sumField = useMemo(() => {
+    const visibleKeys =
+      activeView.columns.length > 0 ? activeView.columns : fields.slice(0, 4).map((f) => f.key);
+    const visible = visibleKeys
+      .map((k) => fields.find((f) => f.key === k))
+      .filter((f): f is FieldDefLite => !!f);
+    return visible.find((f) => f.type === 'currency') ?? visible.find((f) => f.type === 'number');
+  }, [activeView.columns, fields]);
+
+  // Override detection — the control bar uses this to surface "Save as new
+  // view…" when the URL state (filters or sort) diverges from what the active
+  // view stores. A sort-only column-header click counts as an override too.
   const hasOverrides = filters.length > 0 || urlSort.length > 0;
 
   /** Navigate to a saved view, clearing the transient overrides on the URL
@@ -247,8 +273,10 @@ export function RecordListView({
   // Confirm dialog state for view deletion. Holds the view pending deletion
   // so the dialog can show the view label and trigger the mutation on confirm.
   const [deleteConfirmView, setDeleteConfirmView] = useState<ViewRow | null>(null);
+  // Confirm dialog state for record deletion (from the row hover actions).
+  const [deleteRecordId, setDeleteRecordId] = useState<string | null>(null);
 
-  // Dialog state for "Save as new view…". Opened either from the picker
+  // Dialog state for "Save as new view…". Opened either from the control bar
   // (no overrides) or from a renderer that wants to persist its transient
   // state along with the new view — currently just AIView, which passes
   // its in-progress prompt through `config`.
@@ -309,146 +337,145 @@ export function RecordListView({
   );
 
   const createBtn = (
-    <Button onClick={() => setEditing('new')}>
+    <Button size="sm" onClick={() => setEditing('new')}>
       <UserPlus />
       {newLabel ?? `New ${objectLabel.toLowerCase() || 'record'}`}
     </Button>
   );
 
   if (list.isError) {
+    // Only a real NOT_FOUND means the object doesn't exist — anything else
+    // (bad saved-view filter, server error) must show its actual message,
+    // not masquerade as a missing object.
+    const notFound = list.error.data?.code === 'NOT_FOUND';
     return (
       <>
-        {standalone && <HidePageHead />}
+        <HidePageHead />
         <EmptyState
           icon={AlertCircle}
-          title="Unknown object"
-          body={`No object '${objectKey}' exists in this workspace.`}
+          title={notFound ? 'Unknown object' : `Couldn't load ${objectKey} records`}
+          body={
+            notFound ? `No object '${objectKey}' exists in this workspace.` : list.error.message
+          }
         />
       </>
     );
   }
 
+  const isListType = activeView.type === 'list';
+
   return (
     <>
-      {standalone ? (
-        <>
-          <HidePageHead />
-          <header className="mb-6 flex items-center gap-3">
-            <ObjChip label={objectLabel || objectKey} color={object?.color} size={32} />
-            <div className="min-w-0 flex-1">
-              <h1 className="font-medium text-2xl tracking-[-0.02em]">
-                {objectPlural || objectKey}
-              </h1>
-              {!list.isLoading && (
-                <p className="text-muted-foreground text-sm tabular-nums">
-                  {rows.length.toLocaleString()} {rows.length === 1 ? 'record' : 'records'}
-                </p>
-              )}
-            </div>
-            <div>{createBtn}</div>
-          </header>
-        </>
-      ) : (
-        <PageActions>
-          {showImport && (
-            <Button variant="outline">
-              <Upload />
-              Import
-            </Button>
-          )}
-          {createBtn}
-        </PageActions>
-      )}
-
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <ViewPicker
+      <HidePageHead />
+      {/* Break out of .app-wrap's 32px gutter + 24px top padding so the
+          control row and grid run edge-to-edge under the topbar. The
+          `page-flush-bottom` marker removes the wrapper's bottom padding
+          (via :has() in components-app.css) so the sticky footer sits on
+          the viewport edge — other pages keep their breathing room. */}
+      <div className="page-flush-bottom -mx-8 -mt-6 flex flex-col">
+        <ListControlBar
+          objectLabel={objectLabel || objectKey}
+          objectPlural={objectPlural || objectKey}
+          objectColor={object?.color}
+          count={serverCount}
           views={viewsQ.data ?? []}
           activeView={activeView}
           hasOverrides={hasOverrides}
           currentUserId={currentUserId}
-          onSelect={selectView}
-          onSaveAsNew={saveAsNewView}
+          onSelectView={selectView}
+          onSaveAsNew={() => saveAsNewView()}
           onSetDefault={(v) => setDefaultView.mutate({ id: v.id })}
-          onDelete={(v) => setDeleteConfirmView(v)}
-        />
-      </div>
-
-      <ListToolbar
-        searchValue={q}
-        onSearchChange={setQ}
-        searchPlaceholder={`Search ${objectPlural.toLowerCase() || 'records'}…`}
-        actions={
-          <FilterDialog
-            fields={fields}
-            filters={filters}
-            onChange={setFilters}
-            loadReferenceOptions={(targetObject, query) =>
-              utils.record.searchRefs.fetch({ objectKey: targetObject, q: query })
-            }
-          />
-        }
-      />
-
-      {list.isLoading ? (
-        <Card className="p-0">
-          <LoadingScreen size="md" />
-        </Card>
-      ) : rows.length === 0 && activeView.type !== 'report' ? (
-        // Report views aggregate server-side over ALL rows — the list's
-        // max-200-row page being empty says nothing about the report, so they
-        // skip this empty-state gate and render regardless.
-        <Card className="p-0">
-          <EmptyState
-            icon={UserPlus}
-            title={
-              q ? `No ${objectPlural.toLowerCase()} match` : `No ${objectPlural.toLowerCase()} yet`
-            }
-            body={
-              q
-                ? 'Try a different search.'
-                : `Create your first ${objectLabel.toLowerCase()}, or run a Salesforce migration.`
-            }
-            action={!q && createBtn}
-          />
-        </Card>
-      ) : (
-        (() => {
-          // Dispatch to the registered renderer for `activeView.type`. The
-          // dispatcher is renderer-agnostic; per-type state (pagination here,
-          // kanban columns later, etc.) lives inside each registration.
-          const renderer = getViewRenderer(activeView.type);
-          if (!renderer) {
-            return (
-              <Card className="p-0">
-                <EmptyState
-                  icon={AlertCircle}
-                  title="Unknown view type"
-                  body={`No renderer registered for type '${activeView.type}'.`}
-                />
-              </Card>
-            );
+          onDeleteView={(v) => setDeleteConfirmView(v)}
+          fields={fields}
+          filters={filters}
+          onFiltersChange={setFilters}
+          loadReferenceOptions={(targetObject, query) =>
+            utils.record.searchRefs.fetch({ objectKey: targetObject, q: query })
           }
-          const Renderer = renderer.Component;
-          return (
-            <Renderer
-              view={activeView}
-              objectKey={objectKey}
-              objectLabel={objectLabel}
-              fields={fields}
-              rows={rows}
-              refLabels={refLabels}
-              isLoading={list.isLoading}
-              onRowOpen={(id) => router.push(`/${objectKey}/${id}`)}
-              onRowEdit={(row) => setEditing(row)}
-              onRowDelete={(id) => remove.mutate({ objectKey, id })}
-              onCellEdit={(id, patch) => update.mutate({ objectKey, id, data: patch })}
-              onSaveView={saveAsNewView}
-              sort={effectiveSort}
-              onSortChange={setSort}
+          searchValue={q}
+          onSearchChange={setQ}
+          searchPlaceholder={`Search ${objectPlural.toLowerCase() || 'records'}…`}
+          createAction={createBtn}
+        />
+
+        {list.isLoading || isStale ? (
+          <LoadingScreen size="md" />
+        ) : rows.length === 0 && activeView.type !== 'report' ? (
+          // Report views aggregate server-side over ALL rows — the list's
+          // max-200-row page being empty says nothing about the report, so they
+          // skip this empty-state gate and render regardless.
+          <div className="px-8 py-10">
+            <EmptyState
+              icon={UserPlus}
+              title={
+                q
+                  ? `No ${objectPlural.toLowerCase()} match`
+                  : `No ${objectPlural.toLowerCase()} yet`
+              }
+              body={
+                q
+                  ? 'Try a different search.'
+                  : `Create your first ${objectLabel.toLowerCase()}, or run a Salesforce migration.`
+              }
+              action={!q && createBtn}
             />
-          );
-        })()
-      )}
+          </div>
+        ) : (
+          (() => {
+            // Dispatch to the registered renderer for `activeView.type`. The
+            // dispatcher is renderer-agnostic; per-type state (pagination here,
+            // kanban columns later, etc.) lives inside each registration.
+            const renderer = getViewRenderer(activeView.type);
+            if (!renderer) {
+              return (
+                <div className="px-8 py-10">
+                  <EmptyState
+                    icon={AlertCircle}
+                    title="Unknown view type"
+                    body={`No renderer registered for type '${activeView.type}'.`}
+                  />
+                </div>
+              );
+            }
+            const Renderer = renderer.Component;
+            const body = (
+              <Renderer
+                view={activeView}
+                objectKey={objectKey}
+                objectLabel={objectLabel}
+                fields={fields}
+                rows={rows}
+                refLabels={refLabels}
+                isLoading={list.isLoading}
+                onRowOpen={(id) => router.push(`/${objectKey}/${id}`)}
+                onRowEdit={(row) => setEditing(row)}
+                onRowDelete={(id) => setDeleteRecordId(id)}
+                onCellEdit={(id, patch) => update.mutate({ objectKey, id, data: patch })}
+                onSaveView={saveAsNewView}
+                sort={effectiveSort}
+                onSortChange={setSort}
+                tableChrome={isListType ? 'flush' : undefined}
+                footerStart={
+                  isListType ? (
+                    <ListAggregates
+                      searching={!!q}
+                      rows={rows}
+                      serverCount={serverCount}
+                      sumField={sumField}
+                      objectKey={objectKey}
+                      filters={effectiveFilters}
+                      enabled={!!object}
+                    />
+                  ) : undefined
+                }
+              />
+            );
+            // Card-style renderers (dashboard/report) keep page gutters; the
+            // flush list grid owns the full width itself.
+            return isListType ? body : <div className="px-8 py-5">{body}</div>;
+          })()
+        )}
+      </div>
 
       <ConfirmDialog
         open={!!deleteConfirmView}
@@ -468,6 +495,21 @@ export function RecordListView({
             router.replace(pathname, { scroll: false });
           }
           setDeleteConfirmView(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!deleteRecordId}
+        onOpenChange={(o) => !o && setDeleteRecordId(null)}
+        title={`Delete ${objectLabel.toLowerCase() || 'record'}`}
+        description="This permanently deletes the record. This can't be undone."
+        confirmLabel="Delete"
+        tone="destructive"
+        pending={remove.isPending}
+        onConfirm={() => {
+          if (!deleteRecordId) return;
+          remove.mutate({ objectKey, id: deleteRecordId });
+          setDeleteRecordId(null);
         }}
       />
 
@@ -495,6 +537,67 @@ export function RecordListView({
   );
 }
 
-// Pagination + grid moved into components/northbeam/views/list-renderer.tsx
-// when the renderer dispatcher pattern landed. Kept here as a breadcrumb in
-// case anyone greps for it.
+/** Σ / avg / count strip for the sticky list footer. Uses record.aggregate for
+ *  true whole-set numbers; while a search is active (aggregate has no search
+ *  param) it degrades to page-local math over the visible rows. */
+function ListAggregates({
+  searching,
+  rows,
+  serverCount,
+  sumField,
+  objectKey,
+  filters,
+  enabled,
+}: {
+  searching: boolean;
+  rows: { data: Record<string, unknown> }[];
+  serverCount: number | null;
+  sumField: FieldDefLite | undefined;
+  objectKey: string;
+  filters: Filter[];
+  enabled: boolean;
+}) {
+  const sumQ = trpc.record.aggregate.useQuery(
+    {
+      objectKey,
+      groupBy: null,
+      measure: { agg: 'sum', fieldKey: sumField?.key ?? '' },
+      filters,
+    },
+    { enabled: enabled && !!sumField && !searching, retry: false, meta: { silent: true } },
+  );
+
+  const clientSum = useMemo(() => {
+    if (!sumField) return 0;
+    return rows.reduce((n, r) => {
+      const v = Number(r.data[sumField.key]);
+      return Number.isFinite(v) ? n + v : n;
+    }, 0);
+  }, [rows, sumField]);
+
+  const count = searching ? rows.length : (serverCount ?? rows.length);
+  const sum = searching ? clientSum : sumQ.data ? Number(sumQ.data.buckets[0]?.value ?? 0) : null;
+  const avg = sum != null && count > 0 ? sum / count : null;
+
+  return (
+    <div className="flex items-center gap-5 text-muted-foreground text-sm tabular-nums">
+      {sumField && sum != null && (
+        <span>
+          Σ {sumField.label}{' '}
+          <span className="font-medium text-foreground">{formatFieldValueText(sumField, sum)}</span>
+        </span>
+      )}
+      {sumField && avg != null && (
+        <span>
+          Avg{' '}
+          <span className="font-medium text-foreground">{formatFieldValueText(sumField, avg)}</span>
+        </span>
+      )}
+      <span>
+        <span className="font-medium text-foreground">{count.toLocaleString()}</span>{' '}
+        {count === 1 ? 'record' : 'records'}
+        {searching && ' shown'}
+      </span>
+    </div>
+  );
+}

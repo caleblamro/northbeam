@@ -29,6 +29,7 @@ import type { CellOpts } from '@/types/data-grid';
 import type { FieldType } from '@northbeam/db/field-types';
 import type { ViewSort } from '@northbeam/db/views';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
+import { Pencil, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useMemo } from 'react';
 
@@ -45,7 +46,14 @@ interface RecordDataGridProps {
   rows: RecordRow[];
   refLabels: Record<string, string>;
   objectKey: string;
-  height?: number;
+  height?: number | string;
+  /** Edge-to-edge grid (no card radius / side borders) for the full-page
+   *  list. Passed through to the DataGrid primitive. */
+  flush?: boolean;
+  /** Row hover actions. When either is present a trailing actions column is
+   *  appended whose buttons reveal on row hover. */
+  onRowEdit?: (row: { id: string; data: Record<string, unknown> }) => void;
+  onRowDelete?: (id: string) => void;
   /** Optional controlled sort state. When provided, the grid initialises
    *  TanStack's sort to match and reports column-header clicks back via
    *  `onSortChange`. Without these, the grid runs uncontrolled (sort is
@@ -140,9 +148,12 @@ export function RecordDataGrid({
   refLabels,
   objectKey,
   height = 560,
+  flush = false,
   sort,
   onSortChange,
   onCellEdit,
+  onRowEdit,
+  onRowDelete,
 }: RecordDataGridProps) {
   const gridRows = useMemo<GridRow[]>(
     () => rows.map((r) => ({ ...r.data, id: r.id, name: r.name })),
@@ -213,8 +224,59 @@ export function RecordDataGrid({
         };
       });
 
-    return [nameCol, ...dataCols];
-  }, [columnFields, refLabels, objectKey, onCellEdit]);
+    // Trailing hover-actions column (edit / delete). `header` is a function so
+    // the grid treats it as a custom read-only cell (same trick as Name). The
+    // buttons stay invisible until the row is hovered or focused.
+    const actionCols: ColumnDef<GridRow>[] =
+      onRowEdit || onRowDelete
+        ? [
+            {
+              id: '__actions',
+              header: () => null,
+              size: 76,
+              enableSorting: false,
+              enableResizing: false,
+              meta: { label: '' },
+              cell: (info) => {
+                const id = info.row.original.id;
+                return (
+                  <div className="flex h-full w-full items-center justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 [[role=row]:hover_&]:opacity-100">
+                    {onRowEdit && (
+                      <button
+                        type="button"
+                        aria-label="Edit record"
+                        className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const source = rows.find((r) => r.id === id);
+                          if (source) onRowEdit({ id: source.id, data: source.data });
+                        }}
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                    )}
+                    {onRowDelete && (
+                      <button
+                        type="button"
+                        aria-label="Delete record"
+                        className="grid size-6 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-[var(--danger)]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRowDelete(id);
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              },
+            },
+          ]
+        : [];
+
+    return [nameCol, ...dataCols, ...actionCols];
+  }, [columnFields, refLabels, objectKey, onCellEdit, onRowEdit, onRowDelete, rows]);
 
   // The grid's cell variants commit through onDataUpdate → onDataChange with
   // a whole new data array. Diff it against the current rows (unchanged rows
@@ -239,7 +301,15 @@ export function RecordDataGrid({
     [onCellEdit, gridRows, columnFields],
   );
 
-  const initialSorting = useMemo<SortingState>(() => (sort ? toTanStackSorting(sort) : []), [sort]);
+  // A saved sort can reference a field that isn't a visible column (the
+  // server already returned rows in that order) — or, mid-navigation, the
+  // placeholder rows of another object entirely. TanStack errors on sorting
+  // ids with no matching column, so only seed it with ids the grid has.
+  const initialSorting = useMemo<SortingState>(() => {
+    if (!sort) return [];
+    const validIds = new Set(['name', ...columnFields.map((f) => f.key)]);
+    return toTanStackSorting(sort.filter((s) => validIds.has(s.fieldKey)));
+  }, [sort, columnFields]);
 
   const grid = useDataGrid<GridRow>({
     data: gridRows,
@@ -262,5 +332,5 @@ export function RecordDataGrid({
       : undefined,
   });
 
-  return <DataGrid<GridRow> {...grid} height={height} stretchColumns />;
+  return <DataGrid<GridRow> {...grid} height={height} flush={flush} stretchColumns />;
 }

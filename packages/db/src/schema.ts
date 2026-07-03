@@ -382,9 +382,11 @@ export const view = pgTable(
     organizationId: text('organization_id')
       .notNull()
       .references(() => organization.id, { onDelete: 'cascade' }),
-    objectId: uuid('object_id')
-      .notNull()
-      .references(() => objectDef.id, { onDelete: 'cascade' }),
+    // null = workspace-scoped view (not attached to any object) — the user's
+    // customizable Home page is the first of these (key 'home'). Postgres
+    // treats NULLs as distinct in the unique index below, so each user can
+    // own their own workspace view under the same key.
+    objectId: uuid('object_id').references(() => objectDef.id, { onDelete: 'cascade' }),
     key: text('key').notNull(), // slug-style, unique per (org, object)
     label: text('label').notNull(),
     type: text('type').$type<ViewType>().notNull().default('list'),
@@ -539,6 +541,15 @@ export const migrationRun = pgTable('migration_run', {
       refsResolved?: number;
       currentObject?: string;
       error?: string;
+      // Report/dashboard import phase (import-views.ts) — best-effort, so it
+      // carries its own error slot instead of failing the run.
+      reportsFound?: number;
+      reportsImported?: number;
+      dashboardsFound?: number;
+      dashboardsImported?: number;
+      viewsSkipped?: number;
+      reportsError?: string;
+      skippedViews?: Array<{ label: string; reason: string }>;
     }>()
     .notNull()
     .default({}),

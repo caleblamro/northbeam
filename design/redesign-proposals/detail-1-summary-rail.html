@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deal · Summary rail — Northbeam redesign D1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 1120px; }
+
+  .crumbs { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--ink-muted); padding-top: var(--sp-2); }
+  .crumbs a:hover { color: var(--ink); }
+  .crumbs svg { width: 11px; height: 11px; color: var(--ink-subtle); }
+  .crumbs .here { color: var(--ink); font-weight: var(--fw-medium); }
+
+  .cols { margin-top: var(--sp-5); display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--sp-6); align-items: start; }
+
+  /* ---- Sticky summary rail ---- */
+  .rail { position: sticky; top: calc(52px + var(--sp-5)); display: flex; flex-direction: column; gap: var(--sp-4); }
+  .idcard { padding: var(--sp-5); }
+  .idrow { display: flex; align-items: center; gap: 10px; }
+  .idrow h1 { margin: 0; font-size: var(--text-lg); font-weight: var(--fw-semibold); letter-spacing: -0.01em; line-height: var(--lh-snug); }
+  .idrow .k { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-subtle); }
+  .amount { margin-top: var(--sp-4); }
+  .amount .v { font-size: var(--text-2xl); font-weight: var(--fw-medium); letter-spacing: -0.025em; font-variant-numeric: tabular-nums; }
+  .amount .l { font-size: var(--text-xs); color: var(--ink-muted); margin-top: 1px; }
+
+  .stagebox { margin-top: var(--sp-4); }
+  .stepper { display: flex; gap: 4px; }
+  .step { flex: 1; height: 5px; border-radius: 999px; background: var(--surface-active); }
+  .step.done { background: var(--accent); }
+  .stage-now { margin-top: 8px; display: flex; align-items: center; justify-content: space-between; }
+  .stage-now .nxt { font-size: var(--text-xs); color: var(--ink-subtle); }
+
+  .kv { margin: var(--sp-5) 0 0; display: grid; grid-template-columns: 1fr; row-gap: 11px; font-size: var(--text-sm); }
+  .kv .r { display: flex; justify-content: space-between; gap: var(--sp-3); }
+  .kv dt { color: var(--ink-muted); }
+  .kv dd { margin: 0; font-weight: var(--fw-medium); text-align: right; }
+  .kv dd.num { font-variant-numeric: tabular-nums; }
+  .kv a { color: var(--accent); }
+
+  .quick { display: flex; flex-direction: column; gap: 6px; }
+  .quick .btn { justify-content: flex-start; }
+
+  /* ---- Scrolling content: all sections, no tabs ---- */
+  .main { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
+  .sect { overflow: hidden; }
+  .sect .hd {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--sp-3) var(--sp-5);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+  .sect .hd .btn { height: 26px; }
+  .fields { padding: var(--sp-2) var(--sp-5) var(--sp-4); display: grid; grid-template-columns: 1fr 1fr; column-gap: var(--sp-8); }
+  .f { padding: 10px 0; border-bottom: 1px solid var(--divider); }
+  .f:nth-last-child(-n+2) { border-bottom: 0; }
+  .f .l { font-size: var(--text-xs); color: var(--ink-muted); }
+  .f .v { margin-top: 2px; font-size: var(--text-base); color: var(--ink); font-weight: var(--fw-medium); display: flex; align-items: center; gap: 6px; }
+  .f .v.num { font-variant-numeric: tabular-nums; }
+  .f .v .edit { opacity: 0; color: var(--ink-subtle); transition: opacity 0.12s var(--ease); }
+  .f:hover .v .edit { opacity: 1; }
+  .f .v .edit svg { width: 12px; height: 12px; }
+
+  .sect .tbl th { padding: 8px 20px; }
+  .sect .tbl td { padding: 10px 20px; }
+  .name a { font-weight: var(--fw-medium); color: var(--ink); }
+  .name a:hover { color: var(--accent); }
+
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } .rail { position: static; } }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Deals');</script>
+
+<main class="page">
+  <nav class="crumbs reveal reveal-1">
+    <a href="#">Deals</a>
+    <svg class="i" data-icon="chevron-right"></svg>
+    <a href="#">Acme Robotics</a>
+    <svg class="i" data-icon="chevron-right"></svg>
+    <span class="here">Enterprise expansion</span>
+  </nav>
+
+  <div class="cols">
+    <!-- Sticky rail -->
+    <aside class="rail reveal reveal-2">
+      <div class="card idcard">
+        <div class="idrow">
+          <span class="obj-chip lg">D</span>
+          <div>
+            <h1>Acme Robotics — Enterprise expansion</h1>
+            <div class="k">Deal · rec_9f2ka7</div>
+          </div>
+        </div>
+
+        <div class="amount">
+          <div class="v">$420,000</div>
+          <div class="l">expected · closes Jul 18, 2026 · 70% probability</div>
+        </div>
+
+        <div class="stagebox">
+          <div class="stepper">
+            <div class="step done"></div><div class="step done"></div><div class="step done"></div><div class="step done"></div><div class="step"></div>
+          </div>
+          <div class="stage-now">
+            <span class="pill info">Negotiation</span>
+            <span class="nxt">next: Closed Won</span>
+          </div>
+        </div>
+
+        <dl class="kv">
+          <div class="r"><dt>Account</dt><dd><a href="#">Acme Robotics</a></dd></div>
+          <div class="r"><dt>Owner</dt><dd>Caleb Lamro</dd></div>
+          <div class="r"><dt>Next step</dt><dd>Security sign-off</dd></div>
+          <div class="r"><dt>Last activity</dt><dd class="num">25m ago</dd></div>
+          <div class="r"><dt>Created</dt><dd class="num">Mar 2, 2026</dd></div>
+        </dl>
+      </div>
+
+      <div class="quick">
+        <button class="btn primary"><svg class="i" data-icon="pencil"></svg> Edit deal</button>
+        <button class="btn outline"><svg class="i" data-icon="phone"></svg> Log call</button>
+        <button class="btn outline"><svg class="i" data-icon="note"></svg> Add note</button>
+        <button class="btn outline"><svg class="i" data-icon="check"></svg> Mark Closed Won</button>
+      </div>
+    </aside>
+
+    <!-- Scrolling sections -->
+    <div class="main reveal reveal-3">
+      <section class="card sect">
+        <div class="hd"><span class="eyebrow">Deal terms</span><button class="btn ghost"><svg class="i" data-icon="pencil"></svg> Edit</button></div>
+        <div class="fields">
+          <div class="f"><div class="l">Amount</div><div class="v num">$420,000 <span class="edit"><svg class="i" data-icon="pencil"></svg></span></div></div>
+          <div class="f"><div class="l">Close date</div><div class="v num">Jul 18, 2026 <span class="edit"><svg class="i" data-icon="pencil"></svg></span></div></div>
+          <div class="f"><div class="l">Stage</div><div class="v">Negotiation <span class="edit"><svg class="i" data-icon="pencil"></svg></span></div></div>
+          <div class="f"><div class="l">Probability</div><div class="v num">70% <span class="edit"><svg class="i" data-icon="pencil"></svg></span></div></div>
+          <div class="f"><div class="l">Type</div><div class="v">Expansion <span class="edit"><svg class="i" data-icon="pencil"></svg></span></div></div>
+          <div class="f"><div class="l">Source</div><div class="v">Salesforce import <span class="edit"><svg class="i" data-icon="pencil"></svg></span></div></div>
+        </div>
+      </section>
+
+      <section class="card sect">
+        <div class="hd"><span class="eyebrow">Context</span><button class="btn ghost"><svg class="i" data-icon="pencil"></svg> Edit</button></div>
+        <div class="fields">
+          <div class="f"><div class="l">Competitors</div><div class="v">Salesforce, HubSpot</div></div>
+          <div class="f"><div class="l">Contract length</div><div class="v num">36 months</div></div>
+          <div class="f"><div class="l">Champion</div><div class="v">Dana Whitfield (VP Ops)</div></div>
+          <div class="f"><div class="l">Blockers</div><div class="v">Security review in flight</div></div>
+        </div>
+      </section>
+
+      <section class="card sect">
+        <div class="hd"><span class="eyebrow">Contacts · 3</span><button class="btn ghost"><svg class="i" data-icon="plus"></svg> Add</button></div>
+        <table class="tbl">
+          <thead><tr><th>Name</th><th>Title</th><th>Email</th><th class="right">Last touch</th></tr></thead>
+          <tbody>
+            <tr><td class="name"><a href="#">Dana Whitfield</a></td><td class="muted">VP Operations</td><td class="muted">dana@acmerobotics.com</td><td class="right num muted">25m ago</td></tr>
+            <tr><td class="name"><a href="#">Marcus Bell</a></td><td class="muted">Head of Security</td><td class="muted">marcus@acmerobotics.com</td><td class="right num muted">6d ago</td></tr>
+            <tr><td class="name"><a href="#">Ines Kovač</a></td><td class="muted">Procurement Lead</td><td class="muted">ines@acmerobotics.com</td><td class="right num muted">12d ago</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card sect">
+        <div class="hd"><span class="eyebrow">Activities · 4</span><button class="btn ghost"><svg class="i" data-icon="plus"></svg> Log</button></div>
+        <table class="tbl">
+          <thead><tr><th>Type</th><th>Summary</th><th>With</th><th class="right">When</th></tr></thead>
+          <tbody>
+            <tr><td><span class="pill neutral plain">Call</span></td><td class="name">Discussed enterprise rollout timeline</td><td class="muted">Dana Whitfield</td><td class="right num muted">Today 2:42 PM</td></tr>
+            <tr><td><span class="pill neutral plain">Email</span></td><td class="name">Pricing addendum sent</td><td class="muted">Dana Whitfield</td><td class="right num muted">Jun 19</td></tr>
+            <tr><td><span class="pill neutral plain">Meeting</span></td><td class="name">Infra team demo</td><td class="muted">Marcus Bell +2</td><td class="right num muted">Jun 12</td></tr>
+            <tr><td><span class="pill neutral plain">Note</span></td><td class="name">Security questionnaire kickoff</td><td class="muted">—</td><td class="right num muted">Jun 10</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>nbBadge('D1', 'Summary rail');</script>
+</body>
+</html>

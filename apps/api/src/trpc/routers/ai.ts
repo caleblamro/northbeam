@@ -51,7 +51,9 @@ export const aiRouter = router({
   preview: permissionProcedure('view.write')
     .input(
       z.object({
-        objectKey: z.string().min(1),
+        /** Omit for WORKSPACE scope (the Home page): no single target object;
+         *  every live node in the result names its own objectKey. */
+        objectKey: z.string().min(1).optional(),
         prompt: z.string().min(1).max(2000),
         currentArtifact: ArtifactLikeSchema.optional(),
       }),
@@ -66,12 +68,10 @@ export const aiRouter = router({
         });
       }
 
-      const objectWithFields = await getObjectByKey(
-        ctx.db,
-        ctx.auth.organizationId,
-        input.objectKey,
-      );
-      if (!objectWithFields) {
+      const objectWithFields = input.objectKey
+        ? await getObjectByKey(ctx.db, ctx.auth.organizationId, input.objectKey)
+        : null;
+      if (input.objectKey && !objectWithFields) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: `object '${input.objectKey}' not found`,
@@ -82,11 +82,11 @@ export const aiRouter = router({
       // the ground truth the repair pass checks query specs against.
       const others = await listObjects(ctx.db, ctx.auth.organizationId);
       const otherObjects: ObjectContext[] = [];
-      const objectFields: ObjectFieldsByKey = new Map([
-        [objectWithFields.object.key, objectWithFields.fields],
-      ]);
+      const objectFields: ObjectFieldsByKey = new Map(
+        objectWithFields ? [[objectWithFields.object.key, objectWithFields.fields]] : [],
+      );
       for (const o of others) {
-        if (o.key === objectWithFields.object.key) continue;
+        if (o.key === objectWithFields?.object.key) continue;
         const withFields = await getObjectByKey(ctx.db, ctx.auth.organizationId, o.key);
         if (!withFields) continue;
         otherObjects.push(withFields);
@@ -96,24 +96,27 @@ export const aiRouter = router({
       // Pre-flight: pull the live numbers so Claude composes against truth.
       // Wrapped in try/catch — a flaky summary shouldn't block generation,
       // and the prompt explicitly tells Claude to mark sample values when
-      // the summary doesn't cover a metric.
-      let summary: Awaited<ReturnType<typeof buildDataSummary>>;
-      try {
-        summary = await buildDataSummary(ctx.db, {
-          orgId: ctx.auth.organizationId,
-          object: objectWithFields.object,
-          fields: objectWithFields.fields,
-        });
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn('[ai.preview] data summary failed', err);
-        summary = { recordCount: 0, picklistCounts: [], numericSummary: null };
+      // the summary doesn't cover a metric. Workspace scope has no single
+      // object to summarize — the prompt's live-summary section is skipped.
+      let summary: Awaited<ReturnType<typeof buildDataSummary>> | null = null;
+      if (objectWithFields) {
+        try {
+          summary = await buildDataSummary(ctx.db, {
+            orgId: ctx.auth.organizationId,
+            object: objectWithFields.object,
+            fields: objectWithFields.fields,
+          });
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn('[ai.preview] data summary failed', err);
+          summary = { recordCount: 0, picklistCounts: [], numericSummary: null, dateSeries: null };
+        }
       }
 
       const stream = streamArtifact({
         prompt: input.prompt,
-        object: objectWithFields.object,
-        fields: objectWithFields.fields,
+        object: objectWithFields?.object ?? null,
+        fields: objectWithFields?.fields ?? [],
         summary,
         currentArtifact: input.currentArtifact,
         otherObjects,
@@ -121,7 +124,7 @@ export const aiRouter = router({
 
       // Captured for the generator below — ctx.db is dead once it runs.
       const { organizationId, userId } = ctx.auth;
-      const objectId = objectWithFields.object.id;
+      const objectId = objectWithFields?.object.id ?? null;
       const { objectKey, prompt, currentArtifact } = input;
 
       return (async function* () {
@@ -144,7 +147,7 @@ export const aiRouter = router({
               targetType: 'object',
               targetId: objectId,
               meta: {
-                objectKey,
+                objectKey: objectKey ?? 'workspace',
                 model: env.ANTHROPIC_MODEL,
                 promptLength: prompt.length,
                 nodeCount: repaired.artifact.components.length,

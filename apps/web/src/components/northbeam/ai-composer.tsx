@@ -89,6 +89,11 @@ type ComposerMessage = {
 
 type SessionRow = RouterOutputs['ai']['sessionList'][number];
 
+/** Sentinel objectKey for WORKSPACE scope (the Home page) — the composer
+ *  targets the whole workspace instead of one object; ai.preview is called
+ *  without an objectKey and saving writes the caller's `home` view. */
+export const WORKSPACE_KEY = '__workspace__';
+
 type OpenOpts = {
   objectKey?: string;
   /** Prefill the input (no artifact) or record provenance (with artifact). */
@@ -96,6 +101,9 @@ type OpenOpts = {
   /** Start in refinement mode against this artifact — it becomes the page
    *  preview immediately. */
   artifact?: Artifact;
+  /** Home mode: workspace scope + saving updates the given home view in
+   *  place (or creates the caller's `home` view when viewId is null). */
+  home?: { viewId?: string | null };
 };
 
 type ComposerState = {
@@ -146,6 +154,9 @@ type InternalState = ComposerState & {
   saveOpen: boolean;
   setSaveOpen: (v: boolean) => void;
   save: (opts: { label: string; sharedWith: ShareTarget[]; icon: ViewIcon }) => Promise<void>;
+  /** True when composing the Home page (workspace scope) — Save writes the
+   *  home view directly instead of opening the save-as-view dialog. */
+  isHome: boolean;
   isSaving: boolean;
   sessionId: string | null;
   loadSession: (row: SessionRow) => void;
@@ -174,6 +185,8 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // Home mode's save target — the existing home view to update in place.
+  const [homeViewId, setHomeViewId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const seedRef = useRef<OpenOpts | null>(null);
   // send() needs the thread as it was BEFORE the turn (for the session
@@ -197,6 +210,7 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
     setError(null);
     setSaveOpen(false);
     setSessionId(null);
+    setHomeViewId(null);
     seedRef.current = null;
   }, []);
 
@@ -204,7 +218,10 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
     (opts: OpenOpts = {}) => {
       reset();
       seedRef.current = opts;
-      if (opts.objectKey) setObjectKey(opts.objectKey);
+      if (opts.home) {
+        setHomeViewId(opts.home.viewId ?? null);
+        setObjectKey(WORKSPACE_KEY);
+      } else if (opts.objectKey) setObjectKey(opts.objectKey);
       if (opts.artifact) {
         setPreview(opts.artifact);
         setMessages([
@@ -277,7 +294,12 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
       });
     try {
       const stream = await utils.client.ai.preview.mutate(
-        { objectKey, prompt: instruction, currentArtifact: base ?? undefined },
+        {
+          // Workspace scope (home) has no single target object.
+          objectKey: objectKey === WORKSPACE_KEY ? undefined : objectKey,
+          prompt: instruction,
+          currentArtifact: base ?? undefined,
+        },
         { signal: ac.signal },
       );
       for await (const event of stream) {
@@ -386,6 +408,11 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
   const createView = trpc.view.create.useMutation({
     meta: { context: "Couldn't save the dashboard" },
   });
+  const updateView = trpc.view.update.useMutation({
+    meta: { context: "Couldn't save your home page" },
+  });
+
+  const isHome = objectKey === WORKSPACE_KEY;
 
   const save = useCallback(
     async ({
@@ -393,9 +420,44 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
       sharedWith,
       icon,
     }: { label: string; sharedWith: ShareTarget[]; icon: ViewIcon }) => {
-      const objectId = objects.data?.find((o) => o.key === objectKey)?.id;
-      if (!objectId || !preview) return;
+      if (!preview) return;
       const prompts = messages.filter((m) => m.role === 'user').map((m) => m.content);
+
+      if (isHome) {
+        const config = {
+          artifact: preview,
+          prompt: prompts[0] ?? '',
+          prompts,
+          model: model ?? undefined,
+          generatedAt: new Date().toISOString(),
+        };
+        // Update in place when we know (or can find) the caller's existing
+        // home view — otherwise this save IS the home view's creation.
+        const existingId = homeViewId ?? (await utils.view.home.fetch())?.id ?? null;
+        if (existingId) {
+          await updateView.mutateAsync({ id: existingId, config });
+        } else {
+          await createView.mutateAsync({
+            objectId: null,
+            key: 'home',
+            label: 'Home',
+            type: 'dashboard',
+            icon: 'star',
+            filters: [],
+            sort: [],
+            columns: [],
+            sharedWith: [],
+            config,
+          });
+        }
+        await utils.view.home.invalidate();
+        close();
+        router.push('/');
+        return;
+      }
+
+      const objectId = objects.data?.find((o) => o.key === objectKey)?.id;
+      if (!objectId) return;
       const slug =
         label
           .toLowerCase()
@@ -428,7 +490,21 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
       close();
       router.push(`/${key}?view=${created?.id ?? ''}`);
     },
-    [objects.data, objectKey, preview, messages, model, createView, utils.view.list, close, router],
+    [
+      objects.data,
+      objectKey,
+      isHome,
+      homeViewId,
+      preview,
+      messages,
+      model,
+      createView,
+      updateView,
+      utils.view.list,
+      utils.view.home,
+      close,
+      router,
+    ],
   );
 
   const state: ComposerState = { isOpen, preview: isOpen ? preview : null, open, close };
@@ -452,7 +528,8 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
     saveOpen,
     setSaveOpen,
     save,
-    isSaving: createView.isPending,
+    isHome,
+    isSaving: createView.isPending || updateView.isPending,
     sessionId,
     loadSession,
     newThread,
@@ -472,7 +549,7 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
  *  place under a slim status bar. */
 export function AiComposerSurface({ children }: { children: ReactNode }) {
   const { preview } = useAiComposer();
-  const { setSaveOpen, close, isGenerating } = useInternal();
+  const { setSaveOpen, close, isGenerating, isHome, isSaving, save } = useInternal();
   return (
     <>
       <div className={cn(preview && 'hidden')}>{children}</div>
@@ -514,9 +591,16 @@ export function AiComposerSurface({ children }: { children: ReactNode }) {
               <Button variant="ghost" size="xs" onClick={close}>
                 Discard
               </Button>
-              <Button size="xs" onClick={() => setSaveOpen(true)} disabled={isGenerating}>
+              <Button
+                size="xs"
+                onClick={() =>
+                  // Home saves in place — no name/share/icon to pick.
+                  isHome ? save({ label: 'Home', sharedWith: [], icon: 'star' }) : setSaveOpen(true)
+                }
+                disabled={isGenerating || isSaving}
+              >
                 <BookmarkPlus />
-                Save as view
+                {isHome ? 'Save home' : 'Save as view'}
               </Button>
             </span>
           </div>
@@ -594,9 +678,6 @@ export function AiComposerDrawer() {
             </div>
             <div className="min-w-0">
               <p className="font-medium text-sm leading-tight">Compose</p>
-              <p className="text-muted-foreground text-xs leading-tight">
-                Previews on the page · nothing saves until you say so
-              </p>
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1">
               <Select value={objectKey} onValueChange={setObjectKey}>
@@ -607,6 +688,9 @@ export function AiComposerDrawer() {
                   <SelectValue placeholder="Object" />
                 </SelectTrigger>
                 <SelectContent align="end">
+                  {objectKey === WORKSPACE_KEY && (
+                    <SelectItem value={WORKSPACE_KEY}>Workspace (home)</SelectItem>
+                  )}
                   {objects.map((o) => (
                     <SelectItem key={o.id} value={o.key}>
                       {o.labelPlural}
@@ -908,7 +992,9 @@ function SessionHistory({
           >
             <span className="block truncate font-medium text-sm">{row.title}</span>
             <span className="mt-0.5 flex items-center gap-1.5 text-muted-foreground text-xs">
-              <span className="capitalize">{row.objectKey}</span>
+              <span className="capitalize">
+                {row.objectKey === WORKSPACE_KEY ? 'workspace' : row.objectKey}
+              </span>
               <span>·</span>
               <span>{row.messages.length} messages</span>
               <span>·</span>

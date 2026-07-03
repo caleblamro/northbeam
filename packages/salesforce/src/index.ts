@@ -89,6 +89,120 @@ export interface QueryResult<T = Record<string, unknown>> {
   records: T[];
 }
 
+/* ── Analytics REST API shapes (the subset the report importer reads) ────────
+   Listing goes through SOQL on the Report / Dashboard sobjects because the
+   Analytics list endpoints only return ~200 recently-viewed items. Describe
+   shapes follow the v62 Analytics REST API; fields we don't read are omitted
+   and everything defensive-optional — real orgs drift. */
+
+export interface ReportListItem {
+  Id: string;
+  Name: string;
+  DeveloperName: string;
+  FolderName: string | null;
+  Format: string | null; // 'Tabular' | 'Summary' | 'Matrix' | 'MultiBlock'
+}
+
+export interface DashboardListItem {
+  Id: string;
+  Title: string;
+  DeveloperName: string;
+  FolderName: string | null;
+}
+
+export interface ReportGrouping {
+  name: string;
+  dateGranularity?: string | null; // 'None' | 'Day' | 'Week' | 'Month' | 'Quarter' | 'Year' | 'FiscalQuarter' | …
+  sortOrder?: string;
+  sortAggregate?: string | null;
+}
+
+export interface ReportFilterItem {
+  column: string;
+  operator: string; // equals | notEqual | contains | startsWith | greaterThan | …
+  value: string;
+  filterType?: string;
+}
+
+export interface ReportChartMetadata {
+  chartType?: string; // Bar | BarStacked | Column | ColumnStacked | Line | Pie | Donut | Funnel | Scatter | …
+  groupings?: string[];
+  summaries?: string[];
+  title?: string | null;
+}
+
+export interface ReportMetadata {
+  id: string;
+  name: string;
+  developerName: string;
+  reportFormat: string; // 'TABULAR' | 'SUMMARY' | 'MATRIX' | 'MULTI_BLOCK'
+  reportType: { type: string; label: string };
+  detailColumns?: string[];
+  groupingsDown?: ReportGrouping[];
+  groupingsAcross?: ReportGrouping[];
+  aggregates?: string[]; // 'RowCount' | 's!AMOUNT' | 'a!AMOUNT' | 'm!AMOUNT' | 'mx!AMOUNT' | 'FORMULA1' …
+  reportFilters?: ReportFilterItem[];
+  reportBooleanFilter?: string | null;
+  standardDateFilter?: {
+    column: string;
+    durationValue?: string;
+    startDate?: string | null;
+    endDate?: string | null;
+  } | null;
+  chart?: ReportChartMetadata | null;
+}
+
+export interface ReportDescribeResult {
+  reportMetadata: ReportMetadata;
+  reportExtendedMetadata?: {
+    detailColumnInfo?: Record<string, { label?: string; dataType?: string }>;
+  };
+}
+
+export interface DashboardComponent {
+  id?: string;
+  header?: string | null;
+  title?: string | null;
+  footer?: string | null;
+  reportId?: string | null;
+  type?: string; // observed: 'Report'
+  /** Index into the dashboard's componentData array (may be empty when the
+   *  caller can't see the underlying reports). */
+  componentData?: number;
+  /** Null on flex dashboards — fall back to the source report's chart. */
+  properties?: {
+    visualizationType?: string; // Bar | Column | Line | Pie | Donut | Funnel | Metric | Gauge | Table | FlatTable | Scatter | …
+    useReportChart?: boolean;
+    maxValuesDisplayed?: number;
+    groupings?: string[];
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
+}
+
+/** layout.components aligns BY INDEX with the top-level components array;
+ *  colspan is out of the same 12-column grid Northbeam artifacts use. */
+export interface DashboardLayoutComponent {
+  colspan?: number;
+  column?: number;
+  row?: number;
+  rowspan?: number;
+  [key: string]: unknown;
+}
+
+export interface DashboardDescribeResult {
+  id?: string;
+  name?: string;
+  developerName?: string;
+  folderName?: string | null;
+  components?: DashboardComponent[];
+  layout?: {
+    components?: DashboardLayoutComponent[];
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
+}
+
 export class SalesforceError extends Error {
   constructor(
     public status: number,
@@ -173,6 +287,36 @@ export class SalesforceClient {
   async downloadBlob(path: string): Promise<Buffer> {
     const res = await this.request(path);
     return Buffer.from(await res.arrayBuffer());
+  }
+
+  /* ── Analytics (reports + dashboards) ─────────────────────────────────── */
+
+  /** All reports the connected user can see, most recently modified first.
+   *  SOQL on the Report sobject — the Analytics list endpoint only surfaces
+   *  ~200 recently-viewed reports. */
+  async listReports(limit = 200): Promise<ReportListItem[]> {
+    const soql = `SELECT Id, Name, DeveloperName, FolderName, Format FROM Report ORDER BY LastModifiedDate DESC LIMIT ${Math.floor(limit)}`;
+    return (await this.query<ReportListItem>(soql)).records;
+  }
+
+  /** All dashboards the connected user can see, most recently modified first. */
+  async listDashboards(limit = 200): Promise<DashboardListItem[]> {
+    const soql = `SELECT Id, Title, DeveloperName, FolderName FROM Dashboard ORDER BY LastModifiedDate DESC LIMIT ${Math.floor(limit)}`;
+    return (await this.query<DashboardListItem>(soql)).records;
+  }
+
+  /** Report metadata (groupings, aggregates, filters, chart) without rows. */
+  async getReportDescribe(id: string): Promise<ReportDescribeResult> {
+    return (
+      await this.request(`${this.base()}/analytics/reports/${id}/describe`)
+    ).json() as Promise<ReportDescribeResult>;
+  }
+
+  /** Dashboard metadata (components + layout). */
+  async getDashboardDescribe(id: string): Promise<DashboardDescribeResult> {
+    return (
+      await this.request(`${this.base()}/analytics/dashboards/${id}/describe`)
+    ).json() as Promise<DashboardDescribeResult>;
   }
 }
 

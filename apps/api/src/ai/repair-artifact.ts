@@ -10,12 +10,14 @@
 // recorded so the composer can tell the user what changed.
 
 import {
+  ARTIFACT_CHART_TYPES,
+  ARTIFACT_DATE_GRAINS,
   type Artifact,
   ArtifactFilterSchema,
   type ArtifactNode,
   ArtifactSortSchema,
 } from '@northbeam/core';
-import { type FieldRow, GROUPABLE_TYPES, NUMERIC_TYPES } from '@northbeam/db';
+import { DATE_GROUPABLE_TYPES, type FieldRow, GROUPABLE_TYPES, NUMERIC_TYPES } from '@northbeam/db';
 
 export type ObjectFieldsByKey = Map<string, FieldRow[]>;
 
@@ -26,6 +28,15 @@ export type RepairResult = {
 };
 
 const LIVE_COMPONENTS = new Set(['Metric', 'Chart', 'RecordTable', 'RecordGrid', 'RecordList']);
+const CHART_TYPES: ReadonlySet<string> = new Set(ARTIFACT_CHART_TYPES);
+const GRAINS: ReadonlySet<string> = new Set(ARTIFACT_DATE_GRAINS);
+
+/** Groupable per the engine's rules — multipicklist explodes through a
+ *  LATERAL unnest and is only supported in the primary position. */
+function isGroupable(field: FieldRow, position: 'primary' | 'secondary'): boolean {
+  if (GROUPABLE_TYPES.has(field.type) || DATE_GROUPABLE_TYPES.has(field.type)) return true;
+  return field.type === 'multipicklist' && position === 'primary';
+}
 
 type Props = Record<string, unknown>;
 
@@ -108,8 +119,8 @@ function repairNode(
   cleanColumns(props, byKey, notes, where);
 
   if (node.component === 'Metric') {
-    const fn = props.fn;
-    if ((fn === 'sum' || fn === 'avg') && !isNumeric(byKey.get(String(props.fieldKey)))) {
+    const fn = String(props.fn ?? 'count');
+    if (fn !== 'count' && !isNumeric(byKey.get(String(props.fieldKey)))) {
       notes.push(`${where}: '${String(props.fieldKey)}' isn't numeric — using count instead`);
       props.fn = 'count';
       props.fieldKey = undefined;
@@ -125,16 +136,77 @@ function repairNode(
 
   if (node.component === 'Chart') {
     const groupField = byKey.get(String(props.groupBy));
-    if (!groupField || !GROUPABLE_TYPES.has(groupField.type)) {
+    if (!groupField || !isGroupable(groupField, 'primary')) {
       notes.push(`removed a Chart on '${objectKey}' — '${String(props.groupBy)}' isn't groupable`);
       return null;
     }
-    const fn = props.fn;
-    if ((fn === 'sum' || fn === 'avg') && !isNumeric(byKey.get(String(props.measure)))) {
+
+    // dateGrain rides date/datetime group-bys only; invalid values default.
+    const groupIsDate = DATE_GROUPABLE_TYPES.has(groupField.type);
+    if (groupIsDate) {
+      if (props.dateGrain !== undefined && !GRAINS.has(String(props.dateGrain))) {
+        notes.push(`${where}: unknown dateGrain '${String(props.dateGrain)}' — using month`);
+        props.dateGrain = 'month';
+      }
+    } else if (props.dateGrain !== undefined) {
+      notes.push(`${where}: dropped dateGrain — '${groupField.key}' isn't a date field`);
+      props.dateGrain = undefined;
+    }
+
+    // Second grouping: must exist and be groupable (multipicklist is
+    // primary-only — it explodes through a LATERAL unnest server-side).
+    let group2Field: FieldRow | undefined;
+    if (props.groupBy2 !== undefined) {
+      group2Field = byKey.get(String(props.groupBy2));
+      if (!group2Field || !isGroupable(group2Field, 'secondary')) {
+        notes.push(`${where}: dropped groupBy2 '${String(props.groupBy2)}' — not groupable`);
+        props.groupBy2 = undefined;
+        props.groupBy2Grain = undefined;
+        group2Field = undefined;
+      } else if (!DATE_GROUPABLE_TYPES.has(group2Field.type)) {
+        props.groupBy2Grain = undefined;
+      } else if (props.groupBy2Grain !== undefined && !GRAINS.has(String(props.groupBy2Grain))) {
+        props.groupBy2Grain = 'month';
+      }
+    }
+
+    const fn = String(props.fn ?? 'count');
+    if (fn !== 'count' && !isNumeric(byKey.get(String(props.measure)))) {
       notes.push(`${where}: '${String(props.measure)}' isn't numeric — using count instead`);
       props.fn = 'count';
       props.measure = undefined;
     }
+
+    // chartType normalization + shape coherence (mirrors the walker's
+    // coercions so what's SAVED is already clean).
+    if (props.chartType !== undefined && !CHART_TYPES.has(String(props.chartType))) {
+      notes.push(`${where}: unknown chartType '${String(props.chartType)}' — using bar`);
+      props.chartType = 'bar';
+    }
+    const chartType = String(props.chartType ?? 'bar');
+    const effectiveFn = String(props.fn ?? 'count');
+    const nonAdditive = effectiveFn === 'avg' || effectiveFn === 'min' || effectiveFn === 'max';
+    if ((chartType === 'donut' || chartType === 'funnel') && nonAdditive) {
+      notes.push(`${where}: ${chartType} can't chart ${effectiveFn} — using bar`);
+      props.chartType = 'bar';
+    }
+    if (chartType === 'scatter' && effectiveFn === 'count') {
+      notes.push(`${where}: scatter needs a numeric measure — using bar`);
+      props.chartType = 'bar';
+    }
+    if (chartType === 'matrix' && !props.groupBy2) {
+      notes.push(`${where}: matrix needs groupBy2 — using table`);
+      props.chartType = 'table';
+    }
+    const finalType = String(props.chartType ?? 'bar');
+    if (props.groupBy2 && !['bar', 'line', 'area', 'matrix', 'table'].includes(finalType)) {
+      notes.push(`${where}: ${finalType} can't draw a second dimension — dropped groupBy2`);
+      props.groupBy2 = undefined;
+      props.groupBy2Grain = undefined;
+    }
+    if (props.stacked && !props.groupBy2) props.stacked = undefined;
+    // Time-series never fold their tail into "Other".
+    if (groupIsDate && (finalType === 'line' || finalType === 'area')) props.limit = undefined;
   }
 
   return { ...node, props } as ArtifactNode;

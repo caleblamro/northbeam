@@ -107,6 +107,17 @@ export function RunScreen({ runId, onStartOver }: { runId: string; onStartOver: 
           )}
           <StatsRow stats={stats} />
           {capNote}
+          {Array.isArray(stats.skippedViews) && stats.skippedViews.length > 0 && (
+            <p className="mt-3 text-muted-foreground text-sm">
+              {stats.skippedViews.length} report
+              {stats.skippedViews.length === 1 ? '' : 's'} couldn&apos;t be translated (
+              {(stats.skippedViews as Array<{ label: string; reason: string }>)
+                .slice(0, 3)
+                .map((s) => s.label)
+                .join(', ')}
+              {stats.skippedViews.length > 3 ? ', …' : ''}).
+            </p>
+          )}
           <div className="mt-5 flex flex-wrap gap-2">
             {r.status === 'completed' &&
               activeObjects.map((o) => {

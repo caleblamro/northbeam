@@ -7,8 +7,11 @@ export {
 } from './errors.js';
 export { requires, may, requireSession, requireOrg, type AuthContext } from './auth.js';
 export {
+  ARTIFACT_CHART_TYPES,
+  ARTIFACT_DATE_GRAINS,
   ARTIFACT_FILTER_OPS,
   ARTIFACT_LEAF_COMPONENTS,
+  type ArtifactChartType,
   ArtifactFilterSchema,
   ArtifactLeafNodeSchema,
   ArtifactLikeSchema,

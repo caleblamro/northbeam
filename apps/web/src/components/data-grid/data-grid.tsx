@@ -19,8 +19,14 @@ interface DataGridProps<TData>
   extends Omit<ReturnType<typeof useDataGrid<TData>>, 'dir'>,
     Omit<React.ComponentProps<'div'>, 'contextMenu'> {
   dir?: Direction;
-  height?: number;
+  /** Max height of the scroll container. Numbers are px; strings pass
+   *  through verbatim (e.g. a viewport calc for the full-page list). */
+  height?: number | string;
   stretchColumns?: boolean;
+  /** Edge-to-edge presentation: drops the card radius and side borders so
+   *  the grid can run the full width of the page (hairlines top + bottom
+   *  only). Default keeps the bordered-card widget look. */
+  flush?: boolean;
 }
 
 export function DataGrid<TData>({
@@ -47,6 +53,7 @@ export function DataGrid<TData>({
   pasteDialog,
   onRowAdd: onRowAddProp,
   height = 600,
+  flush = false,
   stretchColumns = false,
   adjustLayout = false,
   className,
@@ -101,10 +108,13 @@ export function DataGrid<TData>({
         // biome-ignore lint/a11y/noNoninteractiveTabindex: the grid is a focusable keyboard-navigation container
         tabIndex={0}
         ref={dataGridRef}
-        className="relative grid select-none overflow-auto rounded-md border focus:outline-none"
+        className={cn(
+          'relative grid select-none overflow-auto focus:outline-none',
+          flush ? 'border-b' : 'rounded-md border',
+        )}
         style={{
           ...columnSizeVars,
-          maxHeight: `${height}px`,
+          maxHeight: typeof height === 'number' ? `${height}px` : height,
         }}
         onContextMenu={onDataGridContextMenu}
       >

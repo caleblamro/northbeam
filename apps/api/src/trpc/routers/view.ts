@@ -5,13 +5,11 @@
 import { ArtifactSchema } from '@northbeam/core';
 import {
   type Filter,
-  GROUPABLE_TYPES,
-  NUMERIC_TYPES,
-  type ReportConfig,
   type ShareTarget,
   type ViewSort,
   type ViewType,
   getDefaultView,
+  getHomeViewForUser,
   getObjectById,
   getView,
   listViewsForUser,
@@ -19,9 +17,10 @@ import {
   writeAuditEvent,
 } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Context } from '../context.js';
+import { ReportConfigSchema, resolveReportSpec } from '../report-config.js';
 import { FilterSchema } from '../schemas.js';
 import { permissionProcedure, protectedProcedure, router } from '../trpc.js';
 
@@ -66,31 +65,14 @@ const SortSchema: z.ZodType<ViewSort> = z.object({
 
 const KEY_RE = /^[a-z0-9](?:[a-z0-9-_]{0,46}[a-z0-9])?$/;
 
-const ReportConfigSchema = z
-  .object({
-    groupBy: z.string().min(1).nullable(),
-    measure: z.object({
-      agg: z.enum(['count', 'sum', 'avg']),
-      fieldKey: z.string().min(1).optional(),
-    }),
-    chartType: z.enum(['bar', 'donut', 'line', 'kpi', 'table']),
-  })
-  .superRefine((cfg, ctx) => {
-    if (cfg.measure.agg !== 'count' && !cfg.measure.fieldKey) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `measure agg '${cfg.measure.agg}' requires a fieldKey`,
-        path: ['measure', 'fieldKey'],
-      });
-    }
-  }) satisfies z.ZodType<ReportConfig>;
-
 // The shared field shapes, sans defaults. CreateInput layers defaults on top;
 // UpdateInput stays default-free so a partial patch can't silently reset the
 // unspecified slots back to empty (zod applies .default() even through
 // .partial(), which would wipe a report's config on a label-only patch).
 const ViewFields = z.object({
-  objectId: z.string().uuid(),
+  // null = workspace-scoped view (the customizable Home page). Object list
+  // views always pass a real object id.
+  objectId: z.string().uuid().nullable(),
   key: z.string().regex(KEY_RE, 'lowercase letters, digits, dashes / underscores'),
   label: z.string().min(1).max(80),
   type: ViewTypeSchema,
@@ -138,24 +120,12 @@ async function assertReportConfig(
     throw new TRPCError({ code: 'NOT_FOUND', message: `object '${objectId}' not found` });
   }
   const byKey = new Map(result.fields.map((f) => [f.key, f]));
-  const cfg = parsed.data;
-  if (cfg.groupBy) {
-    const f = byKey.get(cfg.groupBy);
-    if (!f || !GROUPABLE_TYPES.has(f.type)) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: `'${cfg.groupBy}' is not a groupable field on '${result.object.key}'`,
-      });
-    }
-  }
-  if (cfg.measure.agg !== 'count') {
-    const f = cfg.measure.fieldKey ? byKey.get(cfg.measure.fieldKey) : undefined;
-    if (!f || !NUMERIC_TYPES.has(f.type)) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: `measure field '${cfg.measure.fieldKey ?? ''}' must be a numeric field on '${result.object.key}'`,
-      });
-    }
+  const resolved = resolveReportSpec(result.fields, parsed.data);
+  if (!resolved.ok) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `${resolved.message} on '${result.object.key}'`,
+    });
   }
   for (const flt of filters) {
     if (!byKey.has(flt.fieldKey)) {
@@ -203,6 +173,13 @@ export const viewRouter = router({
       ),
     ),
 
+  /** The caller's Home view — the workspace-scoped (null objectId) view
+   *  keyed 'home'. Null when they haven't customized home yet; the web
+   *  layer renders its built-in default artifact in that case. */
+  home: protectedProcedure.query(({ ctx }) =>
+    getHomeViewForUser(ctx.db, ctx.auth.organizationId, ctx.auth.userId, ctx.auth.role),
+  ),
+
   /** One view by id, scoped to the active org. NOT_FOUND on miss. */
   get: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
@@ -228,6 +205,14 @@ export const viewRouter = router({
     .input(CreateInput)
     .mutation(async ({ ctx, input }) => {
       if (input.type === 'report') {
+        // Reports execute server-side against one object's fields — a
+        // workspace-scoped report has nothing to validate against.
+        if (!input.objectId) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'report views must belong to an object',
+          });
+        }
         await assertReportConfig(ctx, input.objectId, input.config, input.filters);
       }
       if (input.type === 'dashboard') {
@@ -283,9 +268,16 @@ export const viewRouter = router({
       // Re-validate the effective (patched) report spec — covers a config
       // change, a type switch to 'report', and a filter change alike.
       if ((input.type ?? existing.type) === 'report') {
+        const effectiveObjectId = input.objectId ?? existing.objectId;
+        if (!effectiveObjectId) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'report views must belong to an object',
+          });
+        }
         await assertReportConfig(
           ctx,
-          input.objectId ?? existing.objectId,
+          effectiveObjectId,
           input.config !== undefined ? input.config : existing.config,
           input.filters ?? existing.filters,
         );
@@ -327,7 +319,11 @@ export const viewRouter = router({
         .where(
           and(
             eq(schema.view.organizationId, ctx.auth.organizationId),
-            eq(schema.view.objectId, target.objectId),
+            // Workspace-scoped views (null objectId) form their own
+            // default group.
+            target.objectId === null
+              ? isNull(schema.view.objectId)
+              : eq(schema.view.objectId, target.objectId),
             eq(schema.view.isDefault, true),
           ),
         );

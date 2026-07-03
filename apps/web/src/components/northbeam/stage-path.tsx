@@ -1,8 +1,10 @@
 'use client';
 
-// Pipeline stage path — a segmented stepper over a record's stage/status
-// picklist (Salesforce "Path" pattern, restyled flat). Clicking a segment
-// moves the record there with an optimistic record.get patch.
+// Pipeline stage path — chevron segments over a record's stage/status
+// picklist (Salesforce "Path" pattern). Completed stages fill with the accent
+// soft tone, the current stage with the brand fill, future stages stay
+// sunken. Clicking a segment moves the record there with an optimistic
+// record.get patch.
 
 import { trpc } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -54,13 +56,19 @@ export function StagePath({
     },
   });
 
+  const last = options.length - 1;
   return (
-    <nav
-      aria-label={field.label}
-      className="flex overflow-hidden rounded-lg border border-border bg-card"
-    >
+    <nav aria-label={field.label} className="flex gap-[3px]">
       {options.map((o, i) => {
         const state = i < currentIdx ? 'done' : i === currentIdx ? 'current' : 'future';
+        // Chevron geometry: arrow tail cut into the left edge (except the
+        // first segment), arrow head on the right (except the last).
+        const clip =
+          i === 0
+            ? 'polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%)'
+            : i === last
+              ? 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 9px 50%)'
+              : 'polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%)';
         return (
           <button
             key={o.value}
@@ -70,25 +78,25 @@ export function StagePath({
             onClick={() =>
               update.mutate({ objectKey, id: recordId, data: { [field.key]: o.value } })
             }
+            style={{
+              clipPath: clip,
+              borderRadius: i === 0 ? '4px 0 0 4px' : i === last ? '0 4px 4px 0' : undefined,
+            }}
             className={cn(
-              'relative flex min-w-0 flex-1 items-center justify-center gap-1.5 px-3 py-2 font-medium text-xs transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              i > 0 && 'border-border border-l',
-              state === 'done' && 'bg-foreground/[0.05] text-foreground hover:bg-foreground/[0.09]',
+              'relative flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 px-3.5 font-medium text-xs transition-colors focus-visible:z-10 focus-visible:outline-none',
+              state === 'done' &&
+                'bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-ring)]',
               state === 'current' && 'bg-primary text-primary-foreground',
               state === 'future' &&
-                'bg-card text-muted-foreground hover:bg-muted hover:text-foreground',
+                'bg-muted text-muted-foreground hover:bg-muted/70 hover:text-foreground',
             )}
           >
             {state === 'done' ? (
               <Check className="size-3.5 shrink-0" />
             ) : (
-              o.color && (
-                <span
-                  className="size-1.5 shrink-0 rounded-full"
-                  style={{
-                    background: state === 'current' ? 'var(--brand-contrast)' : o.color,
-                  }}
-                />
+              o.color &&
+              state !== 'current' && (
+                <span className="size-1.5 shrink-0 rounded-full" style={{ background: o.color }} />
               )
             )}
             <span className="truncate">{o.label}</span>

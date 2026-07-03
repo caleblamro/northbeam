@@ -9,7 +9,7 @@ import type { FieldDefLite } from '@/components/northbeam/field-render';
 import type { RouterOutputs } from '@/lib/api';
 import type { ViewSort, ViewType } from '@northbeam/db/views';
 import type { LucideIcon } from 'lucide-react';
-import type { FC } from 'react';
+import type { FC, ReactNode } from 'react';
 import type { ZodTypeAny } from 'zod';
 
 export type { ViewType };
@@ -47,6 +47,13 @@ export type ViewRendererProps = {
   /** Header-click callback — renderer reports the new sort and the
    *  dispatcher decides whether to write it to URL state. */
   onSortChange?: (sort: ViewSort[]) => void;
+  /** 'flush' renders the table edge-to-edge with a sticky footer bar (the
+   *  full-page list); omit for the default card chrome (embedded tables,
+   *  artifact widgets). Renderers without a table ignore it. */
+  tableChrome?: 'card' | 'flush';
+  /** Slot rendered at the start of the table footer — the dispatcher passes
+   *  the Σ/avg/count aggregate strip here. */
+  footerStart?: ReactNode;
 };
 
 export type ViewRenderer<TConfig = unknown> = {

@@ -16,9 +16,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/cn';
 import type { ViewSort } from '@northbeam/db/views';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 
 export type { RecordRow };
 
@@ -39,6 +40,16 @@ interface RecordTableProps {
   onSortChange?: (sort: ViewSort[]) => void;
   /** Patch one or more fields on a record — enables inline cell editing. */
   onCellEdit?: (recordId: string, patch: Record<string, unknown>) => void;
+  /** Row hover actions — edit opens the form drawer, delete confirms +
+   *  removes. The actions column only renders when at least one is given. */
+  onRowEdit?: (row: { id: string; data: Record<string, unknown> }) => void;
+  onRowDelete?: (id: string) => void;
+  /** 'flush' = full-page list chrome: edge-to-edge grid (no card radius),
+   *  viewport-fit height, and a sticky footer bar. Default 'card' keeps the
+   *  original bordered widget look for embedded/artifact tables. */
+  chrome?: 'card' | 'flush';
+  /** Rendered at the start of the footer bar (the aggregate strip). */
+  footerStart?: ReactNode;
 }
 
 export function RecordTable({
@@ -52,9 +63,14 @@ export function RecordTable({
   sort,
   onSortChange,
   onCellEdit,
+  onRowEdit,
+  onRowDelete,
+  chrome = 'card',
+  footerStart,
 }: RecordTableProps) {
+  const flush = chrome === 'flush';
   const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(defaultPageSize);
+  const [pageSize, setPageSize] = useState(flush ? 100 : defaultPageSize);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const safePageIndex = Math.min(pageIndex, pageCount - 1);
@@ -70,10 +86,16 @@ export function RecordTable({
         rows={pagedRows}
         refLabels={refLabels}
         objectKey={objectKey}
-        height={Math.min(560, 44 + pageSize * rowHeight)}
+        // Flush mode: fill the viewport under the topbar + control row and
+        // leave room for the sticky footer; the grid scrolls internally so
+        // its header can stay stuck.
+        height={flush ? 'calc(100dvh - 152px)' : Math.min(560, 44 + pageSize * rowHeight)}
+        flush={flush}
         sort={sort}
         onSortChange={onSortChange}
         onCellEdit={onCellEdit}
+        onRowEdit={onRowEdit}
+        onRowDelete={onRowDelete}
       />
       {(footer === 'always' || pageCount > 1) && (
         <TablePagination
@@ -86,6 +108,8 @@ export function RecordTable({
             setPageSize(n);
             setPageIndex(0);
           }}
+          flush={flush}
+          footerStart={footerStart}
         />
       )}
     </>
@@ -99,6 +123,8 @@ function TablePagination({
   totalRows,
   onPageChange,
   onPageSizeChange,
+  flush = false,
+  footerStart,
 }: {
   pageIndex: number;
   pageSize: number;
@@ -106,13 +132,25 @@ function TablePagination({
   totalRows: number;
   onPageChange: (i: number) => void;
   onPageSizeChange: (n: number) => void;
+  flush?: boolean;
+  footerStart?: ReactNode;
 }) {
   const firstRow = totalRows === 0 ? 0 : pageIndex * pageSize + 1;
   const lastRow = Math.min(totalRows, (pageIndex + 1) * pageSize);
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
-      <div className="text-muted-foreground tabular-nums">
-        {firstRow.toLocaleString()}–{lastRow.toLocaleString()} of {totalRows.toLocaleString()}
+    <div
+      className={cn(
+        'flex flex-wrap items-center justify-between gap-3 text-sm',
+        // Flush = the full-page list's footer bar: sticks to the bottom of
+        // the app scroll container, full-width hairline on top.
+        flush ? 'sticky bottom-0 z-20 border-border border-t bg-background px-4 py-2' : 'mt-3',
+      )}
+    >
+      <div className="flex items-center gap-5">
+        {footerStart}
+        <div className="text-muted-foreground tabular-nums">
+          {firstRow.toLocaleString()}–{lastRow.toLocaleString()} of {totalRows.toLocaleString()}
+        </div>
       </div>
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 text-muted-foreground text-xs">

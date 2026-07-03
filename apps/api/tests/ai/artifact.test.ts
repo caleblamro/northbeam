@@ -130,6 +130,14 @@ const summary: DataSummary = {
     },
   ],
   numericSummary: { fieldKey: 'amount', fieldLabel: 'Amount', sum: 990000, avg: 23571 },
+  dateSeries: {
+    fieldKey: 'close_date',
+    fieldLabel: 'Close date',
+    points: [
+      { bucket: '2026-05', count: 9 },
+      { bucket: '2026-06', count: 14 },
+    ],
+  },
 };
 
 describe('buildSystemPrompt', () => {
@@ -160,6 +168,26 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('keep every node the');
   });
 
+  it('teaches the expanded chart vocabulary', () => {
+    const prompt = buildSystemPrompt(object, fields, summary);
+    for (const t of ['bar', 'line', 'area', 'donut', 'scatter', 'funnel', 'table', 'matrix']) {
+      expect(prompt, t).toContain(`'${t}'`);
+    }
+    expect(prompt).toContain('dateGrain');
+    expect(prompt).toContain('groupBy2');
+    expect(prompt).toContain("'min'");
+    expect(prompt).toContain("'max'");
+    expect(prompt).not.toContain("dates can't bucket");
+  });
+
+  it('injects the month-grain date series when the summary carries one', () => {
+    const prompt = buildSystemPrompt(object, fields, summary);
+    expect(prompt).toContain('Close date by month');
+    expect(prompt).toContain('2026-06 (14)');
+    const without = buildSystemPrompt(object, fields, { ...summary, dateSeries: null });
+    expect(without).not.toContain('by month (fieldKey');
+  });
+
   it('lists other objects with their field keys for cross-object components', () => {
     const account = { key: 'account', label: 'Account' } as ObjectRow;
     const accountFields = [
@@ -180,8 +208,17 @@ const dealFields = [
   { key: 'stage', label: 'Stage', type: 'picklist' },
   { key: 'amount', label: 'Amount', type: 'currency' },
   { key: 'notes', label: 'Notes', type: 'longtext' },
+  { key: 'close_date', label: 'Close date', type: 'date' },
 ] as FieldRow[];
 const objectsByKey = new Map([['deal', dealFields]]);
+
+/** One-Chart artifact helper for the repair cases below. */
+function chartArtifact(props: Record<string, unknown>): Artifact {
+  return { version: '1', components: [{ component: 'Chart', props }] };
+}
+function chartProps(a: Artifact): Record<string, unknown> {
+  return (a.components[0]?.props ?? {}) as Record<string, unknown>;
+}
 
 describe('repairArtifact', () => {
   it('keeps a fully-valid artifact untouched', () => {
@@ -257,6 +294,115 @@ describe('repairArtifact', () => {
     expect(metric.fn).toBe('count');
     expect(metric.fieldKey).toBeUndefined();
     expect(notes.some((n) => n.includes("isn't groupable"))).toBe(true);
+  });
+
+  it('accepts date group-bys, defaulting or stripping the grain as needed', () => {
+    const valid = repairArtifact(
+      chartArtifact({
+        objectKey: 'deal',
+        groupBy: 'close_date',
+        dateGrain: 'quarter',
+        fn: 'count',
+        chartType: 'line',
+      }),
+      objectsByKey,
+    );
+    expect(valid.notes).toEqual([]);
+    expect(chartProps(valid.artifact).dateGrain).toBe('quarter');
+
+    const badGrain = repairArtifact(
+      chartArtifact({ objectKey: 'deal', groupBy: 'close_date', dateGrain: 'decade', fn: 'count' }),
+      objectsByKey,
+    );
+    expect(chartProps(badGrain.artifact).dateGrain).toBe('month');
+    expect(badGrain.notes.some((n) => n.includes('dateGrain'))).toBe(true);
+
+    const grainOnPicklist = repairArtifact(
+      chartArtifact({ objectKey: 'deal', groupBy: 'stage', dateGrain: 'month', fn: 'count' }),
+      objectsByKey,
+    );
+    expect(chartProps(grainOnPicklist.artifact).dateGrain).toBeUndefined();
+  });
+
+  it('validates groupBy2 and the chart-shape coherence rules', () => {
+    const kept = repairArtifact(
+      chartArtifact({
+        objectKey: 'deal',
+        groupBy: 'close_date',
+        dateGrain: 'month',
+        groupBy2: 'stage',
+        fn: 'sum',
+        measure: 'amount',
+        chartType: 'bar',
+        stacked: true,
+      }),
+      objectsByKey,
+    );
+    expect(kept.notes).toEqual([]);
+    expect(chartProps(kept.artifact).groupBy2).toBe('stage');
+    expect(chartProps(kept.artifact).stacked).toBe(true);
+
+    const unknownGroup2 = repairArtifact(
+      chartArtifact({
+        objectKey: 'deal',
+        groupBy: 'stage',
+        groupBy2: 'ghost',
+        fn: 'count',
+        chartType: 'matrix',
+      }),
+      objectsByKey,
+    );
+    const p = chartProps(unknownGroup2.artifact);
+    expect(p.groupBy2).toBeUndefined();
+    expect(p.chartType).toBe('table'); // matrix without groupBy2 degrades
+    expect(p.stacked).toBeUndefined();
+  });
+
+  it('normalizes unknown chart types and fn/shape mismatches', () => {
+    const unknown = repairArtifact(
+      chartArtifact({ objectKey: 'deal', groupBy: 'stage', fn: 'count', chartType: 'sparkline' }),
+      objectsByKey,
+    );
+    expect(chartProps(unknown.artifact).chartType).toBe('bar');
+
+    const scatterCount = repairArtifact(
+      chartArtifact({ objectKey: 'deal', groupBy: 'stage', fn: 'count', chartType: 'scatter' }),
+      objectsByKey,
+    );
+    expect(chartProps(scatterCount.artifact).chartType).toBe('bar');
+
+    const donutMin = repairArtifact(
+      chartArtifact({
+        objectKey: 'deal',
+        groupBy: 'stage',
+        fn: 'min',
+        measure: 'amount',
+        chartType: 'donut',
+      }),
+      objectsByKey,
+    );
+    expect(chartProps(donutMin.artifact).chartType).toBe('bar');
+
+    // min/max on a non-numeric measure downgrade to count (same as sum/avg).
+    const minText = repairArtifact(
+      chartArtifact({ objectKey: 'deal', groupBy: 'stage', fn: 'max', measure: 'notes' }),
+      objectsByKey,
+    );
+    expect(chartProps(minText.artifact).fn).toBe('count');
+  });
+
+  it('strips the fold limit from time-series charts', () => {
+    const r = repairArtifact(
+      chartArtifact({
+        objectKey: 'deal',
+        groupBy: 'close_date',
+        fn: 'count',
+        chartType: 'line',
+        limit: 8,
+      }),
+      objectsByKey,
+    );
+    expect(chartProps(r.artifact).limit).toBeUndefined();
   });
 
   it('repairs SectionCard children and collapses to an EmptyState when nothing survives', () => {

@@ -5,8 +5,6 @@ import { ValidationFailedError, can, recordPermissionFor } from '@northbeam/core
 import {
   type FieldRow,
   type FormatRule,
-  GROUPABLE_TYPES,
-  NUMERIC_TYPES,
   type PicklistOption,
   aggregateRecords,
   canEditRecord,
@@ -39,6 +37,7 @@ import {
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import type { Context } from '../context.js';
+import { DateGrainSchema, ReportAggSchema, resolveReportSpec } from '../report-config.js';
 import { FilterSchema } from '../schemas.js';
 import { protectedProcedure, router } from '../trpc.js';
 
@@ -82,6 +81,32 @@ async function assertRecordType(
       message: `record type '${recordTypeId}' is not an active type on '${object.key}'`,
     });
   }
+}
+
+/** Bucket labels for one grouping level of record.aggregate: reference
+ *  buckets carry raw uuids (resolve to display names), picklist/multipicklist
+ *  buckets carry raw values (ship the hydrated options for label + color). */
+async function labelsForGroup(
+  ctx: Context,
+  field: FieldRow | undefined,
+  values: Array<string | number | boolean | null>,
+): Promise<{ labels?: Record<string, string>; options?: PicklistOption[] }> {
+  if (!ctx.auth) throw new TRPCError({ code: 'UNAUTHORIZED' });
+  if (!field) return {};
+  if (field.type === 'reference') {
+    const target = narrowFieldConfig('reference', field.config).targetObject;
+    const ids = values.filter((g): g is string => typeof g === 'string' && g.length > 0);
+    return {
+      labels: target ? await labelsForIds(ctx.db, ctx.auth.organizationId, target, ids) : {},
+    };
+  }
+  if (field.type === 'picklist') {
+    return { options: narrowFieldConfig('picklist', field.config).options ?? [] };
+  }
+  if (field.type === 'multipicklist') {
+    return { options: narrowFieldConfig('multipicklist', field.config).options ?? [] };
+  }
+  return {};
 }
 
 // Wire-friendly projections shared by list/get/related — the web app's
@@ -242,41 +267,37 @@ export const recordRouter = router({
       z.object({
         objectKey: z.string(),
         groupBy: z.string().nullish(),
+        groupByGrain: DateGrainSchema.optional(),
+        groupBy2: z.string().nullish(),
+        groupBy2Grain: DateGrainSchema.optional(),
         measure: z.object({
-          agg: z.enum(['count', 'sum', 'avg']),
+          agg: ReportAggSchema,
           fieldKey: z.string().optional(),
         }),
         filters: z.array(FilterSchema).default([]),
-        limit: z.number().min(1).max(200).optional(),
+        // Two groupings return (group, group2) PAIRS, so the cap is wider;
+        // single-group requests are clamped back to 200 below.
+        limit: z.number().min(1).max(1000).optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
       const { object, fields: rawFields } = await requireObject(ctx, input.objectKey);
       const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, rawFields);
-      const byKey = new Map(fields.map((f) => [f.key, f]));
 
-      let groupField: FieldRow | null = null;
-      if (input.groupBy) {
-        const f = byKey.get(input.groupBy);
-        if (!f || !GROUPABLE_TYPES.has(f.type)) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: `'${input.groupBy}' is not a groupable field on '${object.key}'`,
-          });
-        }
-        groupField = f;
+      const resolved = resolveReportSpec(fields, {
+        groupBy: input.groupBy,
+        groupByGrain: input.groupByGrain,
+        groupBy2: input.groupBy2,
+        groupBy2Grain: input.groupBy2Grain,
+        measure: input.measure,
+      });
+      if (!resolved.ok) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `${resolved.message} on '${object.key}'`,
+        });
       }
-      let measureField: FieldRow | undefined;
-      if (input.measure.agg !== 'count') {
-        const f = input.measure.fieldKey ? byKey.get(input.measure.fieldKey) : undefined;
-        if (!f || !NUMERIC_TYPES.has(f.type)) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: `measure field '${input.measure.fieldKey ?? ''}' must be a numeric field on '${object.key}'`,
-          });
-        }
-        measureField = f;
-      }
+      const { groups, measureField } = resolved.value;
 
       const sharedRecordIds =
         object.defaultVisibility === 'private' && !isAdminish(ctx.auth.role)
@@ -290,7 +311,7 @@ export const recordRouter = router({
         orgId: ctx.auth.organizationId,
         object,
         fields,
-        groupBy: groupField,
+        groups,
         measure: { fn: input.measure.agg, field: measureField },
         filters: input.filters,
         acl: {
@@ -298,28 +319,32 @@ export const recordRouter = router({
           sharedRecordIds,
           isAdminish: isAdminish(ctx.auth.role),
         },
-        limit: input.limit,
+        limit:
+          input.limit !== undefined && groups.length < 2 ? Math.min(input.limit, 200) : input.limit,
       });
 
-      // Reference buckets carry raw uuids — resolve them to display names so
-      // the client can label bars/slices without a second round trip.
-      let groupLabels: Record<string, string> | undefined;
-      if (groupField?.type === 'reference') {
-        const target = narrowFieldConfig('reference', groupField.config).targetObject;
-        const ids = buckets
-          .map((b) => b.group)
-          .filter((g): g is string => typeof g === 'string' && g.length > 0);
-        groupLabels = target
-          ? await labelsForIds(ctx.db, ctx.auth.organizationId, target, ids)
-          : {};
-      }
-      // Picklist buckets carry raw values — ship the (hydrated) options so the
-      // client can map value → label + color.
-      let options: PicklistOption[] | undefined;
-      if (groupField?.type === 'picklist') {
-        options = narrowFieldConfig('picklist', groupField.config).options ?? [];
-      }
-      return { buckets, groupLabels, options };
+      // Reference buckets carry raw uuids (resolve to display names), picklist
+      // buckets carry raw values (ship the hydrated options for label + color)
+      // — once per grouping level, so the client never needs a second trip.
+      const primary = await labelsForGroup(
+        ctx,
+        groups[0]?.field,
+        buckets.map((b) => b.group),
+      );
+      const secondary = groups[1]
+        ? await labelsForGroup(
+            ctx,
+            groups[1].field,
+            buckets.map((b) => b.group2 ?? null),
+          )
+        : {};
+      return {
+        buckets,
+        groupLabels: primary.labels,
+        options: primary.options,
+        group2Labels: secondary.labels,
+        options2: secondary.options,
+      };
     }),
 
   /** Records on other objects that reference this one — the Related panel. */
@@ -338,6 +363,7 @@ export const recordRouter = router({
             id: r.id,
             data: r.data,
             name: displayName(g.fields, r.data),
+            createdAt: r.createdAt,
           })),
         });
       }

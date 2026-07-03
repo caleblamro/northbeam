@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Home · Focus queue — Northbeam redesign H3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 900px; }
+
+  /* Greeting */
+  .greet { padding-top: var(--sp-4); display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-4); }
+  .greet h1 { margin: 0; font-size: var(--text-2xl); font-weight: var(--fw-semibold); letter-spacing: -0.02em; }
+  .greet .date { margin-top: 3px; font-size: var(--text-sm); color: var(--ink-muted); }
+  .greet .actions { display: flex; gap: 8px; }
+
+  /* Slim stat band */
+  .statband {
+    margin-top: var(--sp-5);
+    display: flex; align-items: center; gap: var(--sp-6);
+    padding: var(--sp-3) var(--sp-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    background: var(--surface);
+    box-shadow: var(--shadow-xs);
+    overflow-x: auto;
+  }
+  .statband .s { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+  .statband .s .v { font-size: var(--text-lg); font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .statband .s .l { font-size: var(--text-sm); color: var(--ink-muted); }
+  .statband .s .d { font-size: var(--text-xs); color: var(--success); font-variant-numeric: tabular-nums; }
+  .statband .div { width: 1px; height: 22px; background: var(--border); flex: none; }
+  .statband .go { margin-left: auto; font-size: var(--text-sm); color: var(--accent); font-weight: var(--fw-medium); white-space: nowrap; }
+
+  /* Focus queue */
+  .queue-head { margin-top: var(--sp-10); display: flex; align-items: baseline; justify-content: space-between; }
+  .queue-head .n { font-size: var(--text-sm); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+  .queue { margin-top: var(--sp-3); display: flex; flex-direction: column; gap: 10px; }
+  .q {
+    display: grid; grid-template-columns: 3px 26px minmax(0,1fr) auto auto;
+    align-items: center; gap: var(--sp-3);
+    padding: 13px var(--sp-4) 13px 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-xs);
+    transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+    overflow: hidden;
+  }
+  .q:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+  .q .bar { align-self: stretch; }
+  .q.warn .bar { background: var(--warning); }
+  .q.bad .bar { background: var(--danger); }
+  .q.neut .bar { background: var(--border-strong); }
+  .q.info .bar { background: var(--accent); }
+  .q .bd { min-width: 0; }
+  .q .h { display: block; font-size: var(--text-base); font-weight: var(--fw-medium); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .q .s { display: block; margin-top: 1px; font-size: var(--text-sm); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .q .age { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .q .btn { visibility: visible; }
+
+  /* Activity, two columns */
+  .act-head { margin-top: var(--sp-12); display: flex; align-items: baseline; justify-content: space-between; margin-bottom: var(--sp-3); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3) var(--sp-8); }
+  .a { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--divider); }
+  .a .ic { display: grid; place-items: center; width: 24px; height: 24px; flex: none; border-radius: var(--radius-full); border: 1px solid var(--border); background: var(--surface-sunken); color: var(--ink-muted); }
+  .a .ic svg { width: 12px; height: 12px; }
+  .a .bd { min-width: 0; flex: 1; }
+  .a .h { display: block; font-size: var(--text-sm); color: var(--ink-secondary); line-height: var(--lh-snug); }
+  .a .h b { color: var(--ink); font-weight: var(--fw-medium); }
+  .a .s { display: block; font-size: var(--text-xs); color: var(--ink-subtle); margin-top: 1px; }
+  .a .t { font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle); white-space: nowrap; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Home');</script>
+
+<main class="page">
+  <!-- Greeting -->
+  <section class="greet reveal reveal-1">
+    <div>
+      <h1>Good afternoon, Caleb</h1>
+      <div class="date">Friday, July 3 · Lamro Industries</div>
+    </div>
+    <div class="actions">
+      <button class="btn outline"><svg class="i" data-icon="refresh"></svg> Run migration</button>
+      <button class="btn primary"><svg class="i" data-icon="plus"></svg> New</button>
+    </div>
+  </section>
+
+  <!-- Slim pipeline stat band -->
+  <section class="statband reveal reveal-2">
+    <span class="s"><span class="v">$1,870,500</span><span class="l">open pipeline</span><span class="d">▲ 12.4%</span></span>
+    <span class="div"></span>
+    <span class="s"><span class="v">9</span><span class="l">open deals</span></span>
+    <span class="div"></span>
+    <span class="s"><span class="v">42</span><span class="l">accounts</span></span>
+    <span class="div"></span>
+    <span class="s"><span class="v">187</span><span class="l">contacts</span></span>
+    <a class="go" href="#">View pipeline →</a>
+  </section>
+
+  <!-- Focus queue -->
+  <section class="reveal reveal-3">
+    <div class="queue-head">
+      <span class="eyebrow">Your focus today</span>
+      <span class="n">4 items</span>
+    </div>
+    <div class="queue">
+      <a class="q bad" href="#">
+        <span class="bar"></span>
+        <span class="obj-chip">D</span>
+        <span class="bd">
+          <span class="h">Copper &amp; Pine — POS integration</span>
+          <span class="s">Closes in 6 days and the proposal hasn’t been sent · $64,000 · Proposal</span>
+        </span>
+        <span class="age">due Jul 9</span>
+        <button class="btn outline">Send proposal</button>
+      </a>
+      <a class="q warn" href="#">
+        <span class="bar"></span>
+        <span class="obj-chip">D</span>
+        <span class="bd">
+          <span class="h">Acme Robotics — Enterprise expansion</span>
+          <span class="s">No activity in 14 days · $420,000 · Negotiation</span>
+        </span>
+        <span class="age">14d idle</span>
+        <button class="btn outline">Log a touch</button>
+      </a>
+      <a class="q info" href="#">
+        <span class="bar"></span>
+        <span class="obj-chip">D</span>
+        <span class="bd">
+          <span class="h">Meridian Health — Platform migration</span>
+          <span class="s">Contract sitting in legal review for 5 days · $285,000 · Proposal</span>
+        </span>
+        <span class="age">5d waiting</span>
+        <button class="btn outline">Nudge legal</button>
+      </a>
+      <a class="q neut" href="#">
+        <span class="bar"></span>
+        <span class="obj-chip">D</span>
+        <span class="bd">
+          <span class="h">3 deals are missing close dates</span>
+          <span class="s">Vela Analytics, Orbital Freight, Brightloom Retail</span>
+        </span>
+        <span class="age">—</span>
+        <button class="btn outline">Fix dates</button>
+      </a>
+    </div>
+  </section>
+
+  <!-- Activity -->
+  <section class="reveal reveal-4">
+    <div class="act-head">
+      <span class="eyebrow">Recent activity</span>
+      <a href="#" style="font-size:var(--text-sm);color:var(--accent);font-weight:var(--fw-medium)">View all</a>
+    </div>
+    <div class="cols">
+      <div class="a"><span class="ic"><svg class="i" data-icon="phone"></svg></span><span class="bd"><span class="h"><b>Call</b> with Dana Whitfield — rollout timeline</span><span class="s">Acme Robotics</span></span><span class="t">25m</span></div>
+      <div class="a"><span class="ic"><svg class="i" data-icon="mail"></svg></span><span class="bd"><span class="h"><b>Email</b> to Priya Raman — proposal v3</span><span class="s">Meridian Health</span></span><span class="t">2h</span></div>
+      <div class="a"><span class="ic"><svg class="i" data-icon="note"></svg></span><span class="bd"><span class="h"><b>Note</b> — legal reviewing MSA redlines</span><span class="s">Halcyon Aero</span></span><span class="t">5h</span></div>
+      <div class="a"><span class="ic"><svg class="i" data-icon="calendar"></svg></span><span class="bd"><span class="h"><b>Meeting</b> — POS integration scoping</span><span class="s">Copper &amp; Pine</span></span><span class="t">1d</span></div>
+      <div class="a"><span class="ic"><svg class="i" data-icon="mail"></svg></span><span class="bd"><span class="h"><b>Email</b> from Tom Okafor — security questionnaire</span><span class="s">Statler Financial</span></span><span class="t">2d</span></div>
+      <div class="a"><span class="ic"><svg class="i" data-icon="check"></svg></span><span class="bd"><span class="h"><b>Deal won</b> — Juniper Labs at $122,400</span><span class="s">Juniper Labs</span></span><span class="t">6d</span></div>
+    </div>
+  </section>
+</main>
+
+<script>nbBadge('H3', 'Focus queue');</script>
+</body>
+</html>

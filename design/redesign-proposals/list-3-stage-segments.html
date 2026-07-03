@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deals · Stage segments — Northbeam redesign L3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 1080px; }
+
+  .head { display: flex; align-items: center; gap: 10px; }
+  .head h1 { margin: 0; font-size: var(--text-xl); font-weight: var(--fw-semibold); letter-spacing: -0.015em; }
+  .head .count { font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .head .tools { margin-left: auto; display: flex; gap: 8px; }
+
+  /* views row */
+  .views { margin-top: var(--sp-4); display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+  .view { position: relative; padding: 8px 12px; font-size: var(--text-sm); font-weight: var(--fw-medium); color: var(--ink-muted); }
+  .view:hover { color: var(--ink); }
+  .view[aria-current] { color: var(--ink); }
+  .view[aria-current]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 999px; background: var(--accent); }
+  .views .tools { margin-left: auto; display: flex; align-items: center; gap: 8px; padding-bottom: 6px; }
+  .tool-search { display: flex; align-items: center; gap: 7px; height: 30px; width: 200px; padding: 0 10px; border: 1px solid var(--border-field); border-radius: var(--radius-md); background: var(--field-bg); color: var(--placeholder); font-size: var(--text-sm); }
+
+  /* Segmented stage bar: proportional, filterable */
+  .segbar { margin-top: var(--sp-5); display: flex; gap: 6px; }
+  .segseg {
+    position: relative;
+    padding: 10px 14px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    min-width: 110px;
+    transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+    overflow: hidden;
+  }
+  .segseg:hover { border-color: var(--border-strong); }
+  .segseg .n { font-size: var(--text-xs); font-weight: var(--fw-medium); color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .segseg .v { margin-top: 3px; font-size: var(--text-md); font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .segseg .c { margin-top: 1px; font-size: var(--text-xs); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .segseg::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--surface-active); }
+  .segseg.on { border-color: var(--accent); background: var(--accent-soft); }
+  .segseg.on .n { color: var(--accent); }
+  .segseg.on::after { background: var(--accent); }
+  .segseg.won .v { color: var(--success); }
+  .segclear { align-self: center; font-size: var(--text-sm); color: var(--accent); font-weight: var(--fw-medium); padding: 0 6px; }
+
+  /* Grouped table */
+  .card.tblcard { margin-top: var(--sp-5); overflow: hidden; }
+  .tbl th { padding: 9px 16px; }
+  .tbl td { padding: 12px 16px; }
+  .grp td {
+    padding: 7px 16px;
+    background: var(--surface-sunken);
+    font-size: var(--text-xs);
+    font-weight: var(--fw-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .grp .sum { float: right; font-variant-numeric: tabular-nums; color: var(--ink-secondary); text-transform: none; letter-spacing: 0; font-weight: var(--fw-medium); }
+  .grp:hover td { background: var(--surface-sunken); }
+  .name a { font-weight: var(--fw-medium); color: var(--ink); }
+  .name a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Deals');</script>
+
+<main class="page">
+  <!-- Header -->
+  <div class="head reveal reveal-1">
+    <span class="obj-chip">D</span>
+    <h1>Deals</h1>
+    <span class="count">7 shown · filtered by stage</span>
+    <div class="tools">
+      <button class="btn outline"><svg class="i" data-icon="filter"></svg> Filter</button>
+      <button class="btn primary"><svg class="i" data-icon="plus"></svg> New deal</button>
+    </div>
+  </div>
+
+  <!-- Saved views -->
+  <nav class="views reveal reveal-1">
+    <a class="view" aria-current="page" href="#">All open</a>
+    <a class="view" href="#">My deals</a>
+    <a class="view" href="#">Closing this month</a>
+    <a class="view" href="#">Won · Q2</a>
+    <div class="tools">
+      <span class="tool-search"><svg class="i" data-icon="search" style="width:13px;height:13px"></svg> Search deals…</span>
+    </div>
+  </nav>
+
+  <!-- Stage segments (act as filters; two active) -->
+  <div class="segbar reveal reveal-2">
+    <a class="segseg" href="#" style="flex:0.9">
+      <div class="n">Discovery</div>
+      <div class="v">$211,500</div>
+      <div class="c">3 deals</div>
+    </a>
+    <a class="segseg on" href="#" style="flex:1.1">
+      <div class="n">Qualification</div>
+      <div class="v">$360,000</div>
+      <div class="c">2 deals</div>
+    </a>
+    <a class="segseg on" href="#" style="flex:1.1">
+      <div class="n">Proposal</div>
+      <div class="v">$349,000</div>
+      <div class="c">2 deals</div>
+    </a>
+    <a class="segseg" href="#" style="flex:1.9">
+      <div class="n">Negotiation</div>
+      <div class="v">$950,000</div>
+      <div class="c">2 deals</div>
+    </a>
+    <a class="segseg won" href="#" style="flex:0.8">
+      <div class="n">Won · Q2</div>
+      <div class="v">$122,400</div>
+      <div class="c">1 deal</div>
+    </a>
+    <a class="segclear" href="#">Clear</a>
+  </div>
+
+  <!-- Table grouped by close month -->
+  <div class="card tblcard reveal reveal-3">
+    <table class="tbl">
+      <thead>
+        <tr><th>Name</th><th>Account</th><th>Stage</th><th class="right">Amount</th><th class="right">Close date</th><th>Owner</th></tr>
+      </thead>
+      <tbody>
+        <tr class="grp"><td colspan="6">Closing July <span class="sum">2 deals · $349,000</span></td></tr>
+        <tr>
+          <td class="name"><a href="#">Copper &amp; Pine — POS integration</a></td>
+          <td class="muted">Copper &amp; Pine</td>
+          <td><span class="pill warning">Proposal</span></td>
+          <td class="right num">$64,000</td>
+          <td class="right num" style="color:var(--danger);font-weight:var(--fw-medium)">Jul 9 · 6d</td>
+          <td class="muted">Caleb Lamro</td>
+        </tr>
+        <tr>
+          <td class="name"><a href="#">Meridian Health — Platform migration</a></td>
+          <td class="muted">Meridian Health</td>
+          <td><span class="pill warning">Proposal</span></td>
+          <td class="right num">$285,000</td>
+          <td class="right num">Jul 31</td>
+          <td class="muted">Ana Ferreira</td>
+        </tr>
+
+        <tr class="grp"><td colspan="6">Closing August <span class="sum">2 deals · $360,000</span></td></tr>
+        <tr>
+          <td class="name"><a href="#">Northwind Logistics — Renewal + upsell</a></td>
+          <td class="muted">Northwind Logistics</td>
+          <td><span class="pill neutral">Qualification</span></td>
+          <td class="right num">$150,000</td>
+          <td class="right num">Aug 12</td>
+          <td class="muted">Ana Ferreira</td>
+        </tr>
+        <tr>
+          <td class="name"><a href="#">Statler Financial — Compliance suite</a></td>
+          <td class="muted">Statler Financial</td>
+          <td><span class="pill neutral">Qualification</span></td>
+          <td class="right num">$210,000</td>
+          <td class="right num">Aug 20</td>
+          <td class="muted">Caleb Lamro</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script>nbBadge('L3', 'Stage segments');</script>
+</body>
+</html>

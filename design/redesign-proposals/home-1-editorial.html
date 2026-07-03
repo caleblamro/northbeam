@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Home · Editorial ledger — Northbeam redesign H1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 980px; }
+
+  /* Hero: number sits directly on the page bg — no card */
+  .hero { padding-top: var(--sp-6); }
+  .hero-top { display: flex; align-items: baseline; justify-content: space-between; }
+  .hero-link { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-sm); color: var(--accent); font-weight: var(--fw-medium); }
+  .hero-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+  .hero-num {
+    margin-top: var(--sp-4);
+    display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap;
+  }
+  .hero-num .amount {
+    font-size: clamp(3rem, 6.5vw, 4.25rem);
+    line-height: 1.02;
+    letter-spacing: -0.04em;
+    font-weight: var(--fw-regular);
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-sub { margin-top: var(--sp-3); display: flex; align-items: center; gap: 10px; font-size: var(--text-base); color: var(--ink-muted); }
+  .hero-sub .strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .hero-spark { margin-top: var(--sp-6); color: var(--accent); width: 100%; display: block; }
+
+  /* Attention strip: slim inline pills, not a boxed panel */
+  .attn { margin-top: var(--sp-6); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .attn .lbl { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); font-weight: var(--fw-medium); color: var(--warning); }
+  .attn a.pill { transition: filter 0.15s var(--ease); }
+  .attn a.pill:hover { filter: brightness(0.96); }
+
+  /* Metric band: hairline-divided, no cards */
+  .band {
+    margin-top: var(--sp-10);
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .band > a {
+    padding: var(--sp-5) var(--sp-5);
+    display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+    transition: background 0.15s var(--ease);
+  }
+  .band > a:hover { background: var(--surface-hover); }
+  .band > a + a { border-left: 1px solid var(--border); }
+  .band .v { font-size: var(--text-2xl); font-weight: var(--fw-medium); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .band .l { margin-top: 2px; font-size: var(--text-sm); color: var(--ink-muted); }
+  .band .spark { color: var(--ink-subtle); }
+
+  /* Activity ledger: flat rows, mono time gutter, date group headers */
+  .ledger { margin-top: var(--sp-12); }
+  .ledger-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: var(--sp-2); }
+  .day { margin-top: var(--sp-5); padding-bottom: var(--sp-2); font-size: var(--text-xs); font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-subtle); border-bottom: 1px solid var(--border); }
+  .row {
+    display: grid; grid-template-columns: 64px 24px 1fr auto;
+    align-items: center; gap: var(--sp-3);
+    padding: 11px 2px;
+    border-bottom: 1px solid var(--divider);
+    transition: background 0.12s var(--ease);
+  }
+  .row:hover { background: var(--surface-hover); }
+  .row .t { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .row .ic { display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-full); background: var(--surface-sunken); border: 1px solid var(--border); color: var(--ink-muted); }
+  .row .ic svg { width: 12px; height: 12px; }
+  .row .what { font-size: var(--text-base); color: var(--ink-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .what b { color: var(--ink); font-weight: var(--fw-medium); }
+  .row .rec { font-size: var(--text-sm); color: var(--ink-muted); }
+  .row:hover .rec { color: var(--accent); }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Home');</script>
+
+<main class="page">
+  <!-- Hero -->
+  <section class="hero reveal reveal-1">
+    <div class="hero-top">
+      <span class="eyebrow">Open pipeline</span>
+      <a class="hero-link" href="#">View pipeline <svg class="i" data-icon="arrow-right" style="width:12px;height:12px"></svg></a>
+    </div>
+    <div class="hero-num">
+      <span class="amount">$1,870,500</span>
+      <span class="pill success plain"><svg class="i" data-icon="trending-up" style="width:12px;height:12px"></svg>&nbsp;12.4%</span>
+    </div>
+    <div class="hero-sub">
+      <span><span class="strong">9</span> open deals</span>
+      <span class="subtle">·</span>
+      <span><span class="strong">2</span> closing this month</span>
+      <span class="subtle">·</span>
+      <span style="font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.14em">Last 30 days</span>
+    </div>
+    <svg class="spark hero-spark" data-points="1420,1445,1430,1490,1510,1495,1560,1540,1600,1630,1615,1660,1700,1685,1730,1760,1745,1790,1810,1795,1830,1850,1845,1870" data-w="932" data-h="72" data-fill></svg>
+  </section>
+
+  <!-- Needs attention: inline strip -->
+  <section class="attn reveal reveal-2">
+    <span class="lbl"><svg class="i" data-icon="alert" style="width:13px;height:13px"></svg> 4 need attention</span>
+    <a class="pill warning" href="#">Acme Robotics · no activity in 14d</a>
+    <a class="pill danger" href="#">Copper &amp; Pine · closes in 6d, no proposal</a>
+    <a class="pill neutral" href="#">3 deals missing close dates</a>
+    <a class="pill info" href="#">Meridian Health · contract in review 5d</a>
+  </section>
+
+  <!-- Metric band -->
+  <section class="band reveal reveal-3">
+    <a href="#">
+      <div><div class="v">42</div><div class="l">Accounts</div></div>
+      <svg class="spark" data-points="31,33,32,35,36,38,37,40,41,42" data-w="90" data-h="30"></svg>
+    </a>
+    <a href="#">
+      <div><div class="v">187</div><div class="l">Contacts</div></div>
+      <svg class="spark" data-points="120,131,128,140,152,149,161,170,178,187" data-w="90" data-h="30"></svg>
+    </a>
+    <a href="#">
+      <div><div class="v">34</div><div class="l">Deals</div></div>
+      <svg class="spark" data-points="21,24,23,26,27,26,29,31,32,34" data-w="90" data-h="30"></svg>
+    </a>
+  </section>
+
+  <!-- Activity ledger -->
+  <section class="ledger reveal reveal-4">
+    <div class="ledger-head">
+      <span class="eyebrow">Recent activity</span>
+      <a class="hero-link" href="#">View all</a>
+    </div>
+
+    <div class="day">Today</div>
+    <a class="row" href="#">
+      <span class="t">2:42 PM</span>
+      <span class="ic"><svg class="i" data-icon="phone"></svg></span>
+      <span class="what"><b>Call</b> with Dana Whitfield — discussed enterprise rollout timeline</span>
+      <span class="rec">Acme Robotics</span>
+    </a>
+    <a class="row" href="#">
+      <span class="t">12:18 PM</span>
+      <span class="ic"><svg class="i" data-icon="mail"></svg></span>
+      <span class="what"><b>Email</b> to Priya Raman — sent revised proposal v3</span>
+      <span class="rec">Meridian Health</span>
+    </a>
+    <a class="row" href="#">
+      <span class="t">9:05 AM</span>
+      <span class="ic"><svg class="i" data-icon="note"></svg></span>
+      <span class="what"><b>Note</b> — legal reviewing MSA redlines, expect turnaround Friday</span>
+      <span class="rec">Halcyon Aero</span>
+    </a>
+
+    <div class="day">Yesterday</div>
+    <a class="row" href="#">
+      <span class="t">4:30 PM</span>
+      <span class="ic"><svg class="i" data-icon="calendar"></svg></span>
+      <span class="what"><b>Meeting</b> — POS integration scoping with store ops team</span>
+      <span class="rec">Copper &amp; Pine</span>
+    </a>
+    <a class="row" href="#">
+      <span class="t">11:47 AM</span>
+      <span class="ic"><svg class="i" data-icon="mail"></svg></span>
+      <span class="what"><b>Email</b> from Tom Okafor — completed security questionnaire attached</span>
+      <span class="rec">Statler Financial</span>
+    </a>
+
+    <div class="day">Jun 27</div>
+    <a class="row" href="#">
+      <span class="t">3:12 PM</span>
+      <span class="ic"><svg class="i" data-icon="check"></svg></span>
+      <span class="what"><b>Deal won</b> — Juniper Labs data pipeline pilot closed at <b>$122,400</b></span>
+      <span class="rec">Juniper Labs</span>
+    </a>
+  </section>
+</main>
+
+<script>nbBadge('H1', 'Editorial ledger');</script>
+</body>
+</html>

@@ -28,6 +28,7 @@ import type { SalesforceClient } from '@northbeam/salesforce';
 import { eq } from 'drizzle-orm';
 import { enqueueCompute } from '../queue/compute.js';
 import { flagIfAuthError } from './client.js';
+import { importAnalyticsViews } from './import-views.js';
 import type { MappedObject, ProposedField } from './mapper.js';
 
 const BATCH = 500;
@@ -224,6 +225,16 @@ export async function executeRun(
     // job per object) so the import itself completes promptly.
     for (const plan of plans) {
       await enqueueCompute({ orgId, objectKey: plan.obj.targetKey, reason: 'import' });
+    }
+
+    // 6 — reports + dashboards → view rows. Best-effort: a reporting failure
+    // records itself in stats and never fails the record import.
+    stats.currentObject = 'Importing reports & dashboards';
+    await writeStats();
+    try {
+      await importAnalyticsViews({ run, client, orgId, plans, stats, writeStats });
+    } catch (err) {
+      stats.reportsError = err instanceof Error ? err.message : String(err);
     }
 
     stats.currentObject = undefined;

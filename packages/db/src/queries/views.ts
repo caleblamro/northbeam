@@ -3,7 +3,7 @@
 // background jobs that pull a user's views for AI summarisation — gets the
 // same access rules.
 
-import { type SQL, and, asc, desc, eq, or, sql } from 'drizzle-orm';
+import { type SQL, and, asc, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import type { DbExecutor } from '../client.js';
 import type { Role } from '../roles.js';
 import { view } from '../schema.js';
@@ -43,6 +43,31 @@ export async function listViewsForUser(
     ? and(eq(view.organizationId, orgId), eq(view.objectId, objectId), visibleToUser(userId, role))
     : and(eq(view.organizationId, orgId), visibleToUser(userId, role));
   return db.select().from(view).where(where).orderBy(desc(view.isDefault), asc(view.label));
+}
+
+/** The caller's Home view — a workspace-scoped view (null objectId) keyed
+ *  'home'. Prefers the user's own; falls back to one shared with them (e.g.
+ *  an org-wide home an admin published). Null when nothing is saved yet —
+ *  the web layer renders its built-in default artifact then. */
+export async function getHomeViewForUser(
+  db: DbExecutor,
+  orgId: string,
+  userId: string,
+  role: Role,
+): Promise<ViewRow | null> {
+  const rows = await db
+    .select()
+    .from(view)
+    .where(
+      and(
+        eq(view.organizationId, orgId),
+        isNull(view.objectId),
+        eq(view.key, 'home'),
+        visibleToUser(userId, role),
+      ),
+    )
+    .orderBy(desc(view.updatedAt));
+  return rows.find((r) => r.ownerId === userId) ?? rows[0] ?? null;
 }
 
 /** One view by id, scoped to the org. Visibility check is the caller's job —

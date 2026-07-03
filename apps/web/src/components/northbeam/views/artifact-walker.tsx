@@ -16,36 +16,32 @@
 // exactly as before (full-width stack). Children inside a SectionCard keep
 // a plain vertical stack.
 
-import {
-  BarList,
-  type ChartDatum,
-  Donut,
-  LineChart,
-  StatTile,
-} from '@/components/northbeam/charts';
+import { StatTile } from '@/components/northbeam/charts';
 import { DescriptionList } from '@/components/northbeam/description-list';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
 import { FilterDialog } from '@/components/northbeam/filter-bar';
+import { Greeting } from '@/components/northbeam/greeting';
+import { HomeAttention } from '@/components/northbeam/home-attention';
 import { ListToolbar } from '@/components/northbeam/list-toolbar';
 import { MetricGroup } from '@/components/northbeam/metric-group';
 import { PageHeader } from '@/components/northbeam/page-header';
 import { RecordGrid } from '@/components/northbeam/record-grid';
 import { RecordTable } from '@/components/northbeam/record-table';
 import { SectionCard } from '@/components/northbeam/section-card';
+import { AggChart, coerceChartType } from '@/components/northbeam/views/agg-chart';
+import {
+  type AggBucket,
+  type AggregateFn,
+  fmtAggregate,
+  toAggFn,
+  toGrain,
+} from '@/components/northbeam/views/aggregate-data';
 import { Badge } from '@/components/ui/badge';
 import { Callout } from '@/components/ui/callout';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { trpc } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { timeAgo } from '@/lib/time';
@@ -173,6 +169,10 @@ function RenderLeaf({ node, action }: { node: ArtifactNode; action?: ReactNode }
       }));
       return <MetricGroup items={items} />;
     }
+    case 'Greeting':
+      return <Greeting subtitle={props.subtitle as string | undefined} />;
+    case 'AttentionQueue':
+      return <HomeAttention />;
     case 'Metric':
       return <MetricNode props={props} />;
     case 'Chart':
@@ -273,83 +273,19 @@ function RenderLeaf({ node, action }: { node: ArtifactNode; action?: ReactNode }
   }
 }
 
-/* ── Aggregation helpers (Chart + Metric + report renderer) ─────────────── */
+/* ── Aggregation helpers ─────────────────────────────────────────────────
+   The pure helpers moved to ./aggregate-data (and BucketsTable to
+   ./agg-chart) when buckets grew a second grouping level; re-exported here
+   so existing imports keep working. */
 
-export type AggregateFn = 'count' | 'sum' | 'avg';
-
-/** Format an aggregate for display. Currency/percent follow the field type;
- *  large magnitudes compact (12.9K / $4.2M) so stat tiles stay short. */
-export function fmtAggregate(n: number, field?: FieldDefLite): string {
-  if (field?.type === 'currency') {
-    const compact = Math.abs(n) >= 100_000;
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: field.config?.currencyCode ?? 'USD',
-      notation: compact ? 'compact' : 'standard',
-      maximumFractionDigits: compact ? 1 : 0,
-    }).format(n);
-  }
-  if (field?.type === 'percent') {
-    return `${n.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`;
-  }
-  if (Math.abs(n) >= 100_000) {
-    return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(
-      n,
-    );
-  }
-  return n.toLocaleString('en-US', { maximumFractionDigits: 1 });
-}
-
-/** One group-by bucket as returned by `record.aggregate`. */
-export type AggBucket = { group: string | number | boolean | null; value: number; count: number };
-
-/** Human label for an aggregate bucket: hydrated picklist option label (the
- *  `options` record.aggregate ships), reference record label (its
- *  `groupLabels`), checkbox Yes/No, empty → "None". */
-export function bucketLabel(
-  group: AggBucket['group'],
-  options: { value: string; label: string }[],
-  refLabels: Record<string, string>,
-): string {
-  if (group === null || group === '') return 'None';
-  if (typeof group === 'boolean') return group ? 'Yes' : 'No';
-  const key = String(group);
-  return options.find((o) => o.value === key)?.label ?? refLabels[key] ?? key;
-}
-
-/** Fold aggregate buckets into chart data: top-`cap` buckets plus the tail
- *  folded into "Other" (count-weighted for avg). record.aggregate returns
- *  buckets ranked by value desc, so slicing = top-N. */
-export function foldBuckets(args: {
-  buckets: AggBucket[];
-  options?: { value: string; label: string }[] | null;
-  refLabels?: Record<string, string> | null;
-  agg: AggregateFn;
-  cap: number;
-  measureField?: FieldDefLite;
-}): { items: ChartDatum[]; totalDisplay: string } {
-  const { buckets, agg, cap, measureField } = args;
-  const options = args.options ?? [];
-  const refLabels = args.refLabels ?? {};
-  const items: ChartDatum[] = buckets.slice(0, cap).map((b) => ({
-    label: bucketLabel(b.group, options, refLabels),
-    value: b.value,
-    display: fmtAggregate(b.value, measureField),
-  }));
-  const tail = buckets.slice(cap);
-  if (tail.length > 0) {
-    const n = tail.reduce((acc, t) => acc + t.count, 0);
-    const v =
-      agg === 'avg'
-        ? n > 0
-          ? tail.reduce((acc, t) => acc + t.value * t.count, 0) / n
-          : 0
-        : tail.reduce((acc, t) => acc + t.value, 0);
-    items.push({ label: 'Other', value: v, display: fmtAggregate(v, measureField), isOther: true });
-  }
-  const total = items.reduce((acc, it) => acc + Math.max(it.value, 0), 0);
-  return { items, totalDisplay: fmtAggregate(total, measureField) };
-}
+export {
+  type AggBucket,
+  type AggregateFn,
+  bucketLabel,
+  fmtAggregate,
+  foldBuckets,
+} from '@/components/northbeam/views/aggregate-data';
+export { BucketsTable } from '@/components/northbeam/views/agg-chart';
 
 function deltaTrend(delta: string): 'up' | 'down' | 'neutral' {
   const t = delta.trim();
@@ -374,7 +310,7 @@ type MetricProps = {
 
 function MetricNode({ props }: { props: Record<string, unknown> }) {
   const p = props as MetricProps;
-  const fn: AggregateFn = p.fn ?? 'count';
+  const fn = toAggFn(p.fn);
   const live = Boolean(p.objectKey && p.fn);
 
   // Server-side aggregation — same visibility rules as record.list, but over
@@ -418,83 +354,59 @@ type ChartProps = {
   title?: string;
   objectKey?: string;
   groupBy?: string;
+  dateGrain?: string;
+  groupBy2?: string;
+  groupBy2Grain?: string;
   measure?: string;
   fn?: AggregateFn;
-  chartType?: 'bar' | 'donut' | 'line' | 'table';
+  chartType?: string;
+  stacked?: boolean;
   filters?: Filter[];
   limit?: number;
 };
 
 function ChartNode({ props }: { props: Record<string, unknown> }) {
   const p = props as ChartProps;
-  const fn: AggregateFn = p.fn ?? 'count';
-  // A donut states part-to-whole; averages aren't parts of a whole → bars.
-  const requested = p.chartType ?? 'bar';
-  const chartType = requested === 'donut' && fn === 'avg' ? 'bar' : requested;
+  const fn = toAggFn(p.fn);
+  const hasGroup2 = Boolean(p.groupBy2);
+  // Degrade shape mismatches instead of erroring — old saved artifacts and
+  // drifted AI output must keep rendering (unknown chartType → bar).
+  const chartType = coerceChartType(p.chartType, {
+    agg: fn,
+    hasGroup: Boolean(p.groupBy),
+    hasGroup2,
+  });
   const enabled = Boolean(p.objectKey && p.groupBy);
 
-  // Server-side group/aggregate over ALL rows. Fetch a deep bucket set (200)
-  // and keep the top-N + "Other" folding client-side — the endpoint caps
-  // buckets but doesn't fold the tail.
+  // Server-side group/aggregate over ALL rows — one native GROUP BY (two
+  // levels ride the same query). Fetch a deep bucket set and keep the top-N +
+  // "Other" folding client-side.
   const query = trpc.record.aggregate.useQuery(
     {
       objectKey: p.objectKey ?? '',
       groupBy: p.groupBy,
+      groupByGrain: toGrain(p.dateGrain),
+      groupBy2: p.groupBy2 || undefined,
+      groupBy2Grain: toGrain(p.groupBy2Grain),
       measure: { agg: fn, fieldKey: fn === 'count' ? undefined : p.measure },
       filters: p.filters ?? [],
-      limit: 200,
+      limit: hasGroup2 ? 1000 : 200,
     },
     { enabled, retry: false, meta: { silent: true } },
   );
-  // Field metadata shapes the display: currency/percent formatting for the
-  // measure, and the group column header for table charts. object.get is
-  // deduped by react-query, so sibling nodes share one fetch.
-  const needsMeta = enabled && ((fn !== 'count' && Boolean(p.measure)) || chartType === 'table');
+  // Field metadata shapes the display: currency/percent formatting, table
+  // headers, and date-grain label detection. object.get is deduped by
+  // react-query, so sibling nodes share one fetch.
   const meta = trpc.object.get.useQuery(
     { key: p.objectKey ?? '' },
-    { enabled: needsMeta, retry: false, meta: { silent: true } },
+    { enabled, retry: false, meta: { silent: true } },
   );
   const metaFields = (meta.data?.fields ?? []) as FieldDefLite[];
   const measureField = fn === 'count' ? undefined : metaFields.find((f) => f.key === p.measure);
   const groupField = metaFields.find((f) => f.key === p.groupBy);
+  const group2Field = metaFields.find((f) => f.key === p.groupBy2);
 
-  const buckets = query.data?.buckets ?? [];
-  const options = query.data?.options ?? [];
-  const refLabels = query.data?.groupLabels ?? {};
-
-  const data = useMemo(() => {
-    if (!query.data) return null;
-    if (chartType === 'line') {
-      // A line reads left-to-right as an ordered series: sort by group label
-      // and never fold the tail into "Other" — folding is for ranked charts.
-      const labelOf = (g: AggBucket['group']) =>
-        bucketLabel(g, query.data.options ?? [], query.data.groupLabels ?? {});
-      const items = [...query.data.buckets]
-        .sort((a, b) =>
-          labelOf(a.group).localeCompare(labelOf(b.group), 'en-US', { numeric: true }),
-        )
-        .map((b) => ({
-          label: labelOf(b.group),
-          value: b.value,
-          display: fmtAggregate(b.value, measureField),
-        }));
-      const total = items.reduce((acc, it) => acc + Math.max(it.value, 0), 0);
-      return { items, totalDisplay: fmtAggregate(total, measureField) };
-    }
-    // Top-N, tail folded into "Other". Donuts hold ≤ 6 segments (5 + Other).
-    const cap =
-      chartType === 'donut'
-        ? Math.min(Math.max(p.limit ?? 5, 1), 5)
-        : Math.min(Math.max(p.limit ?? 8, 1), 12);
-    return foldBuckets({
-      buckets: query.data.buckets,
-      options: query.data.options,
-      refLabels: query.data.groupLabels,
-      agg: fn,
-      cap,
-      measureField,
-    });
-  }, [query.data, p.limit, fn, chartType, measureField]);
+  const buckets = (query.data?.buckets ?? []) as AggBucket[];
 
   if (!p.objectKey || !p.groupBy) {
     return <UnsupportedNodeNote message="Chart: missing objectKey/groupBy." />;
@@ -508,7 +420,7 @@ function ChartNode({ props }: { props: Record<string, unknown> }) {
   }
 
   let body: ReactNode;
-  if (query.isLoading || (needsMeta && meta.isLoading)) {
+  if (query.isLoading || meta.isLoading) {
     // Skeleton on FIRST load only — refetches hold the previous render dimmed.
     body = (
       <div className="flex flex-col gap-3">
@@ -517,7 +429,7 @@ function ChartNode({ props }: { props: Record<string, unknown> }) {
         <Skeleton className="h-4 w-2/3" />
       </div>
     );
-  } else if (!data || data.items.length === 0) {
+  } else if (buckets.length === 0) {
     body = (
       <EmptyState
         title="No data to chart"
@@ -528,15 +440,23 @@ function ChartNode({ props }: { props: Record<string, unknown> }) {
   } else {
     body = (
       <div className={cn('transition-opacity', query.isFetching && 'opacity-60')}>
-        {chartType === 'donut' ? (
-          <Donut segments={data.items} totalDisplay={data.totalDisplay} />
-        ) : chartType === 'line' ? (
-          <LineChart points={data.items} />
-        ) : chartType === 'table' ? (
-          <BucketsTable {...{ buckets, options, refLabels, agg: fn, groupField, measureField }} />
-        ) : (
-          <BarList items={data.items} />
-        )}
+        <AggChart
+          chartType={chartType === 'kpi' ? 'bar' : chartType}
+          agg={fn}
+          buckets={buckets}
+          options={query.data?.options}
+          refLabels={query.data?.groupLabels}
+          options2={query.data?.options2}
+          group2Labels={query.data?.group2Labels}
+          groupField={groupField}
+          group2Field={group2Field}
+          grain={toGrain(p.dateGrain)}
+          grain2={toGrain(p.groupBy2Grain)}
+          hasGroup2={hasGroup2}
+          stacked={p.stacked}
+          limit={p.limit}
+          measureField={measureField}
+        />
       </div>
     );
   }
@@ -544,55 +464,6 @@ function ChartNode({ props }: { props: Record<string, unknown> }) {
     <SectionCard title={p.title} className="h-full">
       {body}
     </SectionCard>
-  );
-}
-
-/** Aggregate buckets as a plain table — Chart `table` type here, and the
- *  report renderer's accessibility twin below every report chart. */
-export function BucketsTable({
-  buckets,
-  options,
-  refLabels,
-  agg,
-  groupField,
-  measureField,
-}: {
-  buckets: AggBucket[];
-  options: { value: string; label: string }[];
-  refLabels: Record<string, string>;
-  agg: AggregateFn;
-  groupField?: FieldDefLite;
-  measureField?: FieldDefLite;
-}) {
-  const valueHead =
-    agg === 'count' ? 'Count' : `${agg === 'sum' ? 'Sum' : 'Avg'} of ${measureField?.label ?? ''}`;
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>{groupField?.label ?? 'Group'}</TableHead>
-          <TableHead className="text-right">{valueHead}</TableHead>
-          {agg !== 'count' && <TableHead className="text-right">Records</TableHead>}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {buckets.map((b, i) => (
-          <TableRow key={`${String(b.group)}-${i}`}>
-            <TableCell>
-              {groupField ? bucketLabel(b.group, options, refLabels) : 'All records'}
-            </TableCell>
-            <TableCell className="text-right tabular-nums">
-              {fmtAggregate(b.value, measureField)}
-            </TableCell>
-            {agg !== 'count' && (
-              <TableCell className="text-right text-muted-foreground tabular-nums">
-                {b.count.toLocaleString('en-US')}
-              </TableCell>
-            )}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
   );
 }
 

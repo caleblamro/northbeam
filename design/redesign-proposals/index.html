@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Northbeam — page redesign proposals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 940px; }
+  .hero { padding-top: var(--sp-8); }
+  .hero h1 { margin: var(--sp-3) 0 0; font-size: var(--text-3xl); font-weight: var(--fw-semibold); letter-spacing: -0.025em; }
+  .hero p { margin: var(--sp-3) 0 0; max-width: 620px; color: var(--ink-muted); font-size: var(--text-md); line-height: var(--lh-base); }
+  .hero .note { margin-top: var(--sp-3); display: inline-flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--ink-muted); padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--surface); }
+
+  .grp { margin-top: var(--sp-12); }
+  .grp .hd { display: flex; align-items: baseline; gap: 10px; margin-bottom: var(--sp-2); }
+  .grp .hd h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+  .grp .hd .cur { font-size: var(--text-sm); color: var(--ink-subtle); }
+  .grp .pain { font-size: var(--text-sm); color: var(--ink-muted); max-width: 700px; margin-bottom: var(--sp-4); }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-3); }
+  .v {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: var(--sp-5);
+    border: 1px solid var(--border); border-radius: var(--radius-xl);
+    background: var(--surface); box-shadow: var(--shadow-xs);
+    transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease), transform 0.15s var(--ease-out);
+  }
+  .v:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .v .k { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--accent); }
+  .v .nm { font-size: var(--text-md); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+  .v .ds { font-size: var(--text-sm); color: var(--ink-muted); line-height: var(--lh-snug); flex: 1; }
+  .v .fix { font-size: var(--text-xs); color: var(--ink-secondary); padding-top: 8px; border-top: 1px solid var(--divider); }
+  .v .fix b { font-weight: var(--fw-semibold); }
+  .v .open { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; font-size: var(--text-sm); color: var(--accent); font-weight: var(--fw-medium); }
+  @media (max-width: 760px) { .cards { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Home');</script>
+
+<main class="page">
+  <header class="hero reveal reveal-1">
+    <span class="eyebrow">Design exploration · July 2026</span>
+    <h1>Page redesign proposals</h1>
+    <p>Nine layout concepts for the three highest-traffic surfaces. All of them keep the existing
+    token system — near-black brand, single indigo accent, Inter, hairline borders — and only
+    rework composition, hierarchy, and density. Same seed data everywhere so comparisons are fair.</p>
+    <span class="note"><svg class="i" data-icon="sun" style="width:13px;height:13px"></svg> Use the sun/moon toggle in the topbar of any mockup — every concept is themed for light and dark.</span>
+  </header>
+
+  <!-- Home -->
+  <section class="grp reveal reveal-2">
+    <div class="hd"><h2>Home dashboard</h2><span class="cur">currently: hero card → stat strip → two cards</span></div>
+    <p class="pain">Today everything is boxed and equally weighted, and the actionable "needs attention" panel is bottom-right where it's seen last.</p>
+    <div class="cards">
+      <a class="v" href="home-1-editorial.html">
+        <span class="k">H1</span><span class="nm">Editorial ledger</span>
+        <span class="ds">Kills the boxes. Pipeline number sits directly on the page at display size, metrics become a hairline band with micro-sparklines, activity is a flat ledger with a mono time gutter.</span>
+        <span class="fix"><b>Fixes:</b> flat hierarchy — typography does the work instead of card borders.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="home-2-command-center.html">
+        <span class="k">H2</span><span class="nm">Command center</span>
+        <span class="ds">Dense three-column cockpit: stat tiles + pipeline-by-stage bars, a real trend chart with period switcher, and a unified inbox merging attention items with activity. One viewport, no scroll.</span>
+        <span class="fix"><b>Fixes:</b> low information density; adds stage breakdown and closing-soon table the current page lacks.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="home-3-focus-queue.html">
+        <span class="k">H3</span><span class="nm">Focus queue</span>
+        <span class="ds">Task-first morning view: greeting, slim stat band, then needs-attention promoted to full-width actionable rows with one-click actions ("Send proposal", "Log a touch").</span>
+        <span class="fix"><b>Fixes:</b> the actionable panel being buried; the page tells you what to do, not just what exists.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- Lists -->
+  <section class="grp reveal reveal-3">
+    <div class="hd"><h2>Record lists</h2><span class="cur">currently: header + view picker + toolbar + table-in-card</span></div>
+    <p class="pain">Four rows of chrome stack up before any data, and the table floats in a card instead of owning the viewport. Mocked as the Deals list.</p>
+    <div class="cards">
+      <a class="v" href="list-1-full-bleed.html">
+        <span class="k">L1</span><span class="nm">Full-bleed grid</span>
+        <span class="ds">All chrome collapses into one control row (identity · view tabs · filters · search · new). Edge-to-edge table, sticky header, hover row-actions, bulk-select bar, and a sticky Σ/avg/count footer.</span>
+        <span class="fix"><b>Fixes:</b> chrome stack; adds aggregates and bulk actions.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="list-2-split-preview.html">
+        <span class="k">L2</span><span class="nm">Split master-detail</span>
+        <span class="ds">List on the left, live preview pane on the right: selected deal's amount, stage stepper, key fields, latest activity, quick actions. Triage a whole pipeline without ever navigating away.</span>
+        <span class="fix"><b>Fixes:</b> the list→detail→back round-trip for every record.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="list-3-stage-segments.html">
+        <span class="k">L3</span><span class="nm">Stage segments</span>
+        <span class="ds">A proportional stage bar above the table — count + value per stage, clickable as filters — with saved views as underline tabs and rows grouped by close month with per-group sums.</span>
+        <span class="fix"><b>Fixes:</b> no pipeline shape visible from the list; filtering requires the filter dialog.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- Detail -->
+  <section class="grp reveal reveal-4">
+    <div class="hd"><h2>Record detail</h2><span class="cur">currently: header + stage path + stat strip + Details/Related tabs</span></div>
+    <p class="pain">Content hides behind tabs, and the key context (stage, owner, amount) scrolls away with the header. Mocked as a Deal record.</p>
+    <div class="cards">
+      <a class="v" href="detail-1-summary-rail.html">
+        <span class="k">D1</span><span class="nm">Summary rail</span>
+        <span class="ds">Sticky 300px identity rail — amount, stage stepper, key fields, quick actions — beside a single scrolling column of every section and related list. No tabs at all.</span>
+        <span class="fix"><b>Fixes:</b> context scrolling away; tab-hidden related records.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="detail-2-hero-workspace.html">
+        <span class="k">D2</span><span class="nm">Hero workspace</span>
+        <span class="ds">One compact hero band merges breadcrumb, identity, stat row, and a chevron stage path. Below, a two-column workspace: field sections + contacts left, activity/tasks/files rail right.</span>
+        <span class="fix"><b>Fixes:</b> vertical space burned before fields appear; adds a Lightning-style work rail.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="detail-3-document.html">
+        <span class="k">D3</span><span class="nm">Document view</span>
+        <span class="ds">Linear-issue feel: centered 760px column, H1 title, editable meta pills, flat hover-to-edit field rows, collapsible related groups, and a sticky scrollspy nav on the left.</span>
+        <span class="fix"><b>Fixes:</b> heavyweight boxed sections; reads like a document, edits inline.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+    </div>
+  </section>
+</main>
+</body>
+</html>

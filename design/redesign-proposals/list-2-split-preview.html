@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deals · Split master-detail — Northbeam redesign L2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  body { background: var(--bg); }
+  .page.wide { display: flex; flex-direction: column; padding: 0; }
+
+  .controls {
+    display: flex; align-items: center; gap: var(--sp-3);
+    padding: 10px var(--sp-5);
+    border-bottom: 1px solid var(--border);
+  }
+  .ident { display: flex; align-items: center; gap: 10px; }
+  .ident h1 { margin: 0; font-size: var(--text-md); font-weight: var(--fw-semibold); }
+  .ident .count { font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .viewsel { display: inline-flex; align-items: center; gap: 6px; height: var(--h-sm); padding: 0 10px; margin-left: var(--sp-2); border: 1px solid var(--border-field); border-radius: var(--radius-md); background: var(--surface); font-size: var(--text-sm); font-weight: var(--fw-medium); }
+  .tools { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .tool-search { display: flex; align-items: center; gap: 7px; height: var(--h-sm); width: 220px; padding: 0 10px; border: 1px solid var(--border-field); border-radius: var(--radius-md); background: var(--field-bg); color: var(--placeholder); font-size: var(--text-sm); }
+
+  .split { flex: 1; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr); min-height: 0; }
+
+  /* Left: simplified list */
+  .list { border-right: 1px solid var(--border); overflow: auto; }
+  .tbl { font-size: var(--text-sm); }
+  .tbl thead th { position: sticky; top: 0; background: var(--bg); box-shadow: inset 0 -1px 0 var(--border); border-bottom: 0; }
+  .tbl th:first-child, .tbl td:first-child { padding-left: var(--sp-5); }
+  .tbl tbody tr { cursor: pointer; }
+  tr.active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+  tr.active:hover { background: var(--accent-soft); }
+  .name { font-weight: var(--fw-medium); color: var(--ink); }
+  .sub { display: block; margin-top: 1px; font-size: var(--text-xs); color: var(--ink-muted); font-weight: var(--fw-regular); }
+
+  /* Right: preview pane */
+  .preview { overflow: auto; background: var(--bg-page); }
+  .pv { padding: var(--sp-6) var(--sp-6) var(--sp-10); }
+  .pv-head { display: flex; align-items: flex-start; gap: var(--sp-3); }
+  .pv-head .bd { min-width: 0; flex: 1; }
+  .pv-head h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--fw-semibold); letter-spacing: -0.01em; line-height: var(--lh-snug); }
+  .pv-head .meta { margin-top: 3px; display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--ink-muted); }
+  .pv-amount { margin-top: var(--sp-5); display: flex; align-items: baseline; gap: 10px; }
+  .pv-amount .v { font-size: var(--text-3xl); font-weight: var(--fw-medium); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .pv-amount .l { font-size: var(--text-sm); color: var(--ink-muted); }
+
+  .pv .stepper { margin-top: var(--sp-4); display: flex; gap: 4px; }
+  .pv .step { flex: 1; height: 5px; border-radius: 999px; background: var(--surface-active); }
+  .pv .step.done { background: var(--accent); }
+  .pv .steplbl { margin-top: 6px; display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--ink-subtle); }
+  .pv .steplbl .cur { color: var(--accent); font-weight: var(--fw-medium); }
+
+  .pv dl { margin: var(--sp-6) 0 0; display: grid; grid-template-columns: 120px 1fr; row-gap: 10px; column-gap: var(--sp-4); font-size: var(--text-sm); }
+  .pv dt { color: var(--ink-muted); }
+  .pv dd { margin: 0; color: var(--ink); font-weight: var(--fw-medium); }
+  .pv dd.num { font-variant-numeric: tabular-nums; }
+
+  .pv .sect { margin-top: var(--sp-7); }
+  .pv .sect .hd { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--sp-2); }
+  .pv .a { display: flex; gap: 9px; padding: 8px 0; border-bottom: 1px solid var(--divider); font-size: var(--text-sm); }
+  .pv .a .ic { display: grid; place-items: center; width: 22px; height: 22px; flex: none; border-radius: var(--radius-full); background: var(--surface-sunken); border: 1px solid var(--border); color: var(--ink-muted); }
+  .pv .a .ic svg { width: 11px; height: 11px; }
+  .pv .a .t { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle); white-space: nowrap; }
+  .pv-actions { margin-top: var(--sp-7); display: flex; gap: 8px; }
+
+  @media (max-width: 980px) { .split { grid-template-columns: 1fr; } .preview { display: none; } }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Deals');</script>
+
+<main class="page wide">
+  <div class="controls reveal reveal-1">
+    <div class="ident">
+      <span class="obj-chip">D</span>
+      <h1>Deals</h1>
+      <span class="count">34</span>
+    </div>
+    <button class="viewsel">All open <svg class="i" data-icon="chevron-down" style="width:12px;height:12px"></svg></button>
+    <div class="tools">
+      <span class="tool-search"><svg class="i" data-icon="search" style="width:13px;height:13px"></svg> Search deals…</span>
+      <button class="btn outline"><svg class="i" data-icon="filter"></svg> Filter</button>
+      <button class="btn primary"><svg class="i" data-icon="plus"></svg> New deal</button>
+    </div>
+  </div>
+
+  <div class="split reveal reveal-2">
+    <!-- Left: simplified table -->
+    <div class="list ds-scroll">
+      <table class="tbl">
+        <thead>
+          <tr><th>Deal</th><th>Stage</th><th class="right">Amount</th><th class="right">Close</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="name">Halcyon Aero — Fleet telemetry rollout</span><span class="sub">Halcyon Aero · Caleb Lamro</span></td><td><span class="pill info">Negotiation</span></td><td class="right num">$530,000</td><td class="right num muted">Sep 4</td></tr>
+          <tr class="active"><td><span class="name">Acme Robotics — Enterprise expansion</span><span class="sub">Acme Robotics · Caleb Lamro</span></td><td><span class="pill info">Negotiation</span></td><td class="right num">$420,000</td><td class="right num muted">Jul 18</td></tr>
+          <tr><td><span class="name">Meridian Health — Platform migration</span><span class="sub">Meridian Health · Ana Ferreira</span></td><td><span class="pill warning">Proposal</span></td><td class="right num">$285,000</td><td class="right num muted">Jul 31</td></tr>
+          <tr><td><span class="name">Statler Financial — Compliance suite</span><span class="sub">Statler Financial · Caleb Lamro</span></td><td><span class="pill neutral">Qualification</span></td><td class="right num">$210,000</td><td class="right num muted">Aug 20</td></tr>
+          <tr><td><span class="name">Northwind Logistics — Renewal + upsell</span><span class="sub">Northwind Logistics · Ana Ferreira</span></td><td><span class="pill neutral">Qualification</span></td><td class="right num">$150,000</td><td class="right num muted">Aug 12</td></tr>
+          <tr><td><span class="name">Vela Analytics — Starter plan upgrade</span><span class="sub">Vela Analytics · Jon Mistry</span></td><td><span class="pill success">Discovery</span></td><td class="right num">$96,500</td><td class="right num muted">Aug 25</td></tr>
+          <tr><td><span class="name">Orbital Freight — Route optimization</span><span class="sub">Orbital Freight · Jon Mistry</span></td><td><span class="pill success">Discovery</span></td><td class="right num">$77,000</td><td class="right num muted">Sep 15</td></tr>
+          <tr><td><span class="name">Copper &amp; Pine — POS integration</span><span class="sub">Copper &amp; Pine · Caleb Lamro</span></td><td><span class="pill warning">Proposal</span></td><td class="right num">$64,000</td><td class="right num" style="color:var(--danger)">Jul 9</td></tr>
+          <tr><td><span class="name">Brightloom Retail — Loyalty platform</span><span class="sub">Brightloom Retail · Ana Ferreira</span></td><td><span class="pill success">Discovery</span></td><td class="right num">$38,000</td><td class="right num muted">Sep 30</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Right: preview of selected row -->
+    <aside class="preview ds-scroll">
+      <div class="pv">
+        <div class="pv-head">
+          <span class="obj-chip lg">D</span>
+          <div class="bd">
+            <h2>Acme Robotics — Enterprise expansion</h2>
+            <div class="meta"><span>Deal</span><span>·</span><span class="mono" style="font-size:11px">rec_9f2ka7</span></div>
+          </div>
+          <button class="btn outline">Open <svg class="i" data-icon="arrow-up-right" style="width:12px;height:12px"></svg></button>
+        </div>
+
+        <div class="pv-amount">
+          <span class="v">$420,000</span>
+          <span class="l">expected · closes Jul 18, 2026</span>
+        </div>
+
+        <div class="stepper">
+          <div class="step done"></div><div class="step done"></div><div class="step done"></div><div class="step done"></div><div class="step"></div>
+        </div>
+        <div class="steplbl"><span>Discovery</span><span>Qualification</span><span>Proposal</span><span class="cur">Negotiation</span><span>Closed</span></div>
+
+        <dl>
+          <dt>Account</dt><dd><a href="#" style="color:var(--accent)">Acme Robotics</a></dd>
+          <dt>Owner</dt><dd>Caleb Lamro</dd>
+          <dt>Probability</dt><dd class="num">70%</dd>
+          <dt>Source</dt><dd>Salesforce import</dd>
+          <dt>Next step</dt><dd>Security review sign-off</dd>
+        </dl>
+
+        <div class="sect">
+          <div class="hd"><span class="eyebrow">Latest activity</span><a href="#" style="font-size:var(--text-sm);color:var(--accent);font-weight:var(--fw-medium)">All</a></div>
+          <div class="a"><span class="ic"><svg class="i" data-icon="phone"></svg></span><span>Call with Dana Whitfield — rollout timeline</span><span class="t">25m</span></div>
+          <div class="a"><span class="ic"><svg class="i" data-icon="mail"></svg></span><span>Email — pricing addendum sent</span><span class="t">14d</span></div>
+          <div class="a"><span class="ic"><svg class="i" data-icon="calendar"></svg></span><span>Meeting — infra team demo</span><span class="t">21d</span></div>
+        </div>
+
+        <div class="pv-actions">
+          <button class="btn primary"><svg class="i" data-icon="pencil"></svg> Edit</button>
+          <button class="btn outline"><svg class="i" data-icon="phone"></svg> Log call</button>
+          <button class="btn outline"><svg class="i" data-icon="note"></svg> Add note</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script>nbBadge('L2', 'Split master-detail');</script>
+</body>
+</html>

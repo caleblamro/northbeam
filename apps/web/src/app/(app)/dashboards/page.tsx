@@ -16,7 +16,9 @@ export default function DashboardsPage() {
   const views = trpc.view.list.useQuery({});
   const objects = trpc.object.list.useQuery();
   const objectById = new Map((objects.data ?? []).map((o) => [o.id, o]));
-  const dashboards = (views.data ?? []).filter((v) => v.type === 'dashboard');
+  // Workspace-scoped views (null objectId — the Home page) live on `/`, not
+  // in this grid; DashboardCard links through the object route.
+  const dashboards = (views.data ?? []).filter((v) => v.type === 'dashboard' && v.objectId != null);
   const loading = views.isLoading || objects.isLoading;
 
   const newButton = (
@@ -51,7 +53,12 @@ export default function DashboardsPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {dashboards.map((v, i) => (
-            <DashboardCard key={v.id} view={v} object={objectById.get(v.objectId)} index={i} />
+            <DashboardCard
+              key={v.id}
+              view={v}
+              object={v.objectId ? objectById.get(v.objectId) : undefined}
+              index={i}
+            />
           ))}
           <CreateCard
             label="Create dashboard"

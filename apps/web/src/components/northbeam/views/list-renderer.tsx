@@ -20,6 +20,10 @@ export function ListView({
   sort,
   onSortChange,
   onCellEdit,
+  onRowEdit,
+  onRowDelete,
+  tableChrome,
+  footerStart,
 }: ViewRendererProps) {
   const columnKeys = view.columns.length > 0 ? view.columns : fields.slice(0, 4).map((f) => f.key);
   const columns = columnKeys
@@ -39,6 +43,10 @@ export function ListView({
       sort={sort}
       onSortChange={onSortChange}
       onCellEdit={onCellEdit}
+      onRowEdit={onRowEdit}
+      onRowDelete={onRowDelete}
+      chrome={tableChrome}
+      footerStart={footerStart}
     />
   );
 }

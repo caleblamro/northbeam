@@ -8,6 +8,7 @@
 import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
+import type { DateGrain } from '../../src/dynamic/aggregate.js';
 import { buildAggregateQuery } from '../../src/dynamic/aggregate.js';
 import type { FieldRow, ObjectRow } from '../../src/queries/crm.js';
 
@@ -41,6 +42,8 @@ function field(overrides: Partial<FieldRow>): FieldRow {
 
 const stage = field({ key: 'stage', columnName: 'f_stage', type: 'picklist' });
 const amount = field({ key: 'amount', columnName: 'f_amount', type: 'currency' });
+const closeDate = field({ key: 'close_date', columnName: 'f_close_date', type: 'date' });
+const tags = field({ key: 'tags', columnName: 'f_tags', type: 'multipicklist' });
 
 describe('buildAggregateQuery', () => {
   it('builds a grouped sum with quoted identifiers and a bound limit', () => {
@@ -49,7 +52,7 @@ describe('buildAggregateQuery', () => {
         orgId: 'abc',
         object: object(),
         fields: [stage, amount],
-        groupBy: stage,
+        groups: [{ field: stage }],
         measure: { fn: 'sum', field: amount },
         filters: [],
         limit: 10,
@@ -62,13 +65,13 @@ describe('buildAggregateQuery', () => {
     expect(q.params).toEqual([10]);
   });
 
-  it('emits single-row totals without GROUP BY when groupBy is absent', () => {
+  it('emits single-row totals without GROUP BY when no grouping is given', () => {
     const q = render(
       buildAggregateQuery({
         orgId: 'abc',
         object: object(),
         fields: [stage, amount],
-        groupBy: null,
+        groups: [],
         measure: { fn: 'avg', field: amount },
         filters: [],
       }),
@@ -84,7 +87,7 @@ describe('buildAggregateQuery', () => {
         orgId: 'abc',
         object: object(),
         fields: [stage],
-        groupBy: stage,
+        groups: [{ field: stage }],
         measure: { fn: 'count' },
         filters: [],
       }),
@@ -92,17 +95,140 @@ describe('buildAggregateQuery', () => {
     expect(q.sql).toContain('count(*)::numeric as v');
   });
 
-  it('throws when sum/avg is missing its measure field', () => {
+  it('emits min/max aggregates over the measure column', () => {
+    for (const fn of ['min', 'max'] as const) {
+      const q = render(
+        buildAggregateQuery({
+          orgId: 'abc',
+          object: object(),
+          fields: [stage, amount],
+          groups: [{ field: stage }],
+          measure: { fn, field: amount },
+          filters: [],
+        }),
+      );
+      expect(q.sql).toContain(`${fn}("f_amount")::numeric as v`);
+    }
+  });
+
+  it('throws when a non-count aggregate is missing its measure field', () => {
+    for (const fn of ['sum', 'avg', 'min', 'max'] as const) {
+      expect(() =>
+        buildAggregateQuery({
+          orgId: 'abc',
+          object: object(),
+          fields: [stage],
+          groups: [{ field: stage }],
+          measure: { fn },
+          filters: [],
+        }),
+      ).toThrow(/requires a measure field/);
+    }
+  });
+
+  it('buckets date fields with date_trunc, ordered chronologically', () => {
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [closeDate, amount],
+        groups: [{ field: closeDate, grain: 'quarter' }],
+        measure: { fn: 'sum', field: amount },
+        filters: [],
+      }),
+    );
+    expect(q.sql).toContain(`(date_trunc('quarter', "f_close_date"))::date::text as g`);
+    expect(q.sql).toContain('group by 1 order by 1 asc nulls last limit $1');
+  });
+
+  it("defaults the date grain to 'month'", () => {
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [closeDate],
+        groups: [{ field: closeDate }],
+        measure: { fn: 'count' },
+        filters: [],
+      }),
+    );
+    expect(q.sql).toContain(`date_trunc('month', "f_close_date")`);
+  });
+
+  it('rejects a grain outside the whitelist (sql.raw injection guard)', () => {
     expect(() =>
       buildAggregateQuery({
         orgId: 'abc',
         object: object(),
-        fields: [stage],
-        groupBy: stage,
-        measure: { fn: 'sum' },
+        fields: [closeDate],
+        groups: [{ field: closeDate, grain: "century', now()); drop table x; --" as DateGrain }],
+        measure: { fn: 'count' },
         filters: [],
       }),
-    ).toThrow(/requires a measure field/);
+    ).toThrow(/unknown date grain/);
+  });
+
+  it('groups two levels in one pass, ranking whole primary groups by total', () => {
+    const owner = field({ key: 'owner', columnName: 'f_owner', type: 'reference' });
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage, owner, amount],
+        groups: [{ field: stage }, { field: owner }],
+        measure: { fn: 'sum', field: amount },
+        filters: [],
+      }),
+    );
+    expect(q.sql).toContain('select "f_stage" as g, "f_owner" as g2,');
+    expect(q.sql).toContain('group by 1, 2');
+    expect(q.sql).toContain(
+      'order by sum(coalesce(sum("f_amount"), 0)::numeric) over (partition by "f_stage") desc nulls last, 1 asc nulls last, v desc nulls last',
+    );
+  });
+
+  it('orders two-level date primaries chronologically instead of by total', () => {
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [closeDate, stage],
+        groups: [{ field: closeDate, grain: 'month' }, { field: stage }],
+        measure: { fn: 'count' },
+        filters: [],
+      }),
+    );
+    expect(q.sql).toContain('group by 1, 2 order by 1 asc nulls last, v desc nulls last');
+    expect(q.sql).not.toContain('partition by');
+  });
+
+  it('explodes multipicklist primaries with a LATERAL unnest, keeping the NULL bucket', () => {
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [tags, amount],
+        groups: [{ field: tags }],
+        measure: { fn: 'count' },
+        filters: [],
+        acl: { userId: 'u1', sharedRecordIds: [], isAdminish: false },
+      }),
+    );
+    expect(q.sql).toContain(`left join lateral unnest(coalesce("f_tags", '{}')) as mp0(e) on true`);
+    expect(q.sql).toContain('select mp0.e as g,');
+  });
+
+  it('rejects multipicklist as the secondary grouping', () => {
+    expect(() =>
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage, tags],
+        groups: [{ field: stage }, { field: tags }],
+        measure: { fn: 'count' },
+        filters: [],
+      }),
+    ).toThrow(/primary grouping/);
   });
 
   it('pushes filters through buildFilterPredicates (params bound, unknown keys dropped)', () => {
@@ -111,7 +237,7 @@ describe('buildAggregateQuery', () => {
         orgId: 'abc',
         object: object(),
         fields: [stage, amount],
-        groupBy: stage,
+        groups: [{ field: stage }],
         measure: { fn: 'count' },
         filters: [
           { fieldKey: 'stage', op: 'eq', value: 'closed_won' },
@@ -130,7 +256,7 @@ describe('buildAggregateQuery', () => {
         orgId: 'abc',
         object: object({ defaultVisibility: 'private' }),
         fields: [stage],
-        groupBy: stage,
+        groups: [{ field: stage }],
         measure: { fn: 'count' },
         filters: [],
         acl: { userId: 'u1', sharedRecordIds: ['s1'], isAdminish: false },
@@ -150,7 +276,7 @@ describe('buildAggregateQuery', () => {
           orgId: 'abc',
           object: opts.object,
           fields: [stage],
-          groupBy: stage,
+          groups: [{ field: stage }],
           measure: { fn: 'count' },
           filters: [],
           acl: { userId: 'u1', sharedRecordIds: [], isAdminish: opts.isAdminish },
@@ -160,18 +286,30 @@ describe('buildAggregateQuery', () => {
     }
   });
 
-  it('clamps the bucket limit to 200', () => {
-    const q = render(
+  it('clamps the bucket limit to 200 with one grouping and 1000 with two', () => {
+    const one = render(
       buildAggregateQuery({
         orgId: 'abc',
         object: object(),
         fields: [stage],
-        groupBy: stage,
+        groups: [{ field: stage }],
         measure: { fn: 'count' },
         filters: [],
         limit: 9999,
       }),
     );
-    expect(q.params).toEqual([200]);
+    expect(one.params).toEqual([200]);
+    const two = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage, closeDate],
+        groups: [{ field: closeDate }, { field: stage }],
+        measure: { fn: 'count' },
+        filters: [],
+        limit: 9999,
+      }),
+    );
+    expect(two.params).toEqual([1000]);
   });
 });

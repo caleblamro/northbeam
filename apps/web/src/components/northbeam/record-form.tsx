@@ -54,10 +54,15 @@ export function RecordFormDrawer({
     if (!sections?.length) {
       return [{ id: 'all', label: '', cols: 2, fields: editable }];
     }
+    // Imported layouts (Salesforce especially) can repeat a field across
+    // sections or even list it twice in one — each field renders ONCE (first
+    // placement wins), which also keeps Controller keys unique.
     const used = new Set<string>();
     const built = sections
       .map((s) => {
-        const fs = s.fields.map((k) => byKey.get(k)).filter(Boolean) as FieldDefLite[];
+        const fs = s.fields
+          .map((k) => byKey.get(k))
+          .filter((f): f is FieldDefLite => !!f && !used.has(f.key));
         for (const f of fs) used.add(f.key);
         return { id: s.id, label: s.label, cols: s.cols ?? 2, fields: fs };
       })
@@ -132,8 +137,10 @@ export function RecordFormDrawer({
       }
     >
       <form onSubmit={onSubmit}>
-        {groups.map((g) => (
-          <div key={g.id} className="form-section">
+        {groups.map((g, gi) => (
+          // Section ids aren't guaranteed unique in imported layouts — suffix
+          // the position so React keys never collide.
+          <div key={`${g.id}:${gi}`} className="form-section">
             {g.label && <div className="form-section__label">{g.label}</div>}
             <div
               className="form-grid"

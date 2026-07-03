@@ -46,6 +46,27 @@ export const ArtifactSortSchema = z.object({
   direction: z.enum(['asc', 'desc']),
 });
 
+/** The Chart node's chartType vocabulary — one const consumed by the prompt
+ *  gallery (artifact-generator), the repair pass, and the web walker so the
+ *  three can't drift. Deliberately excludes the report-view-only 'kpi': a
+ *  dashboard's single stat is the Metric component. */
+export const ARTIFACT_CHART_TYPES = [
+  'bar',
+  'line',
+  'area',
+  'donut',
+  'scatter',
+  'funnel',
+  'table',
+  'matrix',
+] as const;
+
+export type ArtifactChartType = (typeof ARTIFACT_CHART_TYPES)[number];
+
+/** Date-grain vocabulary for Chart `dateGrain` props — mirrors the engine's
+ *  DateGrain (packages/db) without coupling core to db. */
+export const ARTIFACT_DATE_GRAINS = ['day', 'week', 'month', 'quarter', 'year'] as const;
+
 /* ── Leaf nodes ─────────────────────────────────────────────────────────── */
 
 export const ARTIFACT_LEAF_COMPONENTS = [

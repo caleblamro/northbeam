@@ -11,6 +11,8 @@ export function StatsRow({ stats }: { stats: Record<string, unknown> }) {
     ['Records read', stats.records],
     ['Imported', stats.imported],
     ['References linked', stats.refsResolved],
+    ['Reports', stats.reportsImported],
+    ['Dashboards', stats.dashboardsImported],
   ];
   return (
     <div className="flex flex-wrap gap-x-10 gap-y-4">

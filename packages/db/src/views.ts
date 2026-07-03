@@ -94,15 +94,39 @@ export type FormatRule = {
 };
 
 /* ── Report config ──────────────────────────────────────────────────────────
-   Type-specific config for `report` views: one object, an optional group-by
-   field, a measure, and a chart type. Lives in `view.config`; the shared
-   filters/sort slots on the view row still apply. */
-export type ReportAgg = 'count' | 'sum' | 'avg';
+   Type-specific config for `report` views: one object, up to two group-by
+   fields, a measure, and a chart type. Lives in `view.config`; the shared
+   filters/sort slots on the view row still apply. Every key added after v1
+   is optional so saved configs keep validating without a migration. */
+export type ReportAgg = 'count' | 'sum' | 'avg' | 'min' | 'max';
+
+/** Time bucket for grouping by a date/datetime field — becomes a Postgres
+ *  `date_trunc` grain in the aggregate SQL. */
+export type DateGrain = 'day' | 'week' | 'month' | 'quarter' | 'year';
+
+export type ReportChartType =
+  | 'bar'
+  | 'line'
+  | 'area'
+  | 'donut'
+  | 'scatter'
+  | 'funnel'
+  | 'kpi'
+  | 'table'
+  | 'matrix';
 
 export type ReportConfig = {
   /** field key to bucket by; null = single-row totals. */
   groupBy: string | null;
+  /** Only meaningful when `groupBy` is a date/datetime field. Default 'month'. */
+  groupByGrain?: DateGrain;
+  /** Secondary grouping — stacked/grouped bars and matrix columns. Requires `groupBy`. */
+  groupBy2?: string | null;
+  /** Only meaningful when `groupBy2` is a date/datetime field. Default 'month'. */
+  groupBy2Grain?: DateGrain;
   /** `fieldKey` is required unless `agg` is 'count'. */
   measure: { agg: ReportAgg; fieldKey?: string };
-  chartType: 'bar' | 'donut' | 'line' | 'kpi' | 'table';
+  chartType: ReportChartType;
+  /** bar/area with `groupBy2`: stack the series instead of grouping side by side. */
+  stacked?: boolean;
 };

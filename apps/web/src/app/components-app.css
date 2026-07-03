@@ -2599,3 +2599,13 @@
     padding: 20px 16px 64px;
   }
 }
+
+/* Full-bleed pages opt OUT of the wrapper's bottom padding by carrying the
+   `page-flush-bottom` marker (the record list does — its sticky aggregate
+   footer must sit on the viewport edge). Every other page keeps the normal
+   bottom breathing room. Placed last so it wins the equal-specificity
+   cascade against every app-wrap padding variant above. */
+.app-wrap:has(.page-flush-bottom),
+.app-wrap--wide:has(.page-flush-bottom) {
+  padding-bottom: 0;
+}

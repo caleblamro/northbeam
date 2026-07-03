@@ -15,6 +15,7 @@ import type { DataSummary } from './artifact-generator.js';
 
 const PICKLIST_GROUPS_TO_INCLUDE = 2;
 const BUCKETS_PER_GROUP = 8;
+const DATE_BUCKETS_TO_INCLUDE = 12;
 
 /** Build a DataSummary for the given object. Errors are surfaced — the
  *  caller wraps in try/catch and falls back to an empty summary so a flaky
@@ -40,7 +41,7 @@ export async function buildDataSummary(
       orgId: opts.orgId,
       object: opts.object,
       fields: opts.fields,
-      groupBy: f,
+      groups: [{ field: f }],
       measure: { fn: 'count' },
       filters: [],
       limit: BUCKETS_PER_GROUP,
@@ -68,5 +69,27 @@ export async function buildDataSummary(
     };
   }
 
-  return { recordCount, picklistCounts, numericSummary };
+  // First date/datetime → month-grain record counts, so the model sees
+  // whether a time-series chart has enough buckets to be interesting.
+  const dateField = opts.fields.find((f) => f.type === 'date' || f.type === 'datetime');
+  let dateSeries: DataSummary['dateSeries'] = null;
+  if (dateField && recordCount > 0) {
+    const buckets = await aggregateRecords(db, {
+      orgId: opts.orgId,
+      object: opts.object,
+      fields: opts.fields,
+      groups: [{ field: dateField, grain: 'month' }],
+      measure: { fn: 'count' },
+      filters: [],
+      limit: DATE_BUCKETS_TO_INCLUDE,
+    });
+    const points = buckets
+      .filter((b) => typeof b.group === 'string' && b.group.length > 0)
+      .map((b) => ({ bucket: String(b.group).slice(0, 7), count: b.count }));
+    if (points.length > 0) {
+      dateSeries = { fieldKey: dateField.key, fieldLabel: dateField.label, points };
+    }
+  }
+
+  return { recordCount, picklistCounts, numericSummary, dateSeries };
 }

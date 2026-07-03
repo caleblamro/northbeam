@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en" data-density="compact">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Home · Command center — Northbeam redesign H2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 1400px; padding: var(--sp-5) var(--sp-5) var(--sp-8); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 250px minmax(0, 1fr) 320px;
+    gap: var(--sp-4);
+    align-items: start;
+  }
+
+  /* Left rail: stat tiles + stage breakdown */
+  .rail { display: flex; flex-direction: column; gap: var(--sp-3); }
+  .tile { padding: var(--sp-4); }
+  .tile .l { font-size: var(--text-sm); color: var(--ink-muted); }
+  .tile .v { margin-top: 2px; font-size: var(--text-xl); font-weight: var(--fw-semibold); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .tile .d { margin-top: 2px; font-size: var(--text-xs); color: var(--success); font-variant-numeric: tabular-nums; }
+
+  .stages { padding: var(--sp-4); }
+  .stages h3 { margin: 0 0 var(--sp-3); }
+  .stage { display: block; padding: 6px 0; }
+  .stage + .stage { border-top: 1px solid var(--divider); }
+  .stage .meta { display: flex; justify-content: space-between; align-items: baseline; font-size: var(--text-sm); }
+  .stage .meta .n { color: var(--ink-secondary); font-weight: var(--fw-medium); }
+  .stage .meta .amt { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: var(--fw-medium); }
+  .stage .track { margin-top: 5px; height: 4px; border-radius: 999px; background: var(--surface-sunken); overflow: hidden; }
+  .stage .fill { height: 100%; border-radius: 999px; background: var(--accent); opacity: 0.85; }
+  .stage .sub { margin-top: 3px; font-size: var(--text-xs); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .stage:hover .fill { opacity: 1; }
+
+  .eyebrow-row { display: flex; align-items: baseline; justify-content: space-between; }
+
+  /* Center: trend + closing soon */
+  .center { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+  .trend { padding: var(--sp-5); }
+  .trend-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+  .trend .big { margin-top: var(--sp-2); font-size: var(--text-3xl); font-weight: var(--fw-medium); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .trend .sub { margin-top: 2px; font-size: var(--text-sm); color: var(--ink-muted); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-sunken); padding: 2px; }
+  .seg button { padding: 3px 10px; border-radius: var(--radius-sm); font-size: var(--text-xs); font-weight: var(--fw-medium); color: var(--ink-muted); }
+  .seg button[aria-current] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-xs); }
+  .trend-spark { margin-top: var(--sp-4); width: 100%; color: var(--accent); display: block; }
+
+  .closing { overflow: hidden; }
+  .closing .hd { display: flex; align-items: baseline; justify-content: space-between; padding: var(--sp-4) var(--sp-4) 0; margin-bottom: var(--sp-2); }
+  .closing .tbl td { padding: 8px 16px; }
+  .closing .tbl th { padding: 6px 16px; }
+  .due-soon { color: var(--danger); font-weight: var(--fw-medium); }
+
+  /* Right: unified inbox (attention + activity) */
+  .inbox { display: flex; flex-direction: column; overflow: hidden; }
+  .inbox .hd { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-4) var(--sp-4) var(--sp-3); border-bottom: 1px solid var(--border); }
+  .inbox .hd .count { font-size: var(--text-xs); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .feed { max-height: 560px; overflow: auto; }
+  .item { display: flex; gap: 10px; padding: 11px var(--sp-4); border-bottom: 1px solid var(--divider); transition: background 0.12s var(--ease); }
+  .item:hover { background: var(--surface-hover); }
+  .item:last-child { border-bottom: 0; }
+  .item .ic { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: var(--radius-full); border: 1px solid var(--border); background: var(--surface-sunken); color: var(--ink-muted); margin-top: 1px; }
+  .item .ic svg { width: 12px; height: 12px; }
+  .item.warn .ic { color: var(--warning); background: var(--warning-bg); border-color: var(--warning-border); }
+  .item.bad .ic { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
+  .item .bd { min-width: 0; flex: 1; }
+  .item .bd .h { display: block; font-size: var(--text-sm); color: var(--ink); font-weight: var(--fw-medium); line-height: var(--lh-snug); }
+  .item .bd .s { display: block; margin-top: 1px; font-size: var(--text-xs); color: var(--ink-muted); line-height: var(--lh-snug); }
+  .item .when { font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle); white-space: nowrap; margin-top: 3px; }
+  .item .act { align-self: center; }
+  .feed .rule { padding: 7px var(--sp-4) 5px; font-size: 10.5px; font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-subtle); background: var(--surface-sunken); border-bottom: 1px solid var(--divider); position: sticky; top: 0; }
+
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Home');</script>
+
+<main class="page">
+  <div class="grid">
+
+    <!-- Left rail -->
+    <aside class="rail reveal reveal-1">
+      <div class="card tile"><div class="l">Open pipeline</div><div class="v">$1,870,500</div><div class="d">▲ 12.4% vs last month</div></div>
+      <div class="card tile"><div class="l">Won this quarter</div><div class="v">$122,400</div><div class="d">▲ 1 deal</div></div>
+      <div class="card tile"><div class="l">Avg deal size</div><div class="v">$207,833</div><div class="d" style="color:var(--ink-subtle)">9 open deals</div></div>
+
+      <div class="card stages">
+        <div class="eyebrow" style="margin-bottom:12px">Pipeline by stage</div>
+        <a class="stage" href="#">
+          <div class="meta"><span class="n">Negotiation</span><span class="amt">$950,000</span></div>
+          <div class="track"><div class="fill" style="width:100%"></div></div>
+          <div class="sub">2 deals</div>
+        </a>
+        <a class="stage" href="#">
+          <div class="meta"><span class="n">Qualification</span><span class="amt">$360,000</span></div>
+          <div class="track"><div class="fill" style="width:38%"></div></div>
+          <div class="sub">2 deals</div>
+        </a>
+        <a class="stage" href="#">
+          <div class="meta"><span class="n">Proposal</span><span class="amt">$349,000</span></div>
+          <div class="track"><div class="fill" style="width:37%"></div></div>
+          <div class="sub">2 deals</div>
+        </a>
+        <a class="stage" href="#">
+          <div class="meta"><span class="n">Discovery</span><span class="amt">$211,500</span></div>
+          <div class="track"><div class="fill" style="width:22%"></div></div>
+          <div class="sub">3 deals</div>
+        </a>
+      </div>
+    </aside>
+
+    <!-- Center -->
+    <section class="center reveal reveal-2">
+      <div class="card trend">
+        <div class="trend-head">
+          <div>
+            <span class="eyebrow">Open pipeline</span>
+            <div class="big">$1,870,500</div>
+            <div class="sub"><span style="color:var(--success)">▲ 12.4%</span> · 9 open deals · 2 closing this month</div>
+          </div>
+          <div class="seg">
+            <button>7d</button><button aria-current="true">30d</button><button>90d</button><button>1y</button>
+          </div>
+        </div>
+        <svg class="spark trend-spark" data-points="1420,1445,1430,1490,1510,1495,1560,1540,1600,1630,1615,1660,1700,1685,1730,1760,1745,1790,1810,1795,1830,1850,1845,1870" data-w="720" data-h="150" data-fill></svg>
+      </div>
+
+      <div class="card closing">
+        <div class="hd">
+          <span class="eyebrow">Closing soon</span>
+          <a href="#" style="font-size:var(--text-sm);color:var(--accent);font-weight:var(--fw-medium)">View pipeline</a>
+        </div>
+        <table class="tbl">
+          <thead><tr><th>Deal</th><th>Stage</th><th class="right">Amount</th><th class="right">Close date</th></tr></thead>
+          <tbody>
+            <tr><td class="primary-cell">Copper &amp; Pine — POS integration</td><td><span class="pill warning">Proposal</span></td><td class="right num">$64,000</td><td class="right num due-soon">Jul 9 · 6d</td></tr>
+            <tr><td class="primary-cell">Acme Robotics — Enterprise expansion</td><td><span class="pill info">Negotiation</span></td><td class="right num">$420,000</td><td class="right num">Jul 18</td></tr>
+            <tr><td class="primary-cell">Meridian Health — Platform migration</td><td><span class="pill warning">Proposal</span></td><td class="right num">$285,000</td><td class="right num">Jul 31</td></tr>
+            <tr><td class="primary-cell">Northwind Logistics — Renewal + upsell</td><td><span class="pill neutral">Qualification</span></td><td class="right num">$150,000</td><td class="right num">Aug 12</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Right: unified inbox -->
+    <aside class="card inbox reveal reveal-3">
+      <div class="hd">
+        <span class="eyebrow">Inbox</span>
+        <span class="count">4 need attention</span>
+      </div>
+      <div class="feed ds-scroll">
+        <div class="rule">Needs attention</div>
+        <a class="item warn" href="#">
+          <span class="ic"><svg class="i" data-icon="clock"></svg></span>
+          <span class="bd"><span class="h">Acme Robotics — Enterprise expansion</span><span class="s">No activity in 14 days · $420,000 in Negotiation</span></span>
+          <span class="when">14d</span>
+        </a>
+        <a class="item bad" href="#">
+          <span class="ic"><svg class="i" data-icon="alert"></svg></span>
+          <span class="bd"><span class="h">Copper &amp; Pine — POS integration</span><span class="s">Closes in 6 days — proposal not sent</span></span>
+          <span class="when">6d</span>
+        </a>
+        <a class="item warn" href="#">
+          <span class="ic"><svg class="i" data-icon="calendar"></svg></span>
+          <span class="bd"><span class="h">3 deals missing close dates</span><span class="s">Vela Analytics, Orbital Freight, Brightloom Retail</span></span>
+          <span class="when">—</span>
+        </a>
+        <a class="item" href="#">
+          <span class="ic"><svg class="i" data-icon="note"></svg></span>
+          <span class="bd"><span class="h">Meridian Health — contract in review</span><span class="s">Waiting on legal for 5 days</span></span>
+          <span class="when">5d</span>
+        </a>
+
+        <div class="rule">Recent activity</div>
+        <a class="item" href="#">
+          <span class="ic"><svg class="i" data-icon="phone"></svg></span>
+          <span class="bd"><span class="h">Call with Dana Whitfield</span><span class="s">Acme Robotics · discussed rollout timeline</span></span>
+          <span class="when">25m</span>
+        </a>
+        <a class="item" href="#">
+          <span class="ic"><svg class="i" data-icon="mail"></svg></span>
+          <span class="bd"><span class="h">Email to Priya Raman</span><span class="s">Meridian Health · sent revised proposal v3</span></span>
+          <span class="when">2h</span>
+        </a>
+        <a class="item" href="#">
+          <span class="ic"><svg class="i" data-icon="note"></svg></span>
+          <span class="bd"><span class="h">Note on Halcyon Aero</span><span class="s">Legal reviewing MSA redlines</span></span>
+          <span class="when">5h</span>
+        </a>
+        <a class="item" href="#">
+          <span class="ic"><svg class="i" data-icon="calendar"></svg></span>
+          <span class="bd"><span class="h">Meeting — POS integration scoping</span><span class="s">Copper &amp; Pine · store ops team</span></span>
+          <span class="when">1d</span>
+        </a>
+        <a class="item" href="#">
+          <span class="ic"><svg class="i" data-icon="check"></svg></span>
+          <span class="bd"><span class="h">Deal won — Juniper Labs</span><span class="s">Data pipeline pilot closed at $122,400</span></span>
+          <span class="when">6d</span>
+        </a>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script>nbBadge('H2', 'Command center');</script>
+</body>
+</html>

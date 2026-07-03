@@ -43,6 +43,13 @@ type ViewRow = RouterOutputs['view']['list'][number];
 type ObjectRow = RouterOutputs['object']['list'][number];
 type FieldLite = { key: string; label: string };
 
+const AGG_WORD: Record<string, string> = {
+  sum: 'Sum',
+  avg: 'Average',
+  min: 'Minimum',
+  max: 'Maximum',
+};
+
 /** "Deals · Sum of Amount by Stage" — object plural + measure + group-by. */
 function reportSummary(view: ViewRow, object: ObjectRow | undefined, fields: FieldLite[]): string {
   const cfg = (view.config ?? {}) as Partial<ReportConfig>;
@@ -51,15 +58,15 @@ function reportSummary(view: ViewRow, object: ObjectRow | undefined, fields: Fie
   const measure =
     agg === 'count'
       ? 'Count of records'
-      : `${agg === 'sum' ? 'Sum' : 'Average'} of ${labelOf(cfg.measure?.fieldKey)}`;
+      : `${AGG_WORD[agg] ?? agg} of ${labelOf(cfg.measure?.fieldKey)}`;
   const by = cfg.groupBy ? ` by ${labelOf(cfg.groupBy)}` : '';
   return `${object?.labelPlural ?? 'Records'} · ${measure}${by}`;
 }
 
 /** The artifact node a pinned report becomes. Grouped reports pin as a Chart
- *  (bar/donut — the walker's chart vocabulary; table/line/kpi render as the
- *  ranked bar list on dashboards). Totals-only reports pin as a Metric stat
- *  tile, since a chart needs buckets to draw. */
+ *  carrying the full spec (date grain / second grouping / stacked ride along
+ *  — the walker's chart vocabulary covers them all); totals-only reports pin
+ *  as a Metric stat tile, since a chart needs buckets to draw. */
 function nodeFromReport(view: ViewRow, objectKey: string): ArtifactNode {
   const cfg = (view.config ?? {}) as Partial<ReportConfig> & { limit?: number };
   const agg = cfg.measure?.agg ?? 'count';
@@ -77,9 +84,14 @@ function nodeFromReport(view: ViewRow, objectKey: string): ArtifactNode {
       title: view.label,
       objectKey,
       groupBy: cfg.groupBy,
+      ...(cfg.groupByGrain ? { dateGrain: cfg.groupByGrain } : {}),
+      ...(cfg.groupBy2 ? { groupBy2: cfg.groupBy2 } : {}),
+      ...(cfg.groupBy2Grain ? { groupBy2Grain: cfg.groupBy2Grain } : {}),
       fn: agg,
       measure: fieldKey,
-      chartType: cfg.chartType === 'donut' && agg !== 'avg' ? 'donut' : 'bar',
+      // kpi is report-only vocabulary; everything else renders natively.
+      chartType: cfg.chartType && cfg.chartType !== 'kpi' ? cfg.chartType : 'bar',
+      ...(cfg.stacked ? { stacked: true } : {}),
       filters,
       ...(cfg.limit ? { limit: cfg.limit } : {}),
     },
@@ -101,7 +113,7 @@ export function SavedReports() {
   const objectKeys = [
     ...new Set(
       reports
-        .map((r) => objectById.get(r.objectId)?.key)
+        .map((r) => (r.objectId ? objectById.get(r.objectId)?.key : undefined))
         .filter((k): k is string => typeof k === 'string'),
     ),
   ];
@@ -115,10 +127,10 @@ export function SavedReports() {
   });
 
   const pin = (report: ViewRow, dashboard: ViewRow) => {
-    const objectKey = objectById.get(report.objectId)?.key;
+    const objectKey = report.objectId ? objectById.get(report.objectId)?.key : undefined;
     if (!objectKey) return;
     const config = appendArtifactNode(dashboard.config, nodeFromReport(report, objectKey));
-    const dashObject = objectById.get(dashboard.objectId);
+    const dashObject = dashboard.objectId ? objectById.get(dashboard.objectId) : undefined;
     update.mutate(
       { id: dashboard.id, config },
       {
@@ -169,7 +181,7 @@ export function SavedReports() {
   return (
     <div className="flex flex-col gap-2">
       {reports.map((r) => {
-        const object = objectById.get(r.objectId);
+        const object = r.objectId ? objectById.get(r.objectId) : undefined;
         return (
           <ReportRow
             key={r.id}

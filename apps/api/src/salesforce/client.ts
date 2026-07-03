@@ -185,6 +185,22 @@ class RefreshingSalesforceClient extends SalesforceClient {
   override downloadBlob(path: string) {
     return this.withRefresh((c) => c.downloadBlob(path));
   }
+
+  override listReports(limit?: number) {
+    return this.withRefresh((c) => c.listReports(limit));
+  }
+
+  override listDashboards(limit?: number) {
+    return this.withRefresh((c) => c.listDashboards(limit));
+  }
+
+  override getReportDescribe(id: string) {
+    return this.withRefresh((c) => c.getReportDescribe(id));
+  }
+
+  override getDashboardDescribe(id: string) {
+    return this.withRefresh((c) => c.getDashboardDescribe(id));
+  }
 }
 
 export async function clientForOrg(db: DbExecutor, orgId: string): Promise<SalesforceClient> {

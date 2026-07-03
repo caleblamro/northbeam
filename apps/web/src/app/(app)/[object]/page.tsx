@@ -9,5 +9,5 @@ export default async function ObjectListPage({
   params: Promise<{ object: string }>;
 }) {
   const { object } = await params;
-  return <RecordListView objectKey={object} standalone />;
+  return <RecordListView objectKey={object} />;
 }

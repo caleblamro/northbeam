@@ -59,11 +59,14 @@ export type {
   FormatRule,
   ReportAgg,
   ReportConfig,
+  ReportChartType,
+  DateGrain,
 } from './views.js';
 // Metadata key derivation + reserved-key guards.
 export { keyFromLabel, KEY_RE, RESERVED_FIELD_KEYS } from './keys.js';
 export {
   listViewsForUser,
+  getHomeViewForUser,
   getView,
   getDefaultView,
   type ViewRow,
@@ -171,8 +174,10 @@ export {
   aggregateRecords,
   buildAggregateQuery,
   GROUPABLE_TYPES,
+  DATE_GROUPABLE_TYPES,
   type AggregateBucket,
   type AggregateFn,
+  type AggregateGrouping,
   type AggregateOpts,
 } from './dynamic/aggregate.js';
 export { NUMERIC_TYPES } from './dynamic/filters-sql.js';

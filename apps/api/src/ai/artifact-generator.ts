@@ -16,6 +16,8 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { loadEnv } from '@northbeam/config';
 import {
+  ARTIFACT_CHART_TYPES,
+  ARTIFACT_DATE_GRAINS,
   ARTIFACT_FILTER_OPS,
   ARTIFACT_LEAF_COMPONENTS,
   type Artifact,
@@ -112,6 +114,13 @@ export type DataSummary = {
     counts: { value: string; count: number }[];
   }[];
   numericSummary: { fieldKey: string; fieldLabel: string; sum: number; avg: number } | null;
+  /** Month-grain record counts over the first date field — evidence for
+   *  whether a time-series chart has enough buckets to be interesting. */
+  dateSeries: {
+    fieldKey: string;
+    fieldLabel: string;
+    points: { bucket: string; count: number }[];
+  } | null;
 };
 
 function formatDataSummary(summary: DataSummary): string {
@@ -128,6 +137,12 @@ function formatDataSummary(summary: DataSummary): string {
     const { fieldLabel, sum, avg } = summary.numericSummary;
     parts.push(`- ${fieldLabel}: total ${sum.toLocaleString()}, average ${avg.toLocaleString()}`);
   }
+  if (summary.dateSeries && summary.dateSeries.points.length > 0) {
+    const pts = summary.dateSeries.points.map((p) => `${p.bucket} (${p.count})`).join(', ');
+    parts.push(
+      `- ${summary.dateSeries.fieldLabel} by month (fieldKey \`${summary.dateSeries.fieldKey}\`): ${pts}`,
+    );
+  }
   return parts.join('\n');
 }
 
@@ -143,18 +158,20 @@ function fieldLinesFor(fields: FieldRow[], cap: number): string {
 
 /** Pure prompt assembly — exported so tests can assert the contract (field
  *  cap, data-summary injection, cross-object context, refinement section)
- *  without an API call. */
+ *  without an API call. Pass `object: null` for WORKSPACE scope (the user's
+ *  Home page): no single target object, every live node names its own
+ *  objectKey, and the Greeting/AttentionQueue home nodes come into play. */
 export function buildSystemPrompt(
-  object: ObjectRow,
+  object: ObjectRow | null,
   fields: FieldRow[],
-  summary: DataSummary,
+  summary: DataSummary | null,
   currentArtifact?: ArtifactLike,
   otherObjects: ObjectContext[] = [],
 ): string {
   const fieldLines = fieldLinesFor(fields, 40);
 
   const otherObjectLines = otherObjects
-    .filter((o) => o.object.key !== object.key)
+    .filter((o) => o.object.key !== object?.key)
     .map(
       (o) =>
         `## ${o.object.label} (key: \`${o.object.key}\`)\n${fieldLinesFor(o.fields, 20) || '- (no fields surfaced)'}`,
@@ -221,9 +238,20 @@ supporting evidence: distributions, then individual records.
 
 ## Structure & text (static)
 
-- PageHeader — the hero. ALWAYS first, full width.
+- PageHeader — the hero. ALWAYS first on object dashboards, full width.
   props: { title: string, subtitle?: string }
   Title names the dashboard ("Pipeline overview"), subtitle states scope in one clause.
+
+- Greeting — the Home-page hero: "Good afternoon, <user>" plus today's date, resolved
+  at render time. WORKSPACE (home) dashboards only — it replaces PageHeader there;
+  never use it on an object dashboard.
+  props: { subtitle?: string }
+
+- AttentionQueue — the "needs attention" work queue: the user's overdue and due-soon
+  activities plus deals closing inside two weeks, each row with a one-click action.
+  Live and self-fetching — no query props to configure. WORKSPACE (home) dashboards
+  only; renders best full width, directly under the greeting/KPI rows.
+  props: {}
 
 - Heading — a quiet section break WITHOUT a card. Use between dashboard regions
   instead of stacking SectionCards.
@@ -259,32 +287,53 @@ supporting evidence: distributions, then individual records.
 
 ## Live data (these run real queries when the dashboard renders)
 
-- Metric — ONE stat tile: count, sum, or avg over an object, with optional filters.
+- Metric — ONE stat tile: an aggregate over an object, with optional filters.
   props: {
     label: string,                     // sentence case, e.g. "Open pipeline"
     objectKey: string,
-    fn: 'count' | 'sum' | 'avg',
-    fieldKey?: string,                 // REQUIRED for sum/avg — a number/currency/percent field key
+    fn: 'count' | 'sum' | 'avg' | 'min' | 'max',
+    fieldKey?: string,                 // REQUIRED unless fn is count — a number/currency/percent field key
     filters?: ArtifactFilter[],
     delta?: string,                    // optional signed delta text, e.g. "+12% vs last month"
     span?: number                      // 3 (four tiles) or 4 (three tiles)
   }
 
-- Chart — grouped aggregate over live records.
+- Chart — grouped aggregate over live records (one native GROUP BY, up to two levels).
   props: {
     title?: string,
     objectKey: string,
-    groupBy: string,                   // picklist / reference / checkbox / text field key (dates can't bucket yet)
-    fn: 'count' | 'sum' | 'avg',
-    measure?: string,                  // REQUIRED for sum/avg — numeric field key
-    chartType: 'bar' | 'donut' | 'line' | 'table',
+    groupBy: string,                   // picklist / reference / checkbox / text / date / datetime field key
+    dateGrain?: ${ARTIFACT_DATE_GRAINS.map((g) => `'${g}'`).join(' | ')},  // ONLY when groupBy is a date/datetime field; default 'month'
+    groupBy2?: string,                 // second dimension — stacked bars, multi-series lines/areas, matrix tables
+    groupBy2Grain?: same as dateGrain, // ONLY when groupBy2 is a date/datetime field
+    fn: 'count' | 'sum' | 'avg' | 'min' | 'max',
+    measure?: string,                  // REQUIRED unless fn is count — numeric field key
+    chartType: ${ARTIFACT_CHART_TYPES.map((t) => `'${t}'`).join(' | ')},
+    stacked?: boolean,                 // bar/area with groupBy2: stack the series instead of grouping
     filters?: ArtifactFilter[],
     limit?: number,                    // top-N before the tail folds into "Other" (bar ≤ 12, donut ≤ 5)
     span?: number
   }
-  Choosing chartType: 'bar' answers "which X has the most" (ranked); 'donut' ONLY for
-  part-to-whole with ≤ 5 groups, never with avg; 'line' for an ordered series read
-  left-to-right; 'table' when exact numbers matter more than shape.
+  Choosing chartType:
+  - 'bar' answers "which X has the most" (ranked). Add groupBy2 + stacked: true only
+    when the composition WITHIN each bar matters (pipeline by stage, split by owner).
+  - 'line' is a value moving over ordered buckets — the default for a date groupBy.
+  - 'area' is line with weight: cumulative/volume feel; count/sum over time only,
+    never avg/min/max (a filled area implies additive magnitude).
+  - 'donut' ONLY for part-to-whole with ≤ 5 groups, never with avg/min/max.
+  - 'scatter' plots one point per group: x = record count, y = the measure. Needs a
+    numeric measure (never fn: count). Use it to spot outlier groups ("many small
+    deals vs a few large").
+  - 'funnel' is ordered stage progression: groupBy a stage-like picklist, fn count or
+    sum; stages render in picklist order.
+  - 'table' when exact numbers matter more than shape.
+  - 'matrix' is a two-dimension pivot: groupBy = rows, groupBy2 = columns (REQUIRES
+    groupBy2, keep it a low-cardinality field — ≤ ~8 columns). The answer to "X by Y"
+    questions when both dimensions matter equally.
+  Dates: any date/datetime field can be a groupBy — set dateGrain to match the
+  question's horizon (recent weeks → 'day'/'week', this year → 'month', multi-year →
+  'quarter'/'year'). Time-series charts (line/area over a date) must NOT set limit —
+  buckets are chronological, and the tail must not fold into "Other".
 
 - RecordTable — real records in columns; rows click through to the record.
   props: {
@@ -325,37 +374,63 @@ ArtifactSort = { fieldKey: string, direction: 'asc' | 'desc' }
   SectionCard span 4 (Progress shares or Chips) → RecordTable span 12 sorted by the metric.
 - Digest ("what's new/recent"): PageHeader → Metric row → RecordList span 6 + Chart
   span 6 → Callout if something stands out.
+- Trend ("how is X changing / over time"): PageHeader → Metric row → hero line/area
+  Chart span 8 grouped by a date field (dateGrain to fit the horizon) + RecordList
+  span 4 → RecordTable span 12. Add groupBy2 to the hero when the split matters
+  (revenue by month, stacked by stage). For "X by Y" with two equal dimensions,
+  a matrix Chart is the hero instead.
 
-# Object context
+${
+  object
+    ? `# Object context
 
 You are composing for the **${object.label}** object (key: \`${object.key}\`).
 
 Fields available to reference:
 ${fieldLines || '- (no fields surfaced)'}
-${
+`
+    : `# Workspace context (HOME page)
+
+You are composing the user's HOME page — a workspace-level dashboard that spans all
+objects. Open with Greeting (not PageHeader), lead with the numbers that matter across
+the workspace (open pipeline, record counts), put AttentionQueue where the user will
+act on it, and close with recent records (RecordList over the activity object works
+well). EVERY live node (Metric/Chart/RecordTable/RecordGrid/RecordList) must name its
+objectKey from the objects listed below.
+`
+}${
   otherObjectLines
     ? `
-# Other objects in this workspace
+# ${object ? 'Other objects in this workspace' : 'Objects in this workspace'}
 
-Data-querying components may also target these objects (set their
+Data-querying components may ${object ? 'also ' : ''}target these objects (set their
 \`objectKey\` accordingly). Use ONLY the field keys listed — anything else
 fails at render time.
 
 ${otherObjectLines}
 `
     : ''
-}
+}${
+  summary
+    ? `
 # Live data summary
 
 Came from a real query against the workspace's data — use these numbers for matching
 metrics and Progress values; don't invent values for covered metrics.
 
 ${formatDataSummary(summary)}
+`
+    : ''
+}
 
 # Final checks before you answer
 
 - PageHeader first; KPI row second; rows sum to 12; no half-filled rows.
 - Every fieldKey/groupBy/measure/column exists in the field lists above.
+- dateGrain only when the groupBy field is date/datetime; groupBy2 only on charts
+  whose type can draw a second dimension (stacked bar, line, area, matrix).
+- scatter and every sum/avg/min/max carry a numeric measure; matrix carries groupBy2.
+- Time-series (line/area over a date groupBy) never set limit.
 - No number appears twice; titles ≤ 60 chars; bodies ≤ 280 chars.
 - The note cites real numbers and reads like a colleague, not a changelog.${refinement}`;
 }
@@ -372,9 +447,10 @@ export type GenerationPartial = { note?: string; artifact?: unknown };
  *  keys. Throws when ANTHROPIC_API_KEY isn't configured. */
 export function streamArtifact(opts: {
   prompt: string;
-  object: ObjectRow;
+  /** Null = workspace scope (the Home page): no single target object. */
+  object: ObjectRow | null;
   fields: FieldRow[];
-  summary: DataSummary;
+  summary: DataSummary | null;
   currentArtifact?: ArtifactLike;
   otherObjects?: ObjectContext[];
 }): { partialStream: AsyncIterable<GenerationPartial>; result: Promise<Generation> } {
