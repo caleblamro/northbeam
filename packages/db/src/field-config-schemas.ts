@@ -13,8 +13,8 @@
 // render correctly downstream.
 
 import { z } from 'zod';
-import { FIELD_TYPE_IDS, type FieldConfig, type FieldType } from './field-types.js';
-import { validateFormula } from './formula/index.js';
+import { FIELD_TYPE_IDS, type FieldConfig, type FieldType } from './field-types';
+import { validateFormula } from './formula/index';
 
 export const PicklistOptionSchema = z.object({
   value: z.string().min(1),

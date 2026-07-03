@@ -10,10 +10,10 @@
 //   NULL OR TRUE   → TRUE
 // String concat with null treats null as empty string (Excel-ish).
 
-import { FUNCTIONS } from './functions.js';
-import { compare, toBoolean, toNumber } from './helpers.js';
-import type { AstNode } from './parse.js';
-import { parseFormula } from './parse.js';
+import { FUNCTIONS } from './functions';
+import { compare, toBoolean, toNumber } from './helpers';
+import type { AstNode } from './parse';
+import { parseFormula } from './parse';
 
 export type EvalContext = {
   /** field key → value. Same-record keys come from record.data (coerced via

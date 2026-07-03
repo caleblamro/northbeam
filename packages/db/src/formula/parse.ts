@@ -10,7 +10,7 @@
 //   7. unary -
 //   8. atoms: literal, field, identifier, call, (expr)
 
-import { type Token, tokenize } from './tokenize.js';
+import { type Token, tokenize } from './tokenize';
 
 export type AstNode =
   | { kind: 'Num'; value: number }

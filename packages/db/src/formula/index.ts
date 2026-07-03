@@ -8,14 +8,14 @@
 // globals. The compute worker (apps/api/src/workers) reads the formula off
 // field_def.config.formula and writes the result back to the record's column.
 
-export { tokenize, type Token, TokenizeError } from './tokenize.js';
-export { parseFormula, collectFieldKeys, type AstNode, ParseError } from './parse.js';
-export { evaluateFormula, evaluateAst, FormulaEvalError, type EvalContext } from './evaluate.js';
-export { supportedFunctionNames, type FnHandler } from './functions.js';
+export { tokenize, type Token, TokenizeError } from './tokenize';
+export { parseFormula, collectFieldKeys, type AstNode, ParseError } from './parse';
+export { evaluateFormula, evaluateAst, FormulaEvalError, type EvalContext } from './evaluate';
+export { supportedFunctionNames, type FnHandler } from './functions';
 
-import { parseFormula } from './parse.js';
-import { ParseError } from './parse.js';
-import { TokenizeError } from './tokenize.js';
+import { parseFormula } from './parse';
+import { ParseError } from './parse';
+import { TokenizeError } from './tokenize';
 
 /** True if the formula parses cleanly. Use at write time to reject bad
  *  expressions before they reach the compute worker. */

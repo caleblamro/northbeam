@@ -4,7 +4,7 @@
 // keyFromLabel is the same spirit as sfToKey (apps/api/src/salesforce/mapper.ts)
 // and sanitize (dynamic/identifiers.ts): the output always matches KEY_RE.
 
-import { SYS } from './dynamic/identifiers.js';
+import { SYS } from './dynamic/identifiers';
 
 /** Valid metadata key: starts with a letter, then [a-z0-9_], ≤48 chars. */
 export const KEY_RE = /^[a-z][a-z0-9_]{0,47}$/;

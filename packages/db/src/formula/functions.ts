@@ -9,7 +9,7 @@
 //   - Date functions read the "as-of" clock from EvalContext.now (injected by
 //     the caller) so the engine stays deterministic — no Date.now() in here.
 
-import type { EvalContext } from './evaluate.js';
+import type { EvalContext } from './evaluate';
 import {
   addDays,
   dayDiff,
@@ -20,7 +20,7 @@ import {
   toDate,
   toNumber,
   toStr,
-} from './helpers.js';
+} from './helpers';
 
 export type FnHandler = (args: unknown[], ctx: EvalContext) => unknown;
 
