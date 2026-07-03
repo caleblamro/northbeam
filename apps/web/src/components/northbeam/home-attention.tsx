@@ -1,38 +1,26 @@
 'use client';
 
-// Needs-attention inbox for the home page — my overdue / due-soon activities
-// and open deals closing within two weeks, grouped into severity tabs. Rows
-// carry a semantic-tone edge bar, a kind icon chip, a relative due time, and
-// quick actions (Complete for activities, Open for everything).
+// "Your focus today" queue for the home page — the TOP overdue / due-soon
+// activities and deals closing within two weeks, capped server-side (the
+// procedure returns `limit` items + the true total). Matches the H3
+// focus-queue design: an eyebrow header OUTSIDE the rows, then individual
+// cards with a solid severity edge bar, an object chip, title + one-line
+// detail, a mono urgency stamp, and a labelled action button. Overflow
+// collapses into one "view all" link instead of an unbounded list.
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { type RouterOutputs, trpc } from '@/lib/api';
-import {
-  AlarmClock,
-  ArrowRight,
-  CalendarClock,
-  Check,
-  CircleDollarSign,
-  Flag,
-  type LucideIcon,
-} from 'lucide-react';
+import { useCanObject } from '@/lib/can';
+import { ArrowRight, Check } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ObjChip } from './app-bits';
 import { EmptyState } from './empty-state';
 import { EyebrowLabel } from './eyebrow-label';
 
 type AttentionItem = RouterOutputs['home']['attention']['items'][number];
 type Severity = AttentionItem['severity'];
-
-const KIND_ICONS: Record<AttentionItem['kind'], LucideIcon> = {
-  activity_overdue: AlarmClock,
-  activity_due_soon: CalendarClock,
-  activity_high_priority: Flag,
-  deal_closing: CircleDollarSign,
-};
 
 // Semantic tone per severity — CSS vars so light/dark both resolve.
 const SEVERITY_TONE: Record<Severity, string> = {
@@ -40,13 +28,6 @@ const SEVERITY_TONE: Record<Severity, string> = {
   today: 'var(--warning)',
   week: 'var(--info)',
 };
-
-const TABS: Array<{ value: string; label: string; severity: Severity | null; empty: string }> = [
-  { value: 'all', label: 'All', severity: null, empty: 'Nothing needs your attention.' },
-  { value: 'critical', label: 'Critical', severity: 'critical', empty: 'No overdue work.' },
-  { value: 'today', label: 'Today', severity: 'today', empty: 'Nothing due today.' },
-  { value: 'week', label: 'Upcoming', severity: 'week', empty: 'Nothing coming up this week.' },
-];
 
 function relativeDue(dueAt: Date | string | null): { label: string; overdue: boolean } | null {
   if (!dueAt) return null;
@@ -61,10 +42,12 @@ function relativeDue(dueAt: Date | string | null): { label: string; overdue: boo
     : { label: `due in ${n}${unit}`, overdue: false };
 }
 
-export function HomeAttention() {
+export function HomeAttention({ limit = 8 }: { limit?: number }) {
   const utils = trpc.useUtils();
-  const attention = trpc.home.attention.useQuery();
+  const attention = trpc.home.attention.useQuery({ limit });
   const items = attention.data?.items ?? [];
+  const total = attention.data?.total ?? items.length;
+  const overflow = total - items.length;
 
   const complete = trpc.record.update.useMutation({
     meta: { context: "Couldn't complete activity" },
@@ -75,66 +58,60 @@ export function HomeAttention() {
   });
 
   return (
-    <Card className="p-5">
-      <div className="mb-3">
-        <EyebrowLabel>Needs attention</EyebrowLabel>
+    <section>
+      <div className="flex items-baseline justify-between">
+        <EyebrowLabel>Your focus today</EyebrowLabel>
+        {total > 0 && (
+          <span className="text-muted-foreground text-sm tabular-nums">
+            {total} {total === 1 ? 'item' : 'items'}
+          </span>
+        )}
       </div>
       {attention.isLoading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-6 w-2/3" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-5/6" />
+        <div className="mt-3 space-y-2.5">
+          <Skeleton className="h-14 w-full rounded-lg" />
+          <Skeleton className="h-14 w-full rounded-lg" />
+          <Skeleton className="h-14 w-5/6 rounded-lg" />
+        </div>
+      ) : items.length === 0 ? (
+        <div className="mt-3 rounded-lg border border-border border-dashed py-6">
+          <EmptyState
+            icon={Check}
+            size="sm"
+            title="You're clear ✦"
+            body="Nothing needs your attention."
+          />
         </div>
       ) : (
-        <Tabs defaultValue="all" className="gap-3">
-          <TabsList className="w-full gap-4">
-            {TABS.map((tab) => {
-              const count = tab.severity
-                ? items.filter((i) => i.severity === tab.severity).length
-                : items.length;
-              return (
-                <TabsTrigger key={tab.value} value={tab.value} className="text-xs">
-                  {tab.label}
-                  {count > 0 && (
-                    <Badge size="sm" variant="default" className="tabular-nums">
-                      {count}
-                    </Badge>
-                  )}
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-          {TABS.map((tab) => {
-            const list = tab.severity ? items.filter((i) => i.severity === tab.severity) : items;
-            return (
-              <TabsContent key={tab.value} value={tab.value}>
-                {list.length === 0 ? (
-                  <EmptyState icon={Check} size="sm" title="You're clear ✦" body={tab.empty} />
-                ) : (
-                  <ul className="flex flex-col gap-1.5">
-                    {list.map((item) => (
-                      <AttentionRow
-                        key={item.id}
-                        item={item}
-                        completing={complete.isPending && complete.variables?.id === item.recordId}
-                        onComplete={() =>
-                          complete.mutate({
-                            objectKey: item.objectKey,
-                            id: item.recordId,
-                            data: { status: 'completed' },
-                          })
-                        }
-                      />
-                    ))}
-                  </ul>
-                )}
-              </TabsContent>
-            );
-          })}
-        </Tabs>
+        <>
+          <ul className="mt-3 flex flex-col gap-2.5">
+            {items.map((item) => (
+              <AttentionRow
+                key={item.id}
+                item={item}
+                completing={complete.isPending && complete.variables?.id === item.recordId}
+                onComplete={() =>
+                  complete.mutate({
+                    objectKey: item.objectKey,
+                    id: item.recordId,
+                    data: { status: 'completed' },
+                  })
+                }
+              />
+            ))}
+          </ul>
+          {overflow > 0 && (
+            <Link
+              href="/activities"
+              className="mt-3 inline-flex items-center gap-1 font-medium text-link text-sm underline-offset-4 hover:underline"
+            >
+              View all {total.toLocaleString()}
+              <ArrowRight className="size-3.5" />
+            </Link>
+          )}
+        </>
       )}
-    </Card>
+    </section>
   );
 }
 
@@ -147,60 +124,57 @@ function AttentionRow({
   completing: boolean;
   onComplete: () => void;
 }) {
-  const Icon = KIND_ICONS[item.kind];
+  const router = useRouter();
   const due = relativeDue(item.dueAt);
   const href = `/${item.objectKey}/${item.recordId}`;
+  const canComplete = useCanObject(item.objectKey, 'update');
   const isActivity = item.kind !== 'deal_closing';
 
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the row is a convenience surface; the action button + title link are the keyboard paths
     <li
-      className="group flex items-center gap-2.5 rounded-md border border-border bg-card py-2 pr-2 pl-3"
-      style={{ boxShadow: `inset 2px 0 0 ${SEVERITY_TONE[item.severity]}` }}
+      className="grid cursor-pointer grid-cols-[3px_auto_minmax(0,1fr)_auto_auto] items-center gap-3 overflow-hidden rounded-lg border border-border bg-card py-3 pr-4 shadow-xs transition-shadow hover:border-[var(--border-strong)] hover:shadow-sm"
+      onClick={() => router.push(href)}
     >
-      <span className="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
-        <Icon className="size-3.5" />
-      </span>
-      <div className="min-w-0 flex-1">
+      <span className="self-stretch" style={{ background: SEVERITY_TONE[item.severity] }} />
+      <ObjChip label={item.objectKey} size={26} />
+      <div className="min-w-0">
         <Link
           href={href}
-          className="block truncate font-medium text-foreground text-sm underline-offset-4 hover:underline"
+          onClick={(e) => e.stopPropagation()}
+          className="block truncate font-medium text-foreground text-sm"
         >
           {item.title}
         </Link>
-        <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-          <span className="truncate">{item.sub}</span>
-          {due && (
-            <>
-              <span className="text-muted-foreground/40">·</span>
-              <span
-                className="shrink-0 tabular-nums"
-                style={due.overdue ? { color: 'var(--danger)' } : undefined}
-              >
-                {due.label}
-              </span>
-            </>
-          )}
-        </div>
+        <div className="truncate text-muted-foreground text-xs">{item.sub}</div>
       </div>
-      <div className="flex shrink-0 items-center gap-0.5">
-        {isActivity && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Mark complete"
-            title="Mark complete"
-            disabled={completing}
-            onClick={onComplete}
-          >
-            <Check className="size-3.5" />
-          </Button>
-        )}
-        <Button variant="ghost" size="icon-sm" aria-label={`Open ${item.title}`} asChild>
+      <span
+        className="whitespace-nowrap font-mono text-[0.6875rem] text-muted-foreground tabular-nums"
+        style={due?.overdue ? { color: 'var(--danger)' } : undefined}
+      >
+        {due?.label ?? '—'}
+      </span>
+      {isActivity && canComplete ? (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={completing}
+          onClick={(e) => {
+            e.stopPropagation();
+            onComplete();
+          }}
+        >
+          <Check className="size-3.5" />
+          Complete
+        </Button>
+      ) : (
+        <Button variant="outline" size="sm" asChild onClick={(e) => e.stopPropagation()}>
           <Link href={href}>
+            Open
             <ArrowRight className="size-3.5" />
           </Link>
         </Button>
-      </div>
+      )}
     </li>
   );
 }

@@ -7,6 +7,7 @@ import { and, eq } from 'drizzle-orm';
 import { createMiddleware } from 'hono/factory';
 import { type Session, getSession } from '../auth/index.js';
 import { env } from '../lib/env.js';
+import { resolveGrants } from '../trpc/permissions.js';
 
 const db = createDb(env().DATABASE_URL);
 
@@ -65,11 +66,14 @@ export const requireAuth = createMiddleware<{ Variables: Variables }>(async (c, 
 
   if (!activeOrganizationId || !role) return c.json({ error: 'forbidden' }, 403);
 
+  const permissions = await resolveGrants(db, activeOrganizationId, role);
+
   c.set('auth', {
     userId: session.user.id,
     userEmail: session.user.email,
     organizationId: activeOrganizationId,
     role,
+    permissions,
   });
   await next();
 });

@@ -14,6 +14,7 @@ import type { FieldDefLite } from '@/components/northbeam/field-render';
 import {
   type AggBucket,
   type AggregateFn,
+  NON_ADDITIVE_FNS,
   type PivotRow,
   type PivotSeries,
   bucketLabel,
@@ -70,9 +71,9 @@ export function coerceChartType(
     ? (requested as ResolvedChartType)
     : 'bar';
   if (!opts.hasGroup) return 'kpi';
-  const nonAdditive = opts.agg === 'avg' || opts.agg === 'min' || opts.agg === 'max';
-  // Donuts/funnels state part-to-whole; averages/extremes aren't parts.
-  if ((t === 'donut' || t === 'funnel') && nonAdditive) t = 'bar';
+  // Donuts/funnels state part-to-whole; averages/extremes/medians/distinct
+  // counts aren't parts (NON_ADDITIVE_FNS in aggregate-data).
+  if ((t === 'donut' || t === 'funnel') && NON_ADDITIVE_FNS.has(opts.agg)) t = 'bar';
   // A bucket scatter plots count (x) vs measure (y) — count-only is a line.
   if (t === 'scatter' && opts.agg === 'count') t = 'bar';
   if (t === 'matrix' && !opts.hasGroup2) t = 'table';
@@ -256,6 +257,8 @@ const AGG_NOUN: Record<AggregateFn, string> = {
   avg: 'Avg',
   min: 'Min',
   max: 'Max',
+  countDistinct: 'Distinct',
+  median: 'Median',
 };
 
 /** Aggregate buckets as a plain table — Chart `table` type, and the report

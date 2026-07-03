@@ -1,8 +1,9 @@
 'use client';
 
 // DashboardCard — one saved dashboard-type view on the /dashboards index.
-// Icon tile + label + "object · scope" line; links into the object route
-// with the view preselected (same URL shape the AI dialog navigates to).
+// Icon tile + label + "object · scope" line. Object-scoped views link into
+// the object route with the view preselected (same URL shape the AI dialog
+// navigates to); workspace-scoped ones (no object) live at /dashboards/<id>.
 
 import { IconTile } from '@/components/northbeam/icon-tile';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,7 +39,7 @@ export function DashboardCard({
   const scope = scopeLabel(view.sharedWith);
   return (
     <Link
-      href={object ? `/${object.key}?view=${view.id}` : '/dashboards'}
+      href={object ? `/${object.key}?view=${view.id}` : `/dashboards/${view.id}`}
       className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <Card

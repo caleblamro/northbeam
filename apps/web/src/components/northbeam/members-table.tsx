@@ -21,7 +21,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import type { Role } from '@northbeam/core/roles';
 import { Crown, Mail, MoreHorizontal, Users } from 'lucide-react';
 
 type Member = { id: string; name: string | null; email: string; role: string };
@@ -43,7 +42,8 @@ export function MembersTable({
   perms: { setRole: boolean; remove: boolean; transfer: boolean };
   setRolePending: boolean;
   cancelPending: boolean;
-  onSetRole: (memberId: string, role: Exclude<Role, 'owner'>) => void;
+  /** `role` is a role KEY — a system key or a custom role's slug. */
+  onSetRole: (memberId: string, role: string) => void;
   onCancelInvite: (invitationId: string) => void;
   onTransfer: (target: { id: string; label: string }) => void;
   onRemove: (target: { id: string; label: string }) => void;
@@ -83,7 +83,7 @@ export function MembersTable({
               </TableCell>
               <TableCell>
                 <RoleSelect
-                  value={m.role as Role}
+                  value={m.role}
                   disabled={m.role === 'owner' || setRolePending || !perms.setRole}
                   onChange={(role) => onSetRole(m.id, role)}
                 />

@@ -13,6 +13,7 @@
     "build": "tsup",
     "start": "node --env-file-if-exists=../../.env.local --env-file-if-exists=.env.local dist/index.js",
     "start:worker": "node --env-file-if-exists=../../.env.local --env-file-if-exists=.env.local dist/workers/index.js",
+    "seed:roles": "tsx --env-file-if-exists=../../.env.local --env-file-if-exists=.env.local scripts/seed-roles.ts",
     "sf:dev-connect": "tsx --env-file-if-exists=../../.env.local --env-file-if-exists=.env.local scripts/sf-dev-connect.ts",
     "sf:dry-run-map": "tsx scripts/sf-dry-run-map.ts",
     "sf:dry-run-report": "tsx scripts/sf-dry-run-report.ts",

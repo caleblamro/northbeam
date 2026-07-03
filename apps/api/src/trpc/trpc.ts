@@ -10,7 +10,7 @@ import {
   type NorthbeamErrorCode,
   type Permission,
   ValidationFailedError,
-  can,
+  canOrg,
   logger,
 } from '@northbeam/core';
 import { type Database, type DbExecutor, withOrgContext } from '@northbeam/db';
@@ -112,7 +112,7 @@ export const protectedProcedure = publicProcedure.use(async ({ ctx, next }) => {
 /** Build a procedure that requires a specific Permission. */
 export function permissionProcedure(action: Permission) {
   return protectedProcedure.use(({ ctx, next }) => {
-    if (!can(ctx.auth.role, action)) {
+    if (!canOrg(ctx.auth.permissions, action)) {
       throw new TRPCError({
         code: 'FORBIDDEN',
         message: `role '${ctx.auth.role}' cannot perform '${action}'`,

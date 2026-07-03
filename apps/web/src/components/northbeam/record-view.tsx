@@ -7,6 +7,9 @@
 // this works for any object.
 
 import { ActivityTimeline } from '@/components/northbeam/activity-timeline';
+import { AiAffordance } from '@/components/northbeam/ai-affordance';
+import { useAiComposer } from '@/components/northbeam/ai-composer';
+import { type Artifact, ArtifactView } from '@/components/northbeam/views/artifact-walker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { LoadingScreen } from '@/components/ui/loading-screen';
@@ -19,6 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { trpc } from '@/lib/api';
+import { useCanObject } from '@/lib/can';
 import { cn } from '@/lib/cn';
 import type { FieldConfig, ObjectLayout } from '@northbeam/db/field-types';
 import { Loader2, Pencil, Users, Zap } from 'lucide-react';
@@ -35,9 +39,17 @@ import { useParentChain } from './use-parent-chain';
 
 export function RecordView({ objectKey, id }: { objectKey: string; id: string }) {
   const [editing, setEditing] = useState(false);
+  const canWrite = useCanObject(objectKey, 'update');
+  const composer = useAiComposer();
 
   const rec = trpc.record.get.useQuery({ objectKey, id });
   const related = trpc.record.related.useQuery({ objectKey, id });
+  // The object's saved record-page layout (a `detail` view) — when present it
+  // replaces the built-in workspace below the hero band.
+  const detailView = trpc.view.detail.useQuery(
+    { objectId: rec.data?.object.id ?? '' },
+    { enabled: Boolean(rec.data?.object.id), retry: false, meta: { silent: true } },
+  );
   const parentChain = useParentChain({
     objectKey,
     recordId: id,
@@ -51,6 +63,25 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
   }
 
   const { object, fields, row, refLabels } = rec.data;
+  const detailConfig = (detailView.data?.config ?? null) as { artifact?: Artifact } | null;
+  const detailArtifact =
+    detailConfig?.artifact && detailConfig.artifact.components.length > 0
+      ? detailConfig.artifact
+      : null;
+  // Quiet AI door: generate (or refine) this object's record-page layout.
+  const detailRefine = (
+    <AiAffordance
+      revealOnHover
+      label={detailArtifact ? 'Refine this layout with AI' : 'Design this page with AI'}
+      onClick={() =>
+        composer.open({
+          objectKey,
+          detail: { objectId: object.id, viewId: detailView.data?.id ?? null },
+          artifact: detailArtifact ?? undefined,
+        })
+      }
+    />
+  );
   const layout = (object.layout ?? {}) as ObjectLayout;
   const byKey = new Map(fields.map((f) => [f.key, f as FieldDefLite]));
   const sections = layout.sections?.length
@@ -116,10 +147,12 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
               <span className="font-mono text-[0.6875rem]">{id.slice(0, 8)}</span>
             </div>
           </div>
-          <Button variant="outline" onClick={() => setEditing(true)}>
-            <Pencil />
-            Edit
-          </Button>
+          {canWrite && (
+            <Button variant="outline" onClick={() => setEditing(true)}>
+              <Pencil />
+              Edit
+            </Button>
+          )}
         </header>
 
         {heroKeys.length > 0 && (
@@ -156,13 +189,52 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
               recordId={id}
               field={stageField}
               value={row.data[stageField.key]}
+              readOnly={!canWrite}
             />
           </div>
         )}
       </div>
 
-      {/* Two-column workspace: sections + related tables left, activity rail
-          right. Collapses to one column below lg. */}
+      {/* A saved `detail` view replaces the built-in workspace below the hero
+          band — AI/hand-authored layout, same walker as dashboards, with the
+          record context wired in ('@record', RecordFields, RelatedList…). */}
+      {detailArtifact ? (
+        <div className="group/ai relative mt-6">
+          <div className="absolute top-1 right-1 z-10">{detailRefine}</div>
+          <ArtifactView
+            artifact={detailArtifact}
+            recordCtx={{
+              objectKey,
+              recordId: id,
+              record: { id, data: row.data as Record<string, unknown> },
+              fields: fields as FieldDefLite[],
+              refLabels,
+            }}
+          />
+        </div>
+      ) : (
+        <BuiltInWorkspace />
+      )}
+
+      {editing && (
+        <RecordFormDrawer
+          open
+          onClose={() => setEditing(false)}
+          objectKey={objectKey}
+          objectLabel={object.label}
+          fields={fields as FieldDefLite[]}
+          sections={layout.sections}
+          record={{ id: row.id, data: row.data }}
+          refLabels={refLabels}
+        />
+      )}
+    </div>
+  );
+
+  // The pre-detail-view layout, unchanged — still the default when no detail
+  // view is saved for this object.
+  function BuiltInWorkspace() {
+    return (
       <div className="mt-6 grid items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]">
         <div className="flex min-w-0 flex-col gap-5">
           {sections.map((sec, si) => {
@@ -197,6 +269,7 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
                       value={row.data[f.key]}
                       refLabel={refLabels[String(row.data[f.key])]}
                       fullWidth={cols > 1 && (f.type === 'textarea' || f.type === 'multipicklist')}
+                      canWrite={canWrite}
                     />
                   ))}
                 </div>
@@ -300,21 +373,8 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
           </section>
         </aside>
       </div>
-
-      {editing && (
-        <RecordFormDrawer
-          open
-          onClose={() => setEditing(false)}
-          objectKey={objectKey}
-          objectLabel={object.label}
-          fields={fields as FieldDefLite[]}
-          sections={layout.sections}
-          record={{ id: row.id, data: row.data }}
-          refLabels={refLabels}
-        />
-      )}
-    </div>
-  );
+    );
+  }
 }
 
 function InlineField({
@@ -324,6 +384,7 @@ function InlineField({
   value,
   refLabel,
   fullWidth,
+  canWrite,
 }: {
   objectKey: string;
   recordId: string;
@@ -331,12 +392,14 @@ function InlineField({
   value: unknown;
   refLabel?: string;
   fullWidth?: boolean;
+  /** Role can't write the object → render the value read-only. */
+  canWrite: boolean;
 }) {
   const utils = trpc.useUtils();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<unknown>(value);
   const cfg: FieldConfig = field.config ?? {};
-  const readOnly = READONLY_FIELD_TYPES.has(field.type);
+  const readOnly = !canWrite || READONLY_FIELD_TYPES.has(field.type);
 
   const update = trpc.record.update.useMutation({
     onSuccess: async () => {

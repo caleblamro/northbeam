@@ -17,6 +17,7 @@ import { SaveViewDialog } from '@/components/northbeam/save-view-dialog';
 import { Button } from '@/components/ui/button';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 import { trpc } from '@/lib/api';
+import { useCan, useCanObject } from '@/lib/can';
 import { type Filter, readFiltersFromParams, writeFiltersToParams } from '@/lib/filters';
 import { getViewRenderer } from '@/lib/views/registry';
 import type { ViewRow } from '@/lib/views/types';
@@ -44,6 +45,11 @@ export function RecordListView({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [q, setQ] = useState('');
+  // Server-side pagination: record.list takes limit/offset, so paging works
+  // past the server's 200-row page cap. The whole-set count comes from
+  // record.aggregate below.
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
   const [editing, setEditing] = useState<
     { id: string; data: Record<string, unknown> } | 'new' | null
   >(null);
@@ -130,9 +136,18 @@ export function RecordListView({
       search: q || undefined,
       filters: effectiveFilters,
       sort: effectiveSort,
+      limit: pageSize,
+      offset: pageIndex * pageSize,
     }),
-    [objectKey, q, effectiveFilters, effectiveSort],
+    [objectKey, q, effectiveFilters, effectiveSort, pageIndex, pageSize],
   );
+  // Any change to WHAT is queried resets to page 1 — a stale offset would
+  // otherwise point past the end of the new result set.
+  const queryShape = JSON.stringify([objectKey, q, effectiveFilters, effectiveSort]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: queryShape serializes the real deps
+  useEffect(() => {
+    setPageIndex(0);
+  }, [queryShape]);
   // Filters/sort are part of the query key, so edits would otherwise blank the
   // table while the server round-trips — keep the previous page on screen.
   const list = trpc.record.list.useQuery(listInput, { placeholderData: (prev) => prev });
@@ -213,16 +228,17 @@ export function RecordListView({
     } satisfies ViewRow;
   }, [storedView, object, objectPlural, layout.listColumns]);
 
-  // True record count for the control bar + footer. The list page caps at 200
-  // rows, so rows.length lies for big objects — record.aggregate counts the
-  // whole filtered set server-side (same ACL as the list). Search is a
-  // list-only param, so while searching the footer falls back to page counts.
+  // True record count for the control bar, footer, and pagination. The list
+  // page is limit/offset-windowed, so rows.length can't count — this asks
+  // record.aggregate for the whole filtered+searched set (same ACL + search
+  // predicate as the list, shared server-side).
   const countQ = trpc.record.aggregate.useQuery(
     {
       objectKey,
       groupBy: null,
       measure: { agg: 'count' },
       filters: effectiveFilters,
+      search: q || undefined,
     },
     { enabled: !!object, retry: false, meta: { silent: true } },
   );
@@ -257,6 +273,13 @@ export function RecordListView({
 
   const boot = trpc.me.bootstrap.useQuery();
   const currentUserId = boot.data?.session?.userId ?? null;
+
+  // Per-object CRUD gates — mirror the server's object-permission grid so
+  // roles without a grant don't see affordances that would error on click.
+  const canCreate = useCanObject(objectKey, 'create');
+  const canWrite = useCanObject(objectKey, 'update');
+  const canDelete = useCanObject(objectKey, 'delete');
+  const canWriteViews = useCan('view.write');
 
   const createView = trpc.view.create.useMutation({
     meta: { context: "Couldn't save the view" },
@@ -336,12 +359,12 @@ export function RecordListView({
     ],
   );
 
-  const createBtn = (
+  const createBtn = canCreate ? (
     <Button size="sm" onClick={() => setEditing('new')}>
       <UserPlus />
       {newLabel ?? `New ${objectLabel.toLowerCase() || 'record'}`}
     </Button>
-  );
+  ) : null;
 
   if (list.isError) {
     // Only a real NOT_FOUND means the object doesn't exist — anything else
@@ -396,11 +419,12 @@ export function RecordListView({
           onSearchChange={setQ}
           searchPlaceholder={`Search ${objectPlural.toLowerCase() || 'records'}…`}
           createAction={createBtn}
+          canWriteViews={canWriteViews}
         />
 
         {list.isLoading || isStale ? (
           <LoadingScreen size="md" />
-        ) : rows.length === 0 && activeView.type !== 'report' ? (
+        ) : rows.length === 0 && pageIndex === 0 && activeView.type !== 'report' ? (
           // Report views aggregate server-side over ALL rows — the list's
           // max-200-row page being empty says nothing about the report, so they
           // skip this empty-state gate and render regardless.
@@ -448,18 +472,38 @@ export function RecordListView({
                 refLabels={refLabels}
                 isLoading={list.isLoading}
                 onRowOpen={(id) => router.push(`/${objectKey}/${id}`)}
-                onRowEdit={(row) => setEditing(row)}
-                onRowDelete={(id) => setDeleteRecordId(id)}
-                onCellEdit={(id, patch) => update.mutate({ objectKey, id, data: patch })}
-                onSaveView={saveAsNewView}
+                onRowEdit={canWrite ? (row) => setEditing(row) : undefined}
+                onRowDelete={canDelete ? (id) => setDeleteRecordId(id) : undefined}
+                onCellEdit={
+                  canWrite
+                    ? (id, patch) => update.mutate({ objectKey, id, data: patch })
+                    : undefined
+                }
+                onSaveView={canWriteViews ? saveAsNewView : undefined}
                 sort={effectiveSort}
                 onSortChange={setSort}
                 tableChrome={isListType ? 'flush' : undefined}
+                pagination={
+                  isListType
+                    ? {
+                        pageIndex,
+                        pageSize,
+                        // Search-aware: the aggregate count applies the same
+                        // search predicate as the list, so totals stay exact
+                        // while typing.
+                        totalRows: serverCount,
+                        onPageChange: setPageIndex,
+                        onPageSizeChange: (n) => {
+                          setPageSize(n);
+                          setPageIndex(0);
+                        },
+                      }
+                    : undefined
+                }
                 footerStart={
                   isListType ? (
                     <ListAggregates
-                      searching={!!q}
-                      rows={rows}
+                      search={q || undefined}
                       serverCount={serverCount}
                       sumField={sumField}
                       objectKey={objectKey}
@@ -537,20 +581,18 @@ export function RecordListView({
   );
 }
 
-/** Σ / avg / count strip for the sticky list footer. Uses record.aggregate for
- *  true whole-set numbers; while a search is active (aggregate has no search
- *  param) it degrades to page-local math over the visible rows. */
+/** Σ / avg / count strip for the sticky list footer. Whole-set numbers from
+ *  record.aggregate, which applies the same filter + search predicates as
+ *  the list itself — exact even while the search box is active. */
 function ListAggregates({
-  searching,
-  rows,
+  search,
   serverCount,
   sumField,
   objectKey,
   filters,
   enabled,
 }: {
-  searching: boolean;
-  rows: { data: Record<string, unknown> }[];
+  search: string | undefined;
   serverCount: number | null;
   sumField: FieldDefLite | undefined;
   objectKey: string;
@@ -563,21 +605,14 @@ function ListAggregates({
       groupBy: null,
       measure: { agg: 'sum', fieldKey: sumField?.key ?? '' },
       filters,
+      search,
     },
-    { enabled: enabled && !!sumField && !searching, retry: false, meta: { silent: true } },
+    { enabled: enabled && !!sumField, retry: false, meta: { silent: true } },
   );
 
-  const clientSum = useMemo(() => {
-    if (!sumField) return 0;
-    return rows.reduce((n, r) => {
-      const v = Number(r.data[sumField.key]);
-      return Number.isFinite(v) ? n + v : n;
-    }, 0);
-  }, [rows, sumField]);
-
-  const count = searching ? rows.length : (serverCount ?? rows.length);
-  const sum = searching ? clientSum : sumQ.data ? Number(sumQ.data.buckets[0]?.value ?? 0) : null;
-  const avg = sum != null && count > 0 ? sum / count : null;
+  const count = serverCount;
+  const sum = sumQ.data ? Number(sumQ.data.buckets[0]?.value ?? 0) : null;
+  const avg = sum != null && count != null && count > 0 ? sum / count : null;
 
   return (
     <div className="flex items-center gap-5 text-muted-foreground text-sm tabular-nums">
@@ -593,11 +628,12 @@ function ListAggregates({
           <span className="font-medium text-foreground">{formatFieldValueText(sumField, avg)}</span>
         </span>
       )}
-      <span>
-        <span className="font-medium text-foreground">{count.toLocaleString()}</span>{' '}
-        {count === 1 ? 'record' : 'records'}
-        {searching && ' shown'}
-      </span>
+      {count != null && (
+        <span>
+          <span className="font-medium text-foreground">{count.toLocaleString()}</span>{' '}
+          {count === 1 ? 'record' : 'records'}
+        </span>
+      )}
     </div>
   );
 }

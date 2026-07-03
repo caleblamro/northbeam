@@ -14,8 +14,17 @@ import type { FieldDefLite } from '@/components/northbeam/field-render';
 // schema column and the UI share one source of truth. Helpers (UNARY_OPS,
 // matchesFilter, URL serializers) stay on this file because they're
 // browser-only.
-export type { Filter, FilterOp, FilterValue } from '@northbeam/db/views';
-import type { Filter, FilterOp } from '@northbeam/db/views';
+export type { Filter, FilterEntry, FilterGroup, FilterOp, FilterValue } from '@northbeam/db/views';
+import {
+  type Filter,
+  type FilterEntry,
+  type FilterOp,
+  isFilterGroup,
+  isRelativeDateToken,
+  relativeDateLabel,
+  resolveRelativeDate,
+} from '@northbeam/db/views';
+export { RELATIVE_DATE_PRESETS, isFilterGroup, isRelativeDateToken } from '@northbeam/db/views';
 
 /** Ops that don't need a value (so the popover hides the value editor). */
 export const UNARY_OPS: ReadonlySet<FilterOp> = new Set(['isTrue', 'isFalse', 'isEmpty', 'isSet']);
@@ -54,7 +63,9 @@ export function opsForType(type: string): FilterOp[] {
       return ['eq', 'neq', 'gt', 'lt', 'gte', 'lte', 'isEmpty', 'isSet'];
     case 'date':
     case 'datetime':
-      return ['eq', 'before', 'after', 'isEmpty', 'isSet'];
+      // gte/lte make inclusive relative windows expressible ("last 30 days"
+      // = gte '@-30d') — the SQL side compares dates for these ops too.
+      return ['eq', 'before', 'after', 'gte', 'lte', 'isEmpty', 'isSet'];
     case 'checkbox':
       return ['isTrue', 'isFalse'];
     case 'picklist':
@@ -83,6 +94,19 @@ function isEmptyValue(v: unknown): boolean {
   if (typeof v === 'string' && v === '') return true;
   if (Array.isArray(v) && v.length === 0) return true;
   return false;
+}
+
+/** A date filter value → epoch millis. Resolves relative tokens through the
+ *  SAME module the SQL builder uses (parity contract) and absolute strings
+ *  via Date.parse; NaN when neither parses — comparisons then fail, matching
+ *  the SQL side dropping the predicate… almost: SQL dropping a predicate
+ *  passes every row, so callers must skip (not fail) filters with NaN
+ *  instants. matchesFilter handles that below. */
+function dateFilterInstant(fv: unknown): number {
+  if (isRelativeDateToken(fv)) {
+    return resolveRelativeDate(fv)?.getTime() ?? Number.NaN;
+  }
+  return new Date(String(fv ?? '')).getTime();
 }
 
 /** Match a single field value against one filter. Returns true if the row
@@ -127,36 +151,77 @@ export function matchesFilter(field: FieldDefLite, value: unknown, filter: Filte
         .toLowerCase()
         .endsWith(String(fv ?? '').toLowerCase());
     case 'gt':
-      return Number(value) > Number(fv);
     case 'lt':
-      return Number(value) < Number(fv);
     case 'gte':
-      return Number(value) >= Number(fv);
-    case 'lte':
+    case 'lte': {
+      // Date fields compare as instants (relative tokens resolve through the
+      // shared module); everything else numerically. An unresolvable filter
+      // value makes the filter a NO-OP (true) — the SQL side drops the
+      // predicate in that case, and a dropped predicate passes every row.
+      if (field.type === 'date' || field.type === 'datetime') {
+        const bound = dateFilterInstant(fv);
+        if (Number.isNaN(bound)) return true;
+        const t = new Date(String(value)).getTime();
+        if (Number.isNaN(t)) return false;
+        if (filter.op === 'gt') return t > bound;
+        if (filter.op === 'lt') return t < bound;
+        if (filter.op === 'gte') return t >= bound;
+        return t <= bound;
+      }
+      if (filter.op === 'gt') return Number(value) > Number(fv);
+      if (filter.op === 'lt') return Number(value) < Number(fv);
+      if (filter.op === 'gte') return Number(value) >= Number(fv);
       return Number(value) <= Number(fv);
+    }
     case 'before':
-      return new Date(String(value)).getTime() < new Date(String(fv)).getTime();
-    case 'after':
-      return new Date(String(value)).getTime() > new Date(String(fv)).getTime();
+    case 'after': {
+      const bound = dateFilterInstant(fv);
+      if (Number.isNaN(bound)) return true; // mirrors SQL dropping the predicate
+      const t = new Date(String(value)).getTime();
+      if (Number.isNaN(t)) return false;
+      return filter.op === 'before' ? t < bound : t > bound;
+    }
     default:
       return true;
   }
 }
 
-/** Apply all active filters to a single row's data. */
+/** Apply all active filter entries to a single row's data. Leaves AND; an
+ *  `{ any: [...] }` group passes when ANY known-field leaf matches — and when
+ *  a group has NO known-field leaf it PASSES, mirroring the SQL builder
+ *  dropping the whole group (a dropped predicate constrains nothing). This
+ *  clause is the parity contract with buildFilterPredicates. */
 export function rowPassesFilters(
   fields: FieldDefLite[],
   data: Record<string, unknown>,
-  filters: Filter[],
+  filters: FilterEntry[],
 ): boolean {
   if (!filters.length) return true;
   const byKey = new Map(fields.map((f) => [f.key, f]));
-  for (const f of filters) {
-    const field = byKey.get(f.fieldKey);
+  for (const entry of filters) {
+    if (isFilterGroup(entry)) {
+      const evaluable = entry.any.filter((f) => byKey.has(f.fieldKey));
+      if (evaluable.length === 0) continue; // ↔ SQL drops the group
+      const hit = evaluable.some((f) => {
+        const field = byKey.get(f.fieldKey);
+        return field ? matchesFilter(field, data[f.fieldKey], f) : false;
+      });
+      if (!hit) return false;
+      continue;
+    }
+    const field = byKey.get(entry.fieldKey);
     if (!field) continue;
-    if (!matchesFilter(field, data[f.fieldKey], f)) return false;
+    if (!matchesFilter(field, data[entry.fieldKey], entry)) return false;
   }
   return true;
+}
+
+/** Chip label for an OR group: "Stage is Won, or Amount ≥ 5000". */
+export function groupChipLabel(
+  group: { any: Filter[] },
+  fieldLabelOf: (fieldKey: string) => string,
+): string {
+  return group.any.map((f) => chipLabel(f, fieldLabelOf(f.fieldKey))).join(', or ');
 }
 
 /* ── URL serialization ───────────────────────────────────────────────────── */
@@ -258,6 +323,9 @@ function compareValues(type: string, a: unknown, b: unknown): number {
 export function chipLabel(filter: Filter, fieldLabel: string, valueLabel?: string): string {
   const op = OP_LABEL[filter.op];
   if (UNARY_OPS.has(filter.op)) return `${fieldLabel} ${op}`;
-  const v = valueLabel ?? (filter.value == null ? '' : String(filter.value));
+  const v =
+    valueLabel ??
+    relativeDateLabel(filter.value) ??
+    (filter.value == null ? '' : String(filter.value));
   return `${fieldLabel} ${op} ${v}`;
 }

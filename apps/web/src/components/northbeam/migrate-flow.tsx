@@ -13,7 +13,8 @@ import { SectionCard } from '@/components/northbeam/section-card';
 import { Button } from '@/components/ui/button';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 import { trpc } from '@/lib/api';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { useCan } from '@/lib/can';
+import { AlertCircle, Loader2, ShieldAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 // createRun caps a run at 25 objects; discover returns them sorted by record
@@ -88,10 +89,24 @@ function AutoStart({ onCreated }: { onCreated: (runId: string) => void }) {
 
 export function MigrateFlow() {
   const latest = trpc.salesforce.latestRun.useQuery();
+  const mayRun = useCan('migration.run');
   const [override, setOverride] = useState<string | null>(null);
   const runId = override === 'new' ? null : (override ?? latest.data?.id ?? null);
 
   if (latest.isLoading) return <LoadingScreen size="lg" />;
-  if (!runId) return <AutoStart onCreated={setOverride} />;
+  if (!runId) {
+    // Starting a run (discover + createRun) is admin+ — don't auto-fire live
+    // Salesforce calls for roles the backend will reject anyway.
+    if (!mayRun) {
+      return (
+        <EmptyState
+          icon={ShieldAlert}
+          title="Waiting for an admin"
+          body="Analyzing and importing a Salesforce org is limited to workspace admins. Ask an admin to start the migration — progress will show up here."
+        />
+      );
+    }
+    return <AutoStart onCreated={setOverride} />;
+  }
   return <RunScreen key={runId} runId={runId} onStartOver={() => setOverride('new')} />;
 }

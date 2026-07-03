@@ -88,8 +88,11 @@ export function RunScreen({ runId, onStartOver }: { runId: string; onStartOver: 
         <ObjectMappingCard
           key={o.id}
           object={o}
-          onToggleField={(id, current) =>
-            setField.mutate({ id, status: current === 'skip' ? 'mapped' : 'skip' })
+          onToggleField={
+            mayRun
+              ? (id, current) =>
+                  setField.mutate({ id, status: current === 'skip' ? 'mapped' : 'skip' })
+              : undefined
           }
         />
       ))}
@@ -131,16 +134,18 @@ export function RunScreen({ runId, onStartOver }: { runId: string; onStartOver: 
                   </Link>
                 );
               })}
-            {r.status === 'failed' && (
+            {r.status === 'failed' && mayRun && (
               <Button disabled={execute.isPending} onClick={() => executeMutate({ runId })}>
                 {execute.isPending && <Loader2 className="animate-spin" />}
                 Retry import
               </Button>
             )}
-            <Button variant="ghost" onClick={onStartOver}>
-              <RefreshCw />
-              Run again
-            </Button>
+            {mayRun && (
+              <Button variant="ghost" onClick={onStartOver}>
+                <RefreshCw />
+                Run again
+              </Button>
+            )}
             <Link href="/setup/integrations">
               <Button variant="ghost">Manage connection</Button>
             </Link>

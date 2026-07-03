@@ -3,7 +3,7 @@
 // background jobs that pull a user's views for AI summarisation — gets the
 // same access rules.
 
-import { type SQL, and, asc, desc, eq, isNull, or, sql } from 'drizzle-orm';
+import { type SQL, and, asc, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import type { DbExecutor } from '../client.js';
 import type { Role } from '../roles.js';
 import { view } from '../schema.js';
@@ -88,7 +88,8 @@ export async function getView(
 
 /** Default view for an object — the dispatcher's fallback when the URL
  *  doesn't specify `?view=…`. Prefers an `is_default=true` row; falls back
- *  to the oldest list view; returns null if no views exist yet. */
+ *  to the oldest list view; returns null if no views exist yet. Detail views
+ *  are excluded — they render the record PAGE, never the collection. */
 export async function getDefaultView(
   db: DbExecutor,
   orgId: string,
@@ -97,8 +98,36 @@ export async function getDefaultView(
   const [row] = await db
     .select()
     .from(view)
-    .where(and(eq(view.organizationId, orgId), eq(view.objectId, objectId)))
+    .where(
+      and(eq(view.organizationId, orgId), eq(view.objectId, objectId), ne(view.type, 'detail')),
+    )
     .orderBy(desc(view.isDefault), asc(view.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/** The record-page layout for an object: the pinned default detail view,
+ *  else the newest detail view the caller can see, else null (the record
+ *  page renders its built-in layout then). */
+export async function getDefaultDetailView(
+  db: DbExecutor,
+  orgId: string,
+  objectId: string,
+  userId: string,
+  role: Role,
+): Promise<ViewRow | null> {
+  const [row] = await db
+    .select()
+    .from(view)
+    .where(
+      and(
+        eq(view.organizationId, orgId),
+        eq(view.objectId, objectId),
+        eq(view.type, 'detail'),
+        visibleToUser(userId, role),
+      ),
+    )
+    .orderBy(desc(view.isDefault), desc(view.updatedAt))
     .limit(1);
   return row ?? null;
 }

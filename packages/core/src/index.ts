@@ -5,13 +5,25 @@ export {
   type NorthbeamErrorCode,
   type ValidationIssue,
 } from './errors.js';
-export { requires, may, requireSession, requireOrg, type AuthContext } from './auth.js';
+export {
+  requires,
+  may,
+  requiresObject,
+  mayObject,
+  requireSession,
+  requireOrg,
+  type AuthContext,
+} from './auth.js';
 export {
   ARTIFACT_CHART_TYPES,
   ARTIFACT_DATE_GRAINS,
   ARTIFACT_FILTER_OPS,
   ARTIFACT_LEAF_COMPONENTS,
   type ArtifactChartType,
+  ArtifactActionSchema,
+  type ArtifactAction,
+  ArtifactRowActionSchema,
+  type ArtifactRowAction,
   ArtifactFilterSchema,
   ArtifactLeafNodeSchema,
   ArtifactLikeSchema,
@@ -30,6 +42,17 @@ export {
   type ArtifactSort,
 } from './artifact.js';
 export {
+  QUERY_MEASURE_FNS,
+  QueryConditionSchema,
+  QueryHavingSchema,
+  QueryMeasureSchema,
+  QuerySpecSchema,
+  type QueryCondition,
+  type QueryExists,
+  type QueryMeasure,
+  type QuerySpec,
+} from './query-spec.js';
+export {
   ROLES,
   type Role,
   isRole,
@@ -44,4 +67,20 @@ export {
   meetsRole,
   rankOf,
   recordPermissionFor,
+  // Per-object CRUD model (Directus-style custom roles).
+  type ObjectAction,
+  OBJECT_ACTIONS,
+  type CrudGrant,
+  NO_CRUD,
+  FULL_CRUD,
+  READ_ONLY_CRUD,
+  objectActionFor,
+  ORG_PERMISSION_KEYS,
+  type ResolvedPermissions,
+  canOrg,
+  canObject,
+  type RoleSeed,
+  SYSTEM_ROLE_SEEDS,
+  resolvePermissions,
+  resolveFromStatic,
 } from './roles.js';

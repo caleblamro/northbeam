@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { type RouterOutputs, trpc } from '@/lib/api';
+import { useCan } from '@/lib/can';
 import { appendArtifactNode } from '@/lib/views/artifact-edit';
 import type { ReportConfig } from '@northbeam/db/views';
 import {
@@ -122,6 +123,7 @@ export function SavedReports() {
     objectKeys.map((k, i) => [k, fieldQueries[i]?.data?.fields ?? []]),
   );
 
+  const canWrite = useCan('view.write');
   const update = trpc.view.update.useMutation({
     meta: { context: "Couldn't pin the report" },
   });
@@ -190,6 +192,7 @@ export function SavedReports() {
             fields={object ? (fieldsByKey.get(object.key) ?? []) : []}
             dashboards={dashboards}
             onPin={pin}
+            canWrite={canWrite}
           />
         );
       })}
@@ -203,12 +206,15 @@ function ReportRow({
   fields,
   dashboards,
   onPin,
+  canWrite,
 }: {
   report: ViewRow;
   object?: ObjectRow;
   fields: FieldLite[];
   dashboards: ViewRow[];
   onPin: (report: ViewRow, dashboard: ViewRow) => void;
+  /** view.write — gates Edit + Pin-to-dashboard. */
+  canWrite: boolean;
 }) {
   const href = object ? `/${object.key}?view=${report.id}` : '/reports';
   return (
@@ -238,31 +244,35 @@ function ReportRow({
               Open
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href={`/reports/builder?edit=${report.id}`}>
-              <Pencil />
-              Edit
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <Pin />
-              Pin to dashboard…
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              {dashboards.length === 0 ? (
-                <DropdownMenuItem disabled>No dashboards yet</DropdownMenuItem>
-              ) : (
-                dashboards.map((d) => (
-                  <DropdownMenuItem key={d.id} onSelect={() => onPin(report, d)}>
-                    <LayoutDashboard />
-                    {d.label}
-                  </DropdownMenuItem>
-                ))
-              )}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+          {canWrite && (
+            <>
+              <DropdownMenuItem asChild>
+                <Link href={`/reports/builder?edit=${report.id}`}>
+                  <Pencil />
+                  Edit
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Pin />
+                  Pin to dashboard…
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {dashboards.length === 0 ? (
+                    <DropdownMenuItem disabled>No dashboards yet</DropdownMenuItem>
+                  ) : (
+                    dashboards.map((d) => (
+                      <DropdownMenuItem key={d.id} onSelect={() => onPin(report, d)}>
+                        <LayoutDashboard />
+                        {d.label}
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

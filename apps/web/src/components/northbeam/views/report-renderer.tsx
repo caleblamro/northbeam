@@ -31,6 +31,8 @@ const AGG_WORD: Record<string, string> = {
   avg: 'Average',
   min: 'Minimum',
   max: 'Maximum',
+  median: 'Median',
+  countDistinct: 'Distinct count',
 };
 
 /** Props for the standalone report surface — shared by the saved-view
@@ -82,6 +84,7 @@ export function ReportResult({
       groupBy2: hasGroup2 ? cfg.groupBy2 : undefined,
       groupBy2Grain: cfg.groupBy2Grain,
       measure: { agg, fieldKey: cfg.measure?.fieldKey },
+      having: cfg.groupBy ? cfg.having : undefined,
       filters,
       limit: hasGroup2 ? 1000 : 200,
     },
@@ -249,7 +252,7 @@ const ReportConfigSchema = z
     groupBy2: z.string().nullable().optional(),
     groupBy2Grain: DateGrainSchema.optional(),
     measure: z.object({
-      agg: z.enum(['count', 'sum', 'avg', 'min', 'max']),
+      agg: z.enum(['count', 'sum', 'avg', 'min', 'max', 'countDistinct', 'median']),
       fieldKey: z.string().optional(),
     }),
     chartType: z.enum([

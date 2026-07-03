@@ -14,7 +14,7 @@ import {
   getObjectByKey,
 } from '../queries/crm.js';
 import { fieldDef } from '../schema.js';
-import type { Filter, ViewSort } from '../views.js';
+import type { FilterEntry, ViewSort } from '../views.js';
 import { multipicklistArray } from './bulk.js';
 import { buildFilterPredicates, buildOrderBy } from './filters-sql.js';
 import { SYS, qid, qualified } from './identifiers.js';
@@ -93,6 +93,20 @@ export function aclPredicate(
   return sql`(${sql.join(visParts, sql` or `)})`;
 }
 
+/** Case-insensitive substring search over every text-backed column plus the
+ *  display name. Shared by listRecords AND aggregateRecords so a searched
+ *  list page and its aggregate footer/count see exactly the same rows.
+ *  Null when the term is empty/whitespace (no predicate). */
+export function searchPredicate(fields: FieldRow[], term: string | undefined): SQL | null {
+  const t = term?.trim();
+  if (!t) return null;
+  const like = `%${t}%`;
+  const cols = fields.filter((f) => TEXT_TYPES.has(f.type)).map((f) => f.columnName);
+  cols.push(SYS.name);
+  const ors = cols.map((c) => sql`${col(c)} ilike ${like}`);
+  return sql`(${sql.join(ors, sql` or `)})`;
+}
+
 export async function listRecords(
   db: DbExecutor,
   opts: {
@@ -101,8 +115,9 @@ export async function listRecords(
     fields: FieldRow[];
     search?: string;
     /** View filters pushed down to SQL (AND-combined with search + ACL).
-     *  Same Filter model the web matcher uses — see filters-sql.ts. */
-    filters?: Filter[];
+     *  Same Filter model the web matcher uses — see filters-sql.ts. Entries
+     *  may be `{ any: [...] }` OR groups (one nesting level). */
+    filters?: FilterEntry[];
     /** View sort pushed down to SQL. Empty/omitted keeps the historical
      *  `created_at desc` ordering (buildOrderBy always appends it as the
      *  tiebreaker). */
@@ -123,14 +138,8 @@ export async function listRecords(
   const vis = aclPredicate(opts.object, opts.acl);
   if (vis) clauses.push(vis);
 
-  const term = opts.search?.trim();
-  if (term) {
-    const like = `%${term}%`;
-    const cols = opts.fields.filter((f) => TEXT_TYPES.has(f.type)).map((f) => f.columnName);
-    cols.push(SYS.name);
-    const ors = cols.map((c) => sql`${col(c)} ilike ${like}`);
-    clauses.push(sql`(${sql.join(ors, sql` or `)})`);
-  }
+  const searchClause = searchPredicate(opts.fields, opts.search);
+  if (searchClause) clauses.push(searchClause);
 
   clauses.push(...buildFilterPredicates(opts.fields, opts.filters ?? []));
 

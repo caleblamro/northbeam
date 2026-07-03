@@ -67,6 +67,50 @@ export type ArtifactChartType = (typeof ARTIFACT_CHART_TYPES)[number];
  *  DateGrain (packages/db) without coupling core to db. */
 export const ARTIFACT_DATE_GRAINS = ['day', 'week', 'month', 'quarter', 'year'] as const;
 
+/* ── Actions ────────────────────────────────────────────────────────────────
+   Declarative next-steps a dashboard can offer. The model composes specs from
+   this CLOSED vocabulary only; execution happens client-side through the
+   app's existing flows and mutations, so server-side permission checks stay
+   authoritative. Deliberately absent: delete, bulk mutations, arbitrary
+   navigation — the vocabulary is the security boundary. */
+
+export const ArtifactActionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('createRecord'),
+    label: z.string().min(1).max(40),
+    objectKey: z.string().min(1),
+    /** Field defaults pre-filled into the create form (still user-submitted
+     *  through record.create with full validation). */
+    defaults: z
+      .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+      .optional(),
+  }),
+  z.object({
+    kind: z.literal('navigate'),
+    label: z.string().min(1).max(40),
+    /** Object list page only — the model can't know real view/record ids. */
+    objectKey: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal('openComposer'),
+    label: z.string().min(1).max(40),
+    prompt: z.string().min(1).max(500),
+  }),
+]);
+
+export type ArtifactAction = z.infer<typeof ArtifactActionSchema>;
+
+/** Per-row quick action on RecordTable / RecordList nodes — one click sets
+ *  one field to one value ("Mark won"), via the ordinary record.update. */
+export const ArtifactRowActionSchema = z.object({
+  kind: z.literal('setField'),
+  label: z.string().min(1).max(30),
+  fieldKey: z.string().min(1),
+  value: z.union([z.string(), z.number(), z.boolean()]),
+});
+
+export type ArtifactRowAction = z.infer<typeof ArtifactRowActionSchema>;
+
 /* ── Leaf nodes ─────────────────────────────────────────────────────────── */
 
 export const ARTIFACT_LEAF_COMPONENTS = [
@@ -85,6 +129,21 @@ export const ARTIFACT_LEAF_COMPONENTS = [
   'RecordTable',
   'RecordGrid',
   'RecordList',
+  'ActionBar',
+  // Workspace (home) components — the Home page's greeting hero, inline
+  // stat band, and the needs-attention work queue. Meaningful on workspace-
+  // scoped dashboards; soft-fail elsewhere.
+  'Greeting',
+  'StatBand',
+  'AttentionQueue',
+  // Record-context components — meaningful only inside a `detail` view's
+  // record page (they read the current record); soft-fail elsewhere.
+  'RecordFields',
+  'RelatedList',
+  'StagePath',
+  // Advanced declarative query (QuerySpec) — multi-measure / expression /
+  // EXISTS shapes the simpler Chart/Metric props can't express.
+  'QueryBlock',
 ] as const;
 
 export const ArtifactLeafNodeSchema = z.object({

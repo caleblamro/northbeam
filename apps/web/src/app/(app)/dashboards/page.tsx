@@ -16,9 +16,12 @@ export default function DashboardsPage() {
   const views = trpc.view.list.useQuery({});
   const objects = trpc.object.list.useQuery();
   const objectById = new Map((objects.data ?? []).map((o) => [o.id, o]));
-  // Workspace-scoped views (null objectId — the Home page) live on `/`, not
-  // in this grid; DashboardCard links through the object route.
-  const dashboards = (views.data ?? []).filter((v) => v.type === 'dashboard' && v.objectId != null);
+  // Everything dashboard-shaped lands here — object-scoped views AND
+  // workspace-scoped ones (null objectId, at /dashboards/<id>). The one
+  // exception is the caller's personal Home page (key 'home'), on `/`.
+  const dashboards = (views.data ?? []).filter(
+    (v) => v.type === 'dashboard' && !(v.objectId == null && v.key === 'home'),
+  );
   const loading = views.isLoading || objects.isLoading;
 
   const newButton = (

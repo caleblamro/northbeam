@@ -375,9 +375,9 @@ export const objectRouter = router({
   /** Persist the form-layout customizer's output back onto the object def.
    *  Validates the layout shape but does NOT enforce that every section
    *  field key still exists — the customizer is responsible for filtering
-   *  stale references. Admin+ only (matches the existing org.settings.update
-   *  gate; field schema changes are a workspace-admin concern). */
-  updateLayout: permissionProcedure('org.settings.update')
+   *  stale references. Gated by 'object.manage' — editing an object's layout
+   *  is part of editing the data model, same as its fields/rules. */
+  updateLayout: permissionProcedure('object.manage')
     .input(
       z.object({
         objectId: z.string().uuid(),

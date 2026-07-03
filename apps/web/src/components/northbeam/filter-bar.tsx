@@ -34,8 +34,10 @@ import {
   type Filter,
   type FilterOp,
   OP_LABEL,
+  RELATIVE_DATE_PRESETS,
   UNARY_OPS,
   isFilterable,
+  isRelativeDateToken,
   opsForType,
 } from '@/lib/filters';
 import { Filter as FilterIcon, Plus, Trash2 } from 'lucide-react';
@@ -322,24 +324,12 @@ function FilterValueInput({
     );
   }
 
-  if (field.type === 'date') {
+  if (field.type === 'date' || field.type === 'datetime') {
     return (
-      <Input
-        id="filter-value"
-        type="date"
-        value={value == null ? '' : String(value)}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    );
-  }
-
-  if (field.type === 'datetime') {
-    return (
-      <Input
-        id="filter-value"
-        type="datetime-local"
-        value={value == null ? '' : String(value)}
-        onChange={(e) => onChange(e.target.value)}
+      <DateFilterValue
+        value={value}
+        onChange={onChange}
+        inputType={field.type === 'date' ? 'date' : 'datetime-local'}
       />
     );
   }
@@ -368,5 +358,50 @@ function FilterValueInput({
       onChange={(e) => onChange(e.target.value)}
       placeholder={op === 'contains' ? 'contains…' : ''}
     />
+  );
+}
+
+/** Date/datetime value editor: relative presets ("Last 30 days" → '@-30d')
+ *  keep saved views evergreen; "Specific date…" reveals the native picker.
+ *  A token value selects its preset; anything else reads as custom. */
+const CUSTOM_DATE = '__custom__';
+
+function DateFilterValue({
+  value,
+  onChange,
+  inputType,
+}: {
+  value: Filter['value'];
+  onChange: (next: Filter['value']) => void;
+  inputType: 'date' | 'datetime-local';
+}) {
+  const isToken = isRelativeDateToken(value);
+  return (
+    <div className="flex min-w-0 gap-1.5">
+      <Select
+        value={isToken ? String(value) : CUSTOM_DATE}
+        onValueChange={(v) => onChange(v === CUSTOM_DATE ? '' : v)}
+      >
+        <SelectTrigger id="filter-value" className="min-w-0">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {RELATIVE_DATE_PRESETS.map((p) => (
+            <SelectItem key={p.token} value={p.token}>
+              {p.label}
+            </SelectItem>
+          ))}
+          <SelectItem value={CUSTOM_DATE}>Specific date…</SelectItem>
+        </SelectContent>
+      </Select>
+      {!isToken && (
+        <Input
+          type={inputType}
+          aria-label="Specific date"
+          value={value == null ? '' : String(value)}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </div>
   );
 }

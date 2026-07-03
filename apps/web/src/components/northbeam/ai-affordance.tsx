@@ -12,6 +12,7 @@
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useCan } from '@/lib/can';
 import { cn } from '@/lib/cn';
 import { type VariantProps, cva } from 'class-variance-authority';
 import { Sparkles } from 'lucide-react';
@@ -55,6 +56,10 @@ export function AiAffordance({
   size,
   className,
 }: AiAffordanceProps) {
+  // Composing an artifact persists it as a saved view — hide the door for
+  // roles that can't write views (the backend gates ai.preview the same way).
+  const canCompose = useCan('view.write');
+  if (!canCompose) return null;
   return (
     <Tooltip>
       <TooltipTrigger asChild>

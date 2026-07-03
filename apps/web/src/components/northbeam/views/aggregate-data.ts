@@ -7,9 +7,34 @@ import type { ChartDatum } from '@/components/northbeam/charts';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
 import type { DateGrain } from '@northbeam/db/views';
 
-export type AggregateFn = 'count' | 'sum' | 'avg' | 'min' | 'max';
+export type AggregateFn =
+  | 'count'
+  | 'sum'
+  | 'avg'
+  | 'min'
+  | 'max'
+  | 'countDistinct'
+  | 'median';
 
-const AGG_FNS: readonly string[] = ['count', 'sum', 'avg', 'min', 'max'];
+const AGG_FNS: readonly string[] = [
+  'count',
+  'sum',
+  'avg',
+  'min',
+  'max',
+  'countDistinct',
+  'median',
+];
+
+/** Aggregates that are NOT part-to-whole safe — a donut/funnel of medians or
+ *  distinct counts reads as nonsense. Used by chart-type coercion. */
+export const NON_ADDITIVE_FNS: ReadonlySet<string> = new Set([
+  'avg',
+  'min',
+  'max',
+  'median',
+  'countDistinct',
+]);
 const GRAINS: readonly string[] = ['day', 'week', 'month', 'quarter', 'year'];
 
 /** Narrow untyped artifact props to the aggregate vocabulary (old saved
@@ -88,20 +113,74 @@ export function fmtDateBucket(iso: string, grain: DateGrain): string {
   }
 }
 
+/* ── Metric compare (computed deltas) ───────────────────────────────────────
+   A Metric's `compare` spec turns "% vs last period" into two REAL filtered
+   aggregates instead of a model-invented string. Boundaries are UTC to match
+   the server's UTC date semantics. */
+
+export type ComparePeriod = 'week' | 'month' | 'quarter';
+
+export const COMPARE_PERIODS: readonly string[] = ['week', 'month', 'quarter'];
+
+/** Start of the current period and of the one before it (UTC). Current runs
+ *  period-to-date; previous is the full window [prev, curr). */
+export function periodStarts(period: ComparePeriod, now: Date = new Date()): {
+  curr: Date;
+  prev: Date;
+} {
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  if (period === 'week') {
+    const today = Date.UTC(y, m, now.getUTCDate());
+    const dow = new Date(today).getUTCDay();
+    const back = dow === 0 ? 6 : dow - 1; // ISO Monday
+    const curr = today - back * 86_400_000;
+    return { curr: new Date(curr), prev: new Date(curr - 7 * 86_400_000) };
+  }
+  if (period === 'month') {
+    return { curr: new Date(Date.UTC(y, m, 1)), prev: new Date(Date.UTC(y, m - 1, 1)) };
+  }
+  const q = Math.floor(m / 3) * 3;
+  return { curr: new Date(Date.UTC(y, q, 1)), prev: new Date(Date.UTC(y, q - 3, 1)) };
+}
+
+/** Signed % change between a full previous period and the current
+ *  period-to-date. Undefined when the previous period is empty — "+∞%" is
+ *  noise, and a brand-new series has nothing honest to compare against. */
+export function pctChangeDelta(
+  curr: number,
+  prev: number,
+  period: ComparePeriod,
+): { text: string; trend: 'up' | 'down' | 'neutral' } | undefined {
+  if (!Number.isFinite(curr) || !Number.isFinite(prev) || prev === 0) return undefined;
+  const pct = ((curr - prev) / Math.abs(prev)) * 100;
+  const rounded = Math.round(pct);
+  const trend = rounded > 0 ? 'up' : rounded < 0 ? 'down' : 'neutral';
+  const sign = rounded > 0 ? '+' : '';
+  return { text: `${sign}${rounded}% vs last ${period}`, trend };
+}
+
 /** Grand total across buckets — count/sum add up; avg folds count-weighted;
  *  min/max take the extreme across buckets. */
 export function totalOf(buckets: AggBucket[], agg: AggregateFn): number {
   if (buckets.length === 0) return 0;
   if (agg === 'min') return Math.min(...buckets.map((b) => b.value));
   if (agg === 'max') return Math.max(...buckets.map((b) => b.value));
-  if (agg === 'avg') {
+  // median folds count-weighted like avg — an APPROXIMATION (the true grand
+  // median needs the raw rows); good enough for a header strip.
+  if (agg === 'avg' || agg === 'median') {
     const n = buckets.reduce((acc, b) => acc + b.count, 0);
     return n > 0 ? buckets.reduce((acc, b) => acc + b.value * b.count, 0) / n : 0;
   }
+  // countDistinct sums bucket-level distinct counts — an UPPER BOUND (the
+  // same value can appear in two buckets). Comment stands so this doesn't
+  // read as a bug later.
   return buckets.reduce((acc, b) => acc + b.value, 0);
 }
 
-/** Combine two already-aggregated cells into one (the "Other" fold). */
+/** Combine two already-aggregated cells into one (the "Other" fold).
+ *  avg/median fold count-weighted (median approximately); countDistinct sums
+ *  as an upper bound — both noted in totalOf, same trade-off. */
 function combine(
   agg: AggregateFn,
   a: { value: number; count: number },
@@ -110,7 +189,7 @@ function combine(
   const count = a.count + b.count;
   if (agg === 'min') return { value: Math.min(a.value, b.value), count };
   if (agg === 'max') return { value: Math.max(a.value, b.value), count };
-  if (agg === 'avg') {
+  if (agg === 'avg' || agg === 'median') {
     return { value: count > 0 ? (a.value * a.count + b.value * b.count) / count : 0, count };
   }
   return { value: a.value + b.value, count };

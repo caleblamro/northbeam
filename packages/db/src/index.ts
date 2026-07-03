@@ -2,6 +2,7 @@
 // just need the schema (e.g. type imports) can use the schema export.
 export * as schema from './schema.js';
 export {
+  assertRlsEnforced,
   createDb,
   withOrgContext,
   type Database,
@@ -53,15 +54,26 @@ export type {
   ShareTarget,
   ViewSort,
   Filter,
+  FilterGroup,
+  FilterEntry,
   FilterOp,
   FilterValue,
   FormatTone,
   FormatRule,
   ReportAgg,
+  ReportHaving,
   ReportConfig,
   ReportChartType,
   DateGrain,
 } from './views.js';
+export { isFilterGroup } from './views.js';
+// Relative-date filter tokens ('@today', '@-30d', …).
+export {
+  isRelativeDateToken,
+  resolveRelativeDate,
+  relativeDateLabel,
+  RELATIVE_DATE_PRESETS,
+} from './relative-date.js';
 // Metadata key derivation + reserved-key guards.
 export { keyFromLabel, KEY_RE, RESERVED_FIELD_KEYS } from './keys.js';
 export {
@@ -69,11 +81,13 @@ export {
   getHomeViewForUser,
   getView,
   getDefaultView,
+  getDefaultDetailView,
   type ViewRow,
 } from './queries/views.js';
 // Metadata (object_def / field_def) queries.
 export {
   listObjects,
+  listObjectsWithFields,
   getObjectByKey,
   getObjectById,
   listRollupFields,
@@ -178,9 +192,25 @@ export {
   type AggregateBucket,
   type AggregateFn,
   type AggregateGrouping,
+  type AggregateHaving,
   type AggregateOpts,
 } from './dynamic/aggregate.js';
 export { NUMERIC_TYPES } from './dynamic/filters-sql.js';
+// One-hop reference traversal ("dot paths") for aggregate group-bys/filters.
+export { planRefJoins, splitRefPath, type ResolvedRefPath } from './dynamic/ref-joins.js';
+// QuerySpec compiler — the "almost raw SQL" declarative query engine.
+export {
+  buildQuery,
+  collectQueryTargetKeys,
+  resolveQuerySpec,
+  runQuery,
+  type QueryAcl,
+  type QueryConditionLike,
+  type QueryMeasureLike,
+  type QueryRow,
+  type QuerySpecLike,
+  type ResolvedQueryPlan,
+} from './dynamic/query-compiler.js';
 // Compute orchestration — recompute formulas + rollups (topo-ordered) and the
 // cross-object context builder the pure evaluator reads from.
 export {
@@ -222,6 +252,26 @@ export {
   type SalesforceConnectionRow,
   type ConnectionStatus,
 } from './queries/salesforce.js';
+// Roles & per-object permissions — custom roles + the CRUD grid storage.
+export {
+  seedRoles,
+  listRoles,
+  getRoleById,
+  getRoleByKey,
+  createRole,
+  updateRole,
+  deleteRole,
+  listObjectPermissions,
+  listObjectPermissionsWithKey,
+  upsertObjectPermission,
+  clearObjectPermission,
+  countMembersWithRole,
+  type RoleRow,
+  type ObjectPermissionRow,
+  type RoleSeedInput,
+  type RoleUpdate,
+  type Crud,
+} from './queries/roles.js';
 // Audit log — append-only event trail.
 export {
   writeAuditEvent,

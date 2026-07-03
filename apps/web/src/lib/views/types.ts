@@ -6,6 +6,7 @@
 // the schema and the registry share one source of truth.
 
 import type { FieldDefLite } from '@/components/northbeam/field-render';
+import type { ListPagination } from '@/components/northbeam/record-table';
 import type { RouterOutputs } from '@/lib/api';
 import type { ViewSort, ViewType } from '@northbeam/db/views';
 import type { LucideIcon } from 'lucide-react';
@@ -28,10 +29,12 @@ export type ViewRendererProps = {
   isLoading: boolean;
   /** Click a row → open detail. */
   onRowOpen(id: string): void;
-  /** Click "Edit" in a row menu → open the form drawer. */
-  onRowEdit(row: { id: string; data: Record<string, unknown> }): void;
-  /** Click "Delete" in a row menu → confirm + remove. */
-  onRowDelete(id: string): void;
+  /** Click "Edit" in a row menu → open the form drawer. Omitted when the
+   *  caller's role can't write this object — renderers hide the affordance. */
+  onRowEdit?: (row: { id: string; data: Record<string, unknown> }) => void;
+  /** Click "Delete" in a row menu → confirm + remove. Omitted when the
+   *  caller's role can't delete this object. */
+  onRowDelete?: (id: string) => void;
   /** Patch one or more fields on a record (inline cell edit). Renderers treat
    *  absence as read-only. */
   onCellEdit?: (recordId: string, patch: Record<string, unknown>) => void;
@@ -54,6 +57,9 @@ export type ViewRendererProps = {
   /** Slot rendered at the start of the table footer — the dispatcher passes
    *  the Σ/avg/count aggregate strip here. */
   footerStart?: ReactNode;
+  /** Server-side pagination driven by the dispatcher (record.list
+   *  limit/offset + record.aggregate count). `rows` is one page when set. */
+  pagination?: ListPagination;
 };
 
 export type ViewRenderer<TConfig = unknown> = {

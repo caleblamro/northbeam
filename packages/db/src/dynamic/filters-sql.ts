@@ -13,13 +13,23 @@
 
 import { type SQL, sql } from 'drizzle-orm';
 import type { FieldType } from '../field-types.js';
-import type { Filter, ViewSort } from '../views.js';
+import { isRelativeDateToken, resolveRelativeDate } from '../relative-date.js';
+import { type Filter, type FilterEntry, type ViewSort, isFilterGroup } from '../views.js';
 import { SYS, qid } from './identifiers.js';
 
-/** Minimal field shape the builder needs — satisfied by FieldRow. */
-export type FilterField = { key: string; columnName: string; type: FieldType };
+/** Minimal field shape the builder needs — satisfied by FieldRow.
+ *  `tableAlias` qualifies the column for joined (dot-path) fields; base
+ *  fields stay unqualified. */
+export type FilterField = {
+  key: string;
+  columnName: string;
+  type: FieldType;
+  tableAlias?: string;
+};
 
 const col = (name: string): SQL => sql.raw(qid(name));
+const fieldCol = (f: FilterField): SQL =>
+  f.tableAlias ? sql.raw(`${qid(f.tableAlias)}.${qid(f.columnName)}`) : sql.raw(qid(f.columnName));
 
 /** Types stored in a Postgres `numeric`/`bigint` column — compared as numbers. */
 export const NUMERIC_TYPES: ReadonlySet<FieldType> = new Set<FieldType>([
@@ -55,6 +65,18 @@ function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+/** A date filter value → bound ISO string. Accepts relative tokens
+ *  ('@today', '@-30d' — resolved through the shared relative-date module so
+ *  the web matcher agrees) and absolute date strings; null when neither
+ *  parses, which drops the predicate (existing safe behavior). */
+function dateIso(fv: unknown): string | null {
+  if (isRelativeDateToken(fv)) {
+    return resolveRelativeDate(fv)?.toISOString() ?? null;
+  }
+  const t = Date.parse(String(fv ?? ''));
+  return Number.isNaN(t) ? null : new Date(t).toISOString();
+}
+
 /** `col IS empty` for this field type, matching the web `isEmptyValue`:
  *  null OR empty-string (text) OR empty-array (multipicklist). */
 function emptyPredicate(field: FilterField, c: SQL): SQL {
@@ -68,7 +90,7 @@ function emptyPredicate(field: FilterField, c: SQL): SQL {
  *  be applied (unknown field handled by the caller, non-numeric value for a
  *  numeric op, etc.) — mirroring the web matcher, which skips such filters. */
 function predicate(field: FilterField, f: Filter): SQL | null {
-  const c = col(field.columnName);
+  const c = fieldCol(field);
 
   // Unary / state operators — these run regardless of whether the value is set.
   switch (f.op) {
@@ -128,27 +150,34 @@ function predicate(field: FilterField, f: Filter): SQL | null {
     case 'lt':
     case 'gte':
     case 'lte': {
-      // Numeric-only (mirrors opsForType): `::numeric` on a text/date column
+      const opSql =
+        f.op === 'gt' ? sql`>` : f.op === 'lt' ? sql`<` : f.op === 'gte' ? sql`>=` : sql`<=`;
+      // Date columns compare as instants — this is what makes inclusive
+      // relative windows work ("last 30 days" = gte '@-30d').
+      if (DATE_TYPES.has(field.type)) {
+        const iso = dateIso(fv);
+        if (iso === null) return null;
+        return sql`${c}::timestamptz ${opSql} ${iso}::timestamptz`;
+      }
+      // Numeric otherwise (mirrors opsForType): `::numeric` on a text column
       // would be a per-row cast error, reachable via crafted URLs or stale
       // saved views after a field type change.
       if (!NUMERIC_TYPES.has(field.type)) return null;
       const n = Number(fv);
       if (!Number.isFinite(n)) return null;
-      const opSql =
-        f.op === 'gt' ? sql`>` : f.op === 'lt' ? sql`<` : f.op === 'gte' ? sql`>=` : sql`<=`;
       return sql`${c}::numeric ${opSql} ${n}`;
     }
     case 'before':
     case 'after': {
-      // Date columns only, and the value must parse as a date — the
+      // Date columns only, and the value must resolve to an instant — the
       // FilterDialog lets an empty value through (`{ op: 'before', value:
       // null }`), and `'null'::timestamptz` is a query-killing cast error.
-      // The parsed instant is bound as ISO so Postgres sees exactly what the
-      // web matcher's `new Date(...)` resolved.
+      // Relative tokens ('@-30d') resolve through the shared module; the
+      // instant is bound as ISO so Postgres sees exactly what the web
+      // matcher's `new Date(...)` resolved.
       if (!DATE_TYPES.has(field.type)) return null;
-      const t = Date.parse(String(fv ?? ''));
-      if (Number.isNaN(t)) return null;
-      const iso = new Date(t).toISOString();
+      const iso = dateIso(fv);
+      if (iso === null) return null;
       return f.op === 'before'
         ? sql`${c}::timestamptz < ${iso}::timestamptz`
         : sql`${c}::timestamptz > ${iso}::timestamptz`;
@@ -158,17 +187,32 @@ function predicate(field: FilterField, f: Filter): SQL | null {
   }
 }
 
-/** Translate a Filter[] into AND-combined SQL predicates. Unknown field keys and
- *  inapplicable operators are dropped (the web matcher `continue`s on them), so
- *  the result may be shorter than `filters`. Returns [] when nothing applies. */
-export function buildFilterPredicates(fields: FilterField[], filters: Filter[]): SQL[] {
+/** Translate FilterEntry[] into AND-combined SQL predicates. Leaf entries with
+ *  unknown field keys or inapplicable operators are dropped (the web matcher
+ *  `continue`s on them); `{ any: [...] }` groups OR-combine their surviving
+ *  leaves and drop entirely when NO leaf survives — a group you can't
+ *  evaluate must not constrain the query (parity: the web matcher passes such
+ *  groups). Returns [] when nothing applies. */
+export function buildFilterPredicates(fields: FilterField[], filters: FilterEntry[]): SQL[] {
   if (!filters.length) return [];
   const byKey = new Map(fields.map((f) => [f.key, f]));
-  const out: SQL[] = [];
-  for (const f of filters) {
+  const leaf = (f: FilterEntry): SQL | null => {
+    if (isFilterGroup(f)) return null;
     const field = byKey.get(f.fieldKey);
-    if (!field) continue;
-    const p = predicate(field, f);
+    if (!field) return null;
+    return predicate(field, f);
+  };
+  const out: SQL[] = [];
+  for (const entry of filters) {
+    if (isFilterGroup(entry)) {
+      const parts = entry.any
+        .map((f) => leaf(f))
+        .filter((p): p is SQL => p !== null);
+      if (parts.length === 1 && parts[0]) out.push(parts[0]);
+      else if (parts.length > 1) out.push(sql`(${sql.join(parts, sql` or `)})`);
+      continue;
+    }
+    const p = leaf(entry);
     if (p) out.push(p);
   }
   return out;

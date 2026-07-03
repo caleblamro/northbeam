@@ -7,6 +7,7 @@
 // saved-reports.tsx). Extracted so the page stays inside its 30–80 line
 // budget while owning the section rhythm (mb-7) and reveal stagger.
 
+import { useAiComposer } from '@/components/northbeam/ai-composer';
 import { SectionCard } from '@/components/northbeam/section-card';
 import { Button } from '@/components/ui/button';
 import { Chip } from '@/components/ui/chip';
@@ -51,9 +52,17 @@ const FORECAST = [62, 68, 71, 79, 84, 90, 96, 103, 110, 118, 126, 135].map((v) =
 const ACTUAL = [60, 64, 70, 74, 82, 86, 95, 99, 108, 114, 121, 129].map((v) => v * 1000_00);
 
 /** The AI ask bar + suggestion chips. The input is a shortcut into the same
- *  flow the ⌘K palette's "AI" group opens — never the only door. */
+ *  composer the ⌘K palette's "AI" group opens — never the only door. Asking
+ *  opens the drawer with the question ready to send; chips open it directly. */
 export function ReportsAskBar() {
   const [q, setQ] = useState('');
+  const composer = useAiComposer();
+  const ask = (prompt: string) => {
+    const trimmed = prompt.trim();
+    if (!trimmed) return;
+    setQ('');
+    composer.open({ prompt: trimmed });
+  };
   return (
     <div className="flex flex-col gap-3">
       <div className="reveal reveal-1">
@@ -64,12 +73,15 @@ export function ReportsAskBar() {
           <InputGroupInput
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') ask(q);
+            }}
             placeholder="Ask anything about your pipeline…"
             className="text-[0.9375rem]"
           />
           <InputGroupAddon align="inline-end">
             <Kbd>⌘K</Kbd>
-            <Button size="sm">
+            <Button size="sm" disabled={!q.trim()} onClick={() => ask(q)}>
               Ask
               <ArrowRight />
             </Button>
@@ -78,7 +90,7 @@ export function ReportsAskBar() {
       </div>
       <div className="reveal reveal-2 flex flex-wrap gap-1.5">
         {SUGGESTIONS.map((s) => (
-          <Chip key={s} selected={false} onClick={() => setQ(s)}>
+          <Chip key={s} selected={false} onClick={() => ask(s)}>
             {s}
           </Chip>
         ))}

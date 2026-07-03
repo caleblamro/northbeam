@@ -31,6 +31,7 @@ export function RecordFormDrawer({
   sections,
   record,
   refLabels,
+  defaultValues,
 }: {
   open: boolean;
   onClose: () => void;
@@ -41,6 +42,9 @@ export function RecordFormDrawer({
   sections?: LayoutSection[];
   record?: { id: string; data: Record<string, unknown> } | null;
   refLabels?: Record<string, string>;
+  /** Create mode only: seed values (e.g. an ActionBar's pre-filled defaults).
+   *  Ignored when `record` is set — edits always start from the record. */
+  defaultValues?: Record<string, unknown>;
 }) {
   const utils = trpc.useUtils();
   const editable = useMemo(() => fields.filter((f) => !READONLY_FIELD_TYPES.has(f.type)), [fields]);
@@ -87,7 +91,7 @@ export function RecordFormDrawer({
 
   useEffect(() => {
     if (!open) return;
-    const d = (record?.data ?? {}) as FormValues;
+    const d = (record?.data ?? defaultValues ?? {}) as FormValues;
     form.reset(d);
     const ro: Record<string, Option | null> = {};
     for (const f of editable) {
@@ -97,7 +101,7 @@ export function RecordFormDrawer({
       }
     }
     setRefOptions(ro);
-  }, [open, record, editable, refLabels, form]);
+  }, [open, record, editable, refLabels, form, defaultValues]);
 
   const create = trpc.record.create.useMutation({ meta: { silent: true } });
   const update = trpc.record.update.useMutation({ meta: { silent: true } });

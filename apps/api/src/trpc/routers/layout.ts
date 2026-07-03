@@ -53,7 +53,7 @@ export const layoutRouter = router({
   /** Create or replace a layout override. The (objectId, recordTypeId,
    *  audience, name) tuple is unique — a second upsert with the same key
    *  updates in place. Admin+. */
-  upsert: permissionProcedure('org.settings.update')
+  upsert: permissionProcedure('object.manage')
     .input(
       z.object({
         id: z.string().uuid().optional(),
@@ -101,7 +101,7 @@ export const layoutRouter = router({
 
   /** Remove an override row. Admin+. The default-default (objectDef.layout)
    *  is unaffected — it stays as the fallback. */
-  delete: permissionProcedure('org.settings.update')
+  delete: permissionProcedure('object.manage')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db

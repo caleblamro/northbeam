@@ -34,6 +34,29 @@ async function fieldsFor(db: DbExecutor, objectId: string): Promise<FieldRow[]> 
     .orderBy(asc(fieldDef.orderIndex));
 }
 
+/** Every (non-archived) object with its full field list — two queries total,
+ *  grouped in JS. Prefer this over per-object getObjectByKey loops when a
+ *  caller needs the whole workspace's metadata (e.g. ai.preview's cross-object
+ *  context + repair ground truth). */
+export async function listObjectsWithFields(
+  db: DbExecutor,
+  orgId: string,
+): Promise<ObjectWithFields[]> {
+  const objects = await listObjects(db, orgId);
+  const allFields = await db
+    .select()
+    .from(fieldDef)
+    .where(eq(fieldDef.organizationId, orgId))
+    .orderBy(asc(fieldDef.orderIndex));
+  const byObjectId = new Map<string, FieldRow[]>();
+  for (const f of allFields) {
+    const bucket = byObjectId.get(f.objectId);
+    if (bucket) bucket.push(f);
+    else byObjectId.set(f.objectId, [f]);
+  }
+  return objects.map((object) => ({ object, fields: byObjectId.get(object.id) ?? [] }));
+}
+
 export async function getObjectByKey(
   db: DbExecutor,
   orgId: string,

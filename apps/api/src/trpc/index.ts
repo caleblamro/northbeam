@@ -13,6 +13,7 @@ import { orgRouter } from './routers/org.js';
 import { picklistRouter } from './routers/picklist.js';
 import { recordTypeRouter } from './routers/record-type.js';
 import { recordRouter } from './routers/record.js';
+import { roleRouter } from './routers/role.js';
 import { salesforceRouter } from './routers/salesforce.js';
 import { validationRouter } from './routers/validation.js';
 import { viewRouter } from './routers/view.js';
@@ -31,6 +32,7 @@ export const appRouter = router({
   picklist: picklistRouter,
   record: recordRouter,
   recordType: recordTypeRouter,
+  role: roleRouter,
   salesforce: salesforceRouter,
   validation: validationRouter,
   view: viewRouter,

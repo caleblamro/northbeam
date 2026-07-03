@@ -44,6 +44,7 @@ export const LAUNCHER_TILES: NavSection[] = [
       { label: 'Pipeline', href: '/pipeline', icon: 'funnel' },
       { label: 'Reports', href: '/reports', icon: 'chart-line-up' },
       { label: 'Dashboards', href: '/dashboards', icon: 'squares-four' },
+      { label: 'Views', href: '/views', icon: 'stack' },
     ],
   },
   {
@@ -92,6 +93,10 @@ export const PAGE_META: Record<string, PageMeta> = {
     subtitle: 'Group, measure, and chart any object — then save it as a report.',
   },
   '/dashboards': { title: 'Dashboards', subtitle: 'Pin the metrics your team watches.' },
+  '/views': {
+    title: 'Views',
+    subtitle: 'Everything you and your team have saved — share a view or make it public.',
+  },
   '/migrate': {
     title: 'Migrate from Salesforce',
     subtitle: "One-click import — Northbeam's AI maps your objects and fields.",

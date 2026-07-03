@@ -24,6 +24,7 @@ export function ListView({
   onRowDelete,
   tableChrome,
   footerStart,
+  pagination,
 }: ViewRendererProps) {
   const columnKeys = view.columns.length > 0 ? view.columns : fields.slice(0, 4).map((f) => f.key);
   const columns = columnKeys
@@ -47,6 +48,7 @@ export function ListView({
       onRowDelete={onRowDelete}
       chrome={tableChrome}
       footerStart={footerStart}
+      pagination={pagination}
     />
   );
 }

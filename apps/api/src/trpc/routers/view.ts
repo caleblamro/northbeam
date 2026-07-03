@@ -5,22 +5,30 @@
 import { ArtifactSchema } from '@northbeam/core';
 import {
   type Filter,
+  type ObjectWithFields,
   type ShareTarget,
   type ViewSort,
   type ViewType,
+  getDefaultDetailView,
   getDefaultView,
   getHomeViewForUser,
   getObjectById,
+  getObjectByKey,
   getView,
   listViewsForUser,
   schema,
   writeAuditEvent,
 } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Context } from '../context.js';
-import { ReportConfigSchema, resolveReportSpec } from '../report-config.js';
+import {
+  ReportConfigSchema,
+  collectRefTargetKeys,
+  resolveRefPath,
+  resolveReportSpec,
+} from '../report-config.js';
 import { FilterSchema } from '../schemas.js';
 import { permissionProcedure, protectedProcedure, router } from '../trpc.js';
 
@@ -32,7 +40,12 @@ const ShareTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('user'), userId: z.string().min(1) }),
 ]) satisfies z.ZodType<ShareTarget>;
 
-const ViewTypeSchema = z.enum(['list', 'dashboard', 'report']) satisfies z.ZodType<ViewType>;
+const ViewTypeSchema = z.enum([
+  'list',
+  'dashboard',
+  'report',
+  'detail',
+]) satisfies z.ZodType<ViewType>;
 
 const ViewIconSchema = z.enum([
   'list',
@@ -120,7 +133,20 @@ async function assertReportConfig(
     throw new TRPCError({ code: 'NOT_FOUND', message: `object '${objectId}' not found` });
   }
   const byKey = new Map(result.fields.map((f) => [f.key, f]));
-  const resolved = resolveReportSpec(result.fields, parsed.data);
+  // Dot-path group-bys/filters ('account.industry') validate against loaded
+  // target objects — the same resolution record.aggregate performs at run
+  // time, so what saves is what runs.
+  const targetKeys = collectRefTargetKeys(
+    result.fields,
+    [parsed.data.groupBy, parsed.data.groupBy2],
+    filters,
+  );
+  const targets = new Map<string, ObjectWithFields>();
+  for (const key of targetKeys) {
+    const t = await getObjectByKey(ctx.db, ctx.auth.organizationId, key);
+    if (t) targets.set(key, t);
+  }
+  const resolved = resolveReportSpec(result.fields, parsed.data, targets);
   if (!resolved.ok) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
@@ -128,7 +154,10 @@ async function assertReportConfig(
     });
   }
   for (const flt of filters) {
-    if (!byKey.has(flt.fieldKey)) {
+    const ok = flt.fieldKey.includes('.')
+      ? resolveRefPath(result.fields, targets, flt.fieldKey) !== null
+      : byKey.has(flt.fieldKey);
+    if (!ok) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: `filter field '${flt.fieldKey}' does not exist on '${result.object.key}'`,
@@ -198,6 +227,21 @@ export const viewRouter = router({
     .input(z.object({ objectId: z.string().uuid() }))
     .query(({ ctx, input }) => getDefaultView(ctx.db, ctx.auth.organizationId, input.objectId)),
 
+  /** The record-page layout for an object: pinned default detail view, else
+   *  the newest one visible to the caller, else null (the record page falls
+   *  back to its built-in layout). */
+  detail: protectedProcedure
+    .input(z.object({ objectId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      getDefaultDetailView(
+        ctx.db,
+        ctx.auth.organizationId,
+        input.objectId,
+        ctx.auth.userId,
+        ctx.auth.role,
+      ),
+    ),
+
   /** Create a new view. Caller becomes the owner. Default `sharedWith` is
    *  a personal view ({user, caller}); pass [{kind:'org'}] to share the
    *  whole workspace. */
@@ -215,8 +259,15 @@ export const viewRouter = router({
         }
         await assertReportConfig(ctx, input.objectId, input.config, input.filters);
       }
-      if (input.type === 'dashboard') {
+      if (input.type === 'dashboard' || input.type === 'detail') {
         assertDashboardConfig(input.config);
+      }
+      // Detail views ARE a record page layout — they need an object to lay out.
+      if (input.type === 'detail' && !input.objectId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'detail views must belong to an object',
+        });
       }
       const shared =
         input.sharedWith.length > 0
@@ -282,7 +333,10 @@ export const viewRouter = router({
           input.filters ?? existing.filters,
         );
       }
-      if ((input.type ?? existing.type) === 'dashboard' && input.config !== undefined) {
+      if (
+        ['dashboard', 'detail'].includes(input.type ?? existing.type) &&
+        input.config !== undefined
+      ) {
         // Only newly-written configs are validated — a label-only patch on a
         // legacy dashboard with drifted artifact JSON must not start failing.
         assertDashboardConfig(input.config);
@@ -324,6 +378,12 @@ export const viewRouter = router({
             target.objectId === null
               ? isNull(schema.view.objectId)
               : eq(schema.view.objectId, target.objectId),
+            // Detail views form their OWN default group per object — pinning
+            // a record-page layout must not unset the collection default
+            // (and vice versa).
+            target.type === 'detail'
+              ? eq(schema.view.type, 'detail')
+              : ne(schema.view.type, 'detail'),
             eq(schema.view.isDefault, true),
           ),
         );

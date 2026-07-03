@@ -1,13 +1,21 @@
 // /trpc/record — generic CRUD over records of ANY object, driven by the metadata
 // layer. Every operation is org-scoped. Field values live in `data` (JSONB).
 
-import { ValidationFailedError, can, recordPermissionFor } from '@northbeam/core';
+import {
+  type ObjectAction,
+  QuerySpecSchema,
+  ValidationFailedError,
+  canObject,
+} from '@northbeam/core';
 import {
   type FieldRow,
   type FormatRule,
+  type ObjectWithFields,
   type PicklistOption,
+  type QuerySpecLike,
   aggregateRecords,
   canEditRecord,
+  collectQueryTargetKeys,
   createRecord,
   deleteRecord,
   displayName,
@@ -26,24 +34,50 @@ import {
   recomputeAndPersist,
   recomputeParentRollups,
   requiredIssues,
+  resolveQuerySpec,
   resolveRefLabels,
   revokeShare,
   ruleIssues,
+  runQuery,
   sanitizeData,
   updateRecord,
   visibleSharedRecordIds,
   writeAuditEvent,
 } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
+import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Context } from '../context.js';
-import { DateGrainSchema, ReportAggSchema, resolveReportSpec } from '../report-config.js';
-import { FilterSchema } from '../schemas.js';
+import {
+  DateGrainSchema,
+  ReportAggSchema,
+  ReportHavingSchema,
+  collectRefTargetKeys,
+  resolveFilterRefPaths,
+  resolveReportSpec,
+} from '../report-config.js';
+import { FilterEntrySchema } from '../schemas.js';
 import { protectedProcedure, router } from '../trpc.js';
 
 const dataSchema = z.record(z.string(), z.unknown());
 
-async function requireObject(ctx: Context, key: string, opts?: { forWrite?: boolean }) {
+/** Per-object CRUD gate — the caller's role must grant `action` on this object
+ *  (a role default or an objectPermission override; owner always passes). */
+function assertObjectPermission(ctx: Context, objectId: string, action: ObjectAction): void {
+  if (!ctx.auth) throw new TRPCError({ code: 'UNAUTHORIZED' });
+  if (!canObject(ctx.auth.permissions, objectId, action)) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: `your role cannot ${action} records of this object`,
+    });
+  }
+}
+
+async function requireObject(
+  ctx: Context,
+  key: string,
+  opts?: { forWrite?: boolean; skipReadCheck?: boolean },
+) {
   if (!ctx.auth) throw new TRPCError({ code: 'UNAUTHORIZED' });
   const result = await getObjectByKey(ctx.db, ctx.auth.organizationId, key);
   if (!result) throw new TRPCError({ code: 'NOT_FOUND', message: `object '${key}' not found` });
@@ -51,20 +85,10 @@ async function requireObject(ctx: Context, key: string, opts?: { forWrite?: bool
   if (opts?.forWrite && result.object.archivedAt) {
     throw new TRPCError({ code: 'FORBIDDEN', message: `object '${key}' is archived` });
   }
+  // Every record procedure funnels through here, so the per-object READ gate
+  // lives here — mutations layer their create/update/delete check on top.
+  if (!opts?.skipReadCheck) assertObjectPermission(ctx, result.object.id, 'read');
   return result;
-}
-
-/** Role gate for record mutations. The permission is per-object where one is
- *  declared (`contact.write`) and the generic `record.*` fallback otherwise, so
- *  it depends on the input's objectKey and can't be a static
- *  `permissionProcedure` — enforce inside the handler, right after
- *  `requireObject`. */
-function assertRecordPermission(ctx: Context, objectKey: string, verb: 'write' | 'delete'): void {
-  if (!ctx.auth) throw new TRPCError({ code: 'UNAUTHORIZED' });
-  const permission = recordPermissionFor(objectKey, verb);
-  if (!can(ctx.auth.role, permission)) {
-    throw new TRPCError({ code: 'FORBIDDEN', message: `requires '${permission}' permission` });
-  }
 }
 
 /** A recordTypeId sent with a write must be an active type on the object. */
@@ -163,7 +187,8 @@ export const recordRouter = router({
         search: z.string().optional(),
         // View filters/sort, pushed down to SQL by listRecords so the rows come
         // back already filtered + ordered (see packages/db dynamic/filters-sql.ts).
-        filters: z.array(FilterSchema).default([]),
+        // Entries may be `{ any: [...] }` OR groups (AI dashboards emit them).
+        filters: z.array(FilterEntrySchema).default([]),
         sort: z
           .array(z.object({ fieldKey: z.string(), direction: z.enum(['asc', 'desc']) }))
           .default([]),
@@ -274,7 +299,11 @@ export const recordRouter = router({
           agg: ReportAggSchema,
           fieldKey: z.string().optional(),
         }),
-        filters: z.array(FilterSchema).default([]),
+        having: ReportHavingSchema.optional(),
+        filters: z.array(FilterEntrySchema).default([]),
+        /** Same ILIKE text search listRecords applies — keeps the list
+         *  footer's count/Σ exact while the search box is active. */
+        search: z.string().optional(),
         // Two groupings return (group, group2) PAIRS, so the cap is wider;
         // single-group requests are clamped back to 200 below.
         limit: z.number().min(1).max(1000).optional(),
@@ -284,13 +313,35 @@ export const recordRouter = router({
       const { object, fields: rawFields } = await requireObject(ctx, input.objectKey);
       const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, rawFields);
 
-      const resolved = resolveReportSpec(fields, {
-        groupBy: input.groupBy,
-        groupByGrain: input.groupByGrain,
-        groupBy2: input.groupBy2,
-        groupBy2Grain: input.groupBy2Grain,
-        measure: input.measure,
-      });
+      // Dot paths ('account.industry') need the target objects' metadata —
+      // load each referenced target once, hydrated so remote picklist buckets
+      // carry labeled options.
+      const targetKeys = collectRefTargetKeys(
+        fields,
+        [input.groupBy, input.groupBy2],
+        input.filters,
+      );
+      const targets = new Map<string, ObjectWithFields>();
+      for (const key of targetKeys) {
+        const t = await getObjectByKey(ctx.db, ctx.auth.organizationId, key);
+        if (!t) continue;
+        targets.set(key, {
+          object: t.object,
+          fields: await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, t.fields),
+        });
+      }
+
+      const resolved = resolveReportSpec(
+        fields,
+        {
+          groupBy: input.groupBy,
+          groupByGrain: input.groupByGrain,
+          groupBy2: input.groupBy2,
+          groupBy2Grain: input.groupBy2Grain,
+          measure: input.measure,
+        },
+        targets,
+      );
       if (!resolved.ok) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
@@ -298,6 +349,7 @@ export const recordRouter = router({
         });
       }
       const { groups, measureField } = resolved.value;
+      const refPaths = resolveFilterRefPaths(fields, targets, input.filters);
 
       const sharedRecordIds =
         object.defaultVisibility === 'private' && !isAdminish(ctx.auth.role)
@@ -313,7 +365,10 @@ export const recordRouter = router({
         fields,
         groups,
         measure: { fn: input.measure.agg, field: measureField },
+        having: input.having,
         filters: input.filters,
+        refPaths,
+        search: input.search,
         acl: {
           userId: ctx.auth.userId,
           sharedRecordIds,
@@ -346,6 +401,73 @@ export const recordRouter = router({
         options2: secondary.options,
       };
     }),
+
+  /** QuerySpec execution — the "almost raw SQL" declarative engine behind
+   *  QueryBlock artifact nodes: multi-measure, expression measures, EXISTS
+   *  sub-conditions, AND/OR trees. Resolution + compilation live in
+   *  packages/db (query-compiler.ts); the caller's ACL is mandatory there.
+   *  A local statement_timeout backstops runaway shapes. */
+  query: protectedProcedure.input(QuerySpecSchema).query(async ({ ctx, input }) => {
+    const { object, fields: rawFields } = await requireObject(ctx, input.objectKey);
+    const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, rawFields);
+    const base = { object, fields };
+
+    const targets = new Map<string, ObjectWithFields>();
+    for (const key of collectQueryTargetKeys(base, input as QuerySpecLike)) {
+      const t = await getObjectByKey(ctx.db, ctx.auth.organizationId, key);
+      if (!t) continue;
+      targets.set(key, {
+        object: t.object,
+        fields: await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, t.fields),
+      });
+    }
+
+    const resolved = resolveQuerySpec(base, targets, input as QuerySpecLike);
+    if (!resolved.ok) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `${resolved.message} on '${object.key}'`,
+      });
+    }
+
+    const sharedRecordIds =
+      object.defaultVisibility === 'private' && !isAdminish(ctx.auth.role)
+        ? await visibleSharedRecordIds(
+            ctx.db,
+            { orgId: ctx.auth.organizationId, userId: ctx.auth.userId, role: ctx.auth.role },
+            object.id,
+          )
+        : [];
+
+    // protectedProcedure runs in a transaction — SET LOCAL scopes to it.
+    await ctx.db.execute(sql`set local statement_timeout = '5000'`);
+    const rows = await runQuery(ctx.db, ctx.auth.organizationId, resolved.plan, {
+      userId: ctx.auth.userId,
+      sharedRecordIds,
+      isAdminish: isAdminish(ctx.auth.role),
+    });
+
+    const primary = await labelsForGroup(
+      ctx,
+      resolved.plan.groups[0]?.field,
+      rows.map((r) => r.group),
+    );
+    const secondary = resolved.plan.groups[1]
+      ? await labelsForGroup(
+          ctx,
+          resolved.plan.groups[1].field,
+          rows.map((r) => r.group2 ?? null),
+        )
+      : {};
+    return {
+      rows,
+      measures: resolved.plan.measures.map((m) => m.id),
+      groupLabels: primary.labels,
+      options: primary.options,
+      group2Labels: secondary.labels,
+      options2: secondary.options,
+    };
+  }),
 
   /** Records on other objects that reference this one — the Related panel. */
   related: protectedProcedure
@@ -382,7 +504,7 @@ export const recordRouter = router({
       const { object, fields: rawFields } = await requireObject(ctx, input.objectKey, {
         forWrite: true,
       });
-      assertRecordPermission(ctx, object.key, 'write');
+      assertObjectPermission(ctx, object.id, 'create');
       if (input.recordTypeId) await assertRecordType(ctx, object, input.recordTypeId);
       const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, rawFields);
       const data = sanitizeData(fields, input.data);
@@ -443,7 +565,7 @@ export const recordRouter = router({
       const { object, fields: rawFields } = await requireObject(ctx, input.objectKey, {
         forWrite: true,
       });
-      assertRecordPermission(ctx, object.key, 'write');
+      assertObjectPermission(ctx, object.id, 'update');
       if (input.recordTypeId) await assertRecordType(ctx, object, input.recordTypeId);
       const fields = await hydratePicklistOptions(ctx.db, ctx.auth.organizationId, rawFields);
       const existing = await getRecord(ctx.db, {
@@ -525,7 +647,7 @@ export const recordRouter = router({
     .input(z.object({ objectKey: z.string(), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey, { forWrite: true });
-      assertRecordPermission(ctx, object.key, 'delete');
+      assertObjectPermission(ctx, object.id, 'delete');
       // Delete needs the existing row to check the owner.
       const existing = await getRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
@@ -595,7 +717,7 @@ export const recordRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey);
-      assertRecordPermission(ctx, object.key, 'write');
+      assertObjectPermission(ctx, object.id, 'update');
       const existing = await getRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
@@ -636,7 +758,7 @@ export const recordRouter = router({
     .input(z.object({ objectKey: z.string(), id: z.string(), userId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey);
-      assertRecordPermission(ctx, object.key, 'write');
+      assertObjectPermission(ctx, object.id, 'update');
       const existing = await getRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
@@ -678,7 +800,7 @@ export const recordRouter = router({
     .input(z.object({ objectKey: z.string(), id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey);
-      assertRecordPermission(ctx, object.key, 'write');
+      assertObjectPermission(ctx, object.id, 'update');
       const row = await getRecord(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
@@ -707,12 +829,27 @@ export const recordRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const { object, fields } = await requireObject(ctx, input.objectKey);
+      // Same visibility rules as `list` — the typeahead must not surface
+      // private-object records the caller has no share for.
+      const sharedRecordIds =
+        object.defaultVisibility === 'private' && !isAdminish(ctx.auth.role)
+          ? await visibleSharedRecordIds(
+              ctx.db,
+              { orgId: ctx.auth.organizationId, userId: ctx.auth.userId, role: ctx.auth.role },
+              object.id,
+            )
+          : [];
       const rows = await listRecords(ctx.db, {
         orgId: ctx.auth.organizationId,
         object,
         fields,
         search: input.q,
         limit: input.limit ?? 20,
+        acl: {
+          userId: ctx.auth.userId,
+          sharedRecordIds,
+          isAdminish: isAdminish(ctx.auth.role),
+        },
       });
       return rows.map((r) => ({ value: r.id, label: displayName(fields, r.data) }));
     }),

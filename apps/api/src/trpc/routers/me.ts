@@ -1,6 +1,8 @@
 // /trpc/me — single round-trip "who am I" payload for the dashboard.
 import { type Role, schema } from '@northbeam/db';
 import { eq } from 'drizzle-orm';
+import { rootDb } from '../context.js';
+import { type ClientGrants, resolveClientGrants } from '../permissions.js';
 import { publicProcedure, router } from '../trpc.js';
 
 type Identity = { userId: string; email: string; name: string | null };
@@ -44,9 +46,18 @@ export const meRouter = router({
     // already has memberships. Auto-pick their first org so the dashboard
     // doesn't bounce them to /create-org despite already belonging to one.
     const resolvedActiveOrgId = activeOrgId ?? organizations[0]?.id ?? null;
-    const activeOrg = resolvedActiveOrgId
+    const baseActiveOrg = resolvedActiveOrgId
       ? (organizations.find((o) => o.id === resolvedActiveOrgId) ?? null)
       : null;
+
+    // Attach the caller's resolved permissions for the active org so the client
+    // can gate UI without a static role→permission map (custom roles are
+    // DB-backed). Object overrides are keyed by objectKey for the client.
+    let permissions: ClientGrants | null = null;
+    if (baseActiveOrg) {
+      permissions = await resolveClientGrants(rootDb(), baseActiveOrg.id, baseActiveOrg.role);
+    }
+    const activeOrg = baseActiveOrg ? { ...baseActiveOrg, permissions } : null;
 
     return { session: identity, activeOrg, organizations };
   }),

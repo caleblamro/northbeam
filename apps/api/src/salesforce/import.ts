@@ -25,7 +25,7 @@ import {
   withOrgContext,
 } from '@northbeam/db';
 import type { SalesforceClient } from '@northbeam/salesforce';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { enqueueCompute } from '../queue/compute.js';
 import { flagIfAuthError } from './client.js';
 import { importAnalyticsViews } from './import-views.js';
@@ -81,7 +81,7 @@ export async function executeRun(
         .where(eq(schema.migrationRun.id, runId)),
     );
 
-    const plans = await run((tx) => loadPlans(tx, runId));
+    const plans = await run((tx) => loadPlans(tx, orgId, runId));
     stats.objects = plans.length;
     stats.fields = plans.reduce(
       (n, p) => n + p.fields.filter((f) => f.status === 'mapped').length,
@@ -248,18 +248,25 @@ export async function executeRun(
 
 /** Reassemble the reviewed plan from the mapping tables (meta = mapper proposal,
  *  status = post-review user decision). */
-async function loadPlans(db: DbExecutor, runId: string): Promise<Plan[]> {
+async function loadPlans(db: DbExecutor, orgId: string, runId: string): Promise<Plan[]> {
   const objects = await db
     .select()
     .from(schema.objectMapping)
-    .where(eq(schema.objectMapping.runId, runId));
+    .where(
+      and(eq(schema.objectMapping.organizationId, orgId), eq(schema.objectMapping.runId, runId)),
+    );
   const plans: Plan[] = [];
   for (const om of objects) {
     if (om.action === 'skip') continue;
     const fms = await db
       .select()
       .from(schema.fieldMapping)
-      .where(eq(schema.fieldMapping.objectMappingId, om.id));
+      .where(
+        and(
+          eq(schema.fieldMapping.organizationId, orgId),
+          eq(schema.fieldMapping.objectMappingId, om.id),
+        ),
+      );
     plans.push({
       mappingId: om.id,
       obj: om.meta as unknown as MappedObject,
@@ -338,7 +345,9 @@ async function ensureDefs(db: DbExecutor, orgId: string, plan: Plan): Promise<Ma
   const allRts = await db
     .select()
     .from(schema.recordType)
-    .where(eq(schema.recordType.objectId, objectId));
+    .where(
+      and(eq(schema.recordType.organizationId, orgId), eq(schema.recordType.objectId, objectId)),
+    );
   for (const rt of allRts) if (rt.salesforceId) rtMap.set(rt.salesforceId, rt.id);
 
   // Physical table + columns (both idempotent).
@@ -351,7 +360,12 @@ async function ensureDefs(db: DbExecutor, orgId: string, plan: Plan): Promise<Ma
   await db
     .update(schema.objectMapping)
     .set({ targetObjectId: objectId })
-    .where(eq(schema.objectMapping.id, plan.mappingId));
+    .where(
+      and(
+        eq(schema.objectMapping.organizationId, orgId),
+        eq(schema.objectMapping.id, plan.mappingId),
+      ),
+    );
 
   return rtMap;
 }

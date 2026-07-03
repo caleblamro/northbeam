@@ -1,8 +1,10 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   index,
   integer,
   jsonb,
+  pgPolicy,
   pgTable,
   text,
   timestamp,
@@ -14,6 +16,21 @@ import type { Role } from './roles.js';
 import type { Filter, FormatRule, ShareTarget, ViewIcon, ViewSort, ViewType } from './views.js';
 
 type DefSource = 'system' | 'custom' | 'salesforce' | 'ai';
+
+/** RLS policy every org-scoped metadata table carries. `withOrgContext` sets
+ *  the `app.org_id` GUC per-transaction; Postgres then filters rows to the
+ *  caller's org even if a query forgets its `where organization_id = ?`.
+ *  `current_setting(..., true)` returns NULL (deny-all) when the GUC is unset.
+ *  Enforcement requires the runtime role to be a non-owner non-superuser —
+ *  see drizzle/0010_rls_enforcement.sql and scripts/setup-app-role.ts.
+ *  Policy names match the hand-written 0005/0006/0008 migrations so existing
+ *  databases converge instead of duplicating. */
+const orgIsolation = (policyName: string) =>
+  pgPolicy(policyName, {
+    for: 'all',
+    using: sql`organization_id = current_setting('app.org_id', true)`,
+    withCheck: sql`organization_id = current_setting('app.org_id', true)`,
+  });
 
 /* ────────────────────────────────────────────────────────────────────────────
    Better Auth core tables — singular names match Better Auth conventions
@@ -120,6 +137,80 @@ export const invitation = pgTable('invitation', {
 });
 
 /* ────────────────────────────────────────────────────────────────────────────
+   ROLES & PERMISSIONS — Directus-style custom roles.
+
+   A `member.role` is a role KEY (string) naming a row here. The four system
+   roles (owner/admin/member/viewer) are seeded per-org from
+   @northbeam/core's SYSTEM_ROLE_SEEDS; orgs can also create custom roles.
+   Authorization has two axes: org-level actions (`orgPermissions`, a set of the
+   non-record Permission keys) and per-object CRUD (a role `default*` grant plus
+   `objectPermission` overrides). See packages/core/src/roles.ts.
+   ──────────────────────────────────────────────────────────────────────── */
+export const role = pgTable(
+  'role',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    /** Stored on member.role. System keys are the 4 built-ins; custom roles get
+     *  a slug. Unique per org. */
+    key: text('key').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    /** Optional chip color for the roles UI (hex). */
+    color: text('color'),
+    /** The 4 built-ins — not deletable; owner is additionally immutable. */
+    isSystem: boolean('is_system').notNull().default(false),
+    /** Ordering + owner semantics (owner=3…viewer=0; custom default 1). Not a
+     *  permission inheritance rank — grants are explicit per role. */
+    rank: integer('rank').notNull().default(1),
+    /** Granted org-level actions — a subset of @northbeam/core Permission keys
+     *  (the non-record ones). Record CRUD lives in the default* grant below. */
+    orgPermissions: jsonb('org_permissions').$type<string[]>().notNull().default([]),
+    /** Default per-object CRUD, applied to any object without an explicit
+     *  objectPermission override. */
+    defaultCreate: boolean('default_create').notNull().default(false),
+    defaultRead: boolean('default_read').notNull().default(true),
+    defaultUpdate: boolean('default_update').notNull().default(false),
+    defaultDelete: boolean('default_delete').notNull().default(false),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('role_org_key_uq').on(t.organizationId, t.key),
+    orgIsolation('role_org_isolation'),
+  ],
+);
+
+/** Per-role, per-object CRUD override. Absent row → the role's default* grant. */
+export const objectPermission = pgTable(
+  'object_permission',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => role.id, { onDelete: 'cascade' }),
+    objectId: uuid('object_id')
+      .notNull()
+      .references(() => objectDef.id, { onDelete: 'cascade' }),
+    canCreate: boolean('can_create').notNull().default(false),
+    canRead: boolean('can_read').notNull().default(false),
+    canUpdate: boolean('can_update').notNull().default(false),
+    canDelete: boolean('can_delete').notNull().default(false),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('object_permission_role_object_uq').on(t.roleId, t.objectId),
+    orgIsolation('object_permission_org_isolation'),
+  ],
+);
+
+/* ────────────────────────────────────────────────────────────────────────────
    METADATA-DRIVEN CRM — objects, fields, and records are all data.
    Standard objects (account/contact/deal/activity) are seeded as `isSystem`
    object defs; Salesforce custom objects/fields just become more defs. This is
@@ -173,9 +264,10 @@ export const objectDef = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
-  (t) => ({
-    orgKey: uniqueIndex('object_def_org_key_uq').on(t.organizationId, t.key),
-  }),
+  (t) => [
+    uniqueIndex('object_def_org_key_uq').on(t.organizationId, t.key),
+    orgIsolation('object_def_org_isolation'),
+  ],
 );
 
 // A field on an object. `type` is from field-types.ts; `config` (JSONB) holds the
@@ -207,9 +299,10 @@ export const fieldDef = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
-  (t) => ({
-    objKey: uniqueIndex('field_def_obj_key_uq').on(t.objectId, t.key),
-  }),
+  (t) => [
+    uniqueIndex('field_def_obj_key_uq').on(t.objectId, t.key),
+    orgIsolation('field_def_org_isolation'),
+  ],
 );
 
 // NOTE: record VALUES are no longer stored here. Per the fully-native data model
@@ -237,9 +330,10 @@ export const recordType = pgTable(
     salesforceId: text('salesforce_id'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
-  (t) => ({
-    objKey: uniqueIndex('record_type_obj_key_uq').on(t.objectId, t.key),
-  }),
+  (t) => [
+    uniqueIndex('record_type_obj_key_uq').on(t.objectId, t.key),
+    orgIsolation('record_type_org_isolation'),
+  ],
 );
 
 // Layout overrides — extracted from objectDef.layout (which becomes the
@@ -273,14 +367,15 @@ export const layoutDef = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
-  (t) => ({
-    objKey: uniqueIndex('layout_def_obj_rt_audience_name_uq').on(
+  (t) => [
+    uniqueIndex('layout_def_obj_rt_audience_name_uq').on(
       t.objectId,
       t.recordTypeId,
       t.audience,
       t.name,
     ),
-  }),
+    orgIsolation('layout_def_org_isolation'),
+  ],
 );
 
 // Global picklist sets (SF Global Value Sets) — one shared option list many
@@ -300,9 +395,10 @@ export const globalPicklist = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
-  (t) => ({
-    orgName: uniqueIndex('global_picklist_org_name_uq').on(t.organizationId, t.name),
-  }),
+  (t) => [
+    uniqueIndex('global_picklist_org_name_uq').on(t.organizationId, t.name),
+    orgIsolation('global_picklist_org_isolation'),
+  ],
 );
 
 // Validation rules — per-object Northbeam formula conditions that BLOCK a save
@@ -328,9 +424,10 @@ export const validationRule = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
-  (t) => ({
-    objName: uniqueIndex('validation_rule_obj_name_uq').on(t.objectId, t.name),
-  }),
+  (t) => [
+    uniqueIndex('validation_rule_obj_name_uq').on(t.objectId, t.name),
+    orgIsolation('validation_rule_org_isolation'),
+  ],
 );
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -359,9 +456,10 @@ export const recordShare = pgTable(
     grantedBy: text('granted_by').references(() => user.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
-  (t) => ({
-    uniq: uniqueIndex('record_share_unique').on(t.objectId, t.recordId, t.userId),
-  }),
+  (t) => [
+    uniqueIndex('record_share_unique').on(t.objectId, t.recordId, t.userId),
+    orgIsolation('record_share_org_isolation'),
+  ],
 );
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -414,9 +512,10 @@ export const view = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
-  (t) => ({
-    orgObjectKey: uniqueIndex('view_org_object_key_uq').on(t.organizationId, t.objectId, t.key),
-  }),
+  (t) => [
+    uniqueIndex('view_org_object_key_uq').on(t.organizationId, t.objectId, t.key),
+    orgIsolation('view_org_isolation'),
+  ],
 );
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -448,9 +547,10 @@ export const auditLog = pgTable(
     userAgent: text('user_agent'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
-  (t) => ({
-    orgTime: uniqueIndex('audit_log_org_created_idx').on(t.organizationId, t.createdAt),
-  }),
+  (t) => [
+    uniqueIndex('audit_log_org_created_idx').on(t.organizationId, t.createdAt),
+    orgIsolation('audit_log_org_isolation'),
+  ],
 );
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -491,113 +591,132 @@ export const aiSession = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
-  (t) => ({
-    ownerRecency: index('ai_session_owner_recency_idx').on(t.organizationId, t.userId, t.updatedAt),
-  }),
+  (t) => [
+    index('ai_session_owner_recency_idx').on(t.organizationId, t.userId, t.updatedAt),
+    orgIsolation('ai_session_org_isolation'),
+  ],
 );
 
 /* ────────────────────────────────────────────────────────────────────────────
    SALESFORCE MIGRATION / MAPPING
    ────────────────────────────────────────────────────────────────────────── */
 
-export const salesforceConnection = pgTable('salesforce_connection', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  organizationId: text('organization_id')
-    .notNull()
-    .references(() => organization.id, { onDelete: 'cascade' }),
-  instanceUrl: text('instance_url').notNull(),
-  status: text('status')
-    .$type<'connected' | 'disconnected' | 'error'>()
-    .notNull()
-    .default('connected'),
-  // OAuth tokens are stored encrypted (ciphertext only — never plaintext).
-  accessTokenEnc: text('access_token_enc'),
-  refreshTokenEnc: text('refresh_token_enc'),
-  connectedBy: text('connected_by').references(() => user.id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-});
+export const salesforceConnection = pgTable(
+  'salesforce_connection',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    instanceUrl: text('instance_url').notNull(),
+    status: text('status')
+      .$type<'connected' | 'disconnected' | 'error'>()
+      .notNull()
+      .default('connected'),
+    // OAuth tokens are stored encrypted (ciphertext only — never plaintext).
+    accessTokenEnc: text('access_token_enc'),
+    refreshTokenEnc: text('refresh_token_enc'),
+    connectedBy: text('connected_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  () => [orgIsolation('salesforce_connection_org_isolation')],
+);
 
 // One migration job. Goes mapping → ready → running → completed/failed.
-export const migrationRun = pgTable('migration_run', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  organizationId: text('organization_id')
-    .notNull()
-    .references(() => organization.id, { onDelete: 'cascade' }),
-  connectionId: uuid('connection_id')
-    .notNull()
-    .references(() => salesforceConnection.id, { onDelete: 'cascade' }),
-  status: text('status')
-    .$type<'mapping' | 'ready' | 'running' | 'completed' | 'failed'>()
-    .notNull()
-    .default('mapping'),
-  stats: jsonb('stats')
-    .$type<{
-      objects?: number;
-      fields?: number;
-      records?: number;
-      needsReview?: number;
-      imported?: number;
-      refsResolved?: number;
-      currentObject?: string;
-      error?: string;
-      // Report/dashboard import phase (import-views.ts) — best-effort, so it
-      // carries its own error slot instead of failing the run.
-      reportsFound?: number;
-      reportsImported?: number;
-      dashboardsFound?: number;
-      dashboardsImported?: number;
-      viewsSkipped?: number;
-      reportsError?: string;
-      skippedViews?: Array<{ label: string; reason: string }>;
-    }>()
-    .notNull()
-    .default({}),
-  startedAt: timestamp('started_at'),
-  completedAt: timestamp('completed_at'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+export const migrationRun = pgTable(
+  'migration_run',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => salesforceConnection.id, { onDelete: 'cascade' }),
+    status: text('status')
+      .$type<'mapping' | 'ready' | 'running' | 'completed' | 'failed'>()
+      .notNull()
+      .default('mapping'),
+    stats: jsonb('stats')
+      .$type<{
+        objects?: number;
+        fields?: number;
+        records?: number;
+        needsReview?: number;
+        imported?: number;
+        refsResolved?: number;
+        currentObject?: string;
+        error?: string;
+        // Report/dashboard import phase (import-views.ts) — best-effort, so it
+        // carries its own error slot instead of failing the run.
+        reportsFound?: number;
+        reportsImported?: number;
+        dashboardsFound?: number;
+        dashboardsImported?: number;
+        viewsSkipped?: number;
+        reportsError?: string;
+        skippedViews?: Array<{ label: string; reason: string }>;
+      }>()
+      .notNull()
+      .default({}),
+    startedAt: timestamp('started_at'),
+    completedAt: timestamp('completed_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  () => [orgIsolation('migration_run_org_isolation')],
+);
 
 // SF object → Northbeam object_def. `action` decides map-to-existing / create-new / skip.
-export const objectMapping = pgTable('object_mapping', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  organizationId: text('organization_id')
-    .notNull()
-    .references(() => organization.id, { onDelete: 'cascade' }),
-  runId: uuid('run_id')
-    .notNull()
-    .references(() => migrationRun.id, { onDelete: 'cascade' }),
-  sfObject: text('sf_object').notNull(), // 'Account', 'Opportunity', 'Project__c'
-  sfLabel: text('sf_label'),
-  targetObjectId: uuid('target_object_id').references(() => objectDef.id, { onDelete: 'set null' }),
-  action: text('action').$type<'map' | 'create' | 'skip'>().notNull().default('map'),
-  recordCount: integer('record_count').notNull().default(0),
-  // Mapper proposal for this object (target key/label/layout/record types/flags) —
-  // field_defs/object_defs don't exist until execute, so the plan lives here.
-  meta: jsonb('meta').$type<Record<string, unknown>>().notNull().default({}),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+export const objectMapping = pgTable(
+  'object_mapping',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => migrationRun.id, { onDelete: 'cascade' }),
+    sfObject: text('sf_object').notNull(), // 'Account', 'Opportunity', 'Project__c'
+    sfLabel: text('sf_label'),
+    targetObjectId: uuid('target_object_id').references(() => objectDef.id, {
+      onDelete: 'set null',
+    }),
+    action: text('action').$type<'map' | 'create' | 'skip'>().notNull().default('map'),
+    recordCount: integer('record_count').notNull().default(0),
+    // Mapper proposal for this object (target key/label/layout/record types/flags) —
+    // field_defs/object_defs don't exist until execute, so the plan lives here.
+    meta: jsonb('meta').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  () => [orgIsolation('object_mapping_org_isolation')],
+);
 
 // SF field → Northbeam field_def, with optional value transform + auto-mapper confidence.
-export const fieldMapping = pgTable('field_mapping', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  organizationId: text('organization_id')
-    .notNull()
-    .references(() => organization.id, { onDelete: 'cascade' }),
-  objectMappingId: uuid('object_mapping_id')
-    .notNull()
-    .references(() => objectMapping.id, { onDelete: 'cascade' }),
-  sfField: text('sf_field').notNull(),
-  sfLabel: text('sf_label'),
-  sfType: text('sf_type'),
-  targetFieldId: uuid('target_field_id').references(() => fieldDef.id, { onDelete: 'set null' }),
-  transform: jsonb('transform')
-    .$type<{ valueMap?: Record<string, string>; expression?: string }>()
-    .notNull()
-    .default({}),
-  confidence: integer('confidence').notNull().default(0), // 0–100 from the auto-mapper
-  status: text('status').$type<'mapped' | 'review' | 'skip'>().notNull().default('review'),
-  // Mapper proposal for this field (key/columnName/type/pgType/config/usage/reason).
-  meta: jsonb('meta').$type<Record<string, unknown>>().notNull().default({}),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+export const fieldMapping = pgTable(
+  'field_mapping',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    objectMappingId: uuid('object_mapping_id')
+      .notNull()
+      .references(() => objectMapping.id, { onDelete: 'cascade' }),
+    sfField: text('sf_field').notNull(),
+    sfLabel: text('sf_label'),
+    sfType: text('sf_type'),
+    targetFieldId: uuid('target_field_id').references(() => fieldDef.id, { onDelete: 'set null' }),
+    transform: jsonb('transform')
+      .$type<{ valueMap?: Record<string, string>; expression?: string }>()
+      .notNull()
+      .default({}),
+    confidence: integer('confidence').notNull().default(0), // 0–100 from the auto-mapper
+    status: text('status').$type<'mapped' | 'review' | 'skip'>().notNull().default('review'),
+    // Mapper proposal for this field (key/columnName/type/pgType/config/usage/reason).
+    meta: jsonb('meta').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  () => [orgIsolation('field_mapping_org_isolation')],
+);

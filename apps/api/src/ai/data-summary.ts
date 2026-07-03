@@ -4,12 +4,11 @@
 // one aggregate per summarized field.
 
 import {
+  type AggregateOpts,
   type DbExecutor,
   type FieldRow,
   type ObjectRow,
   aggregateRecords,
-  countRecords,
-  sumField,
 } from '@northbeam/db';
 import type { DataSummary } from './artifact-generator.js';
 
@@ -19,15 +18,26 @@ const DATE_BUCKETS_TO_INCLUDE = 12;
 
 /** Build a DataSummary for the given object. Errors are surfaced — the
  *  caller wraps in try/catch and falls back to an empty summary so a flaky
- *  query never blocks generation. */
+ *  query never blocks generation.
+ *
+ *  `acl` MUST carry the caller's visibility (same shape record.aggregate
+ *  builds) — otherwise the model's note can cite numbers the user's rendered
+ *  dashboard will never show. Every query below goes through aggregateRecords
+ *  so the shared aclPredicate applies uniformly. */
 export async function buildDataSummary(
   db: DbExecutor,
-  opts: { orgId: string; object: ObjectRow; fields: FieldRow[] },
+  opts: { orgId: string; object: ObjectRow; fields: FieldRow[]; acl?: AggregateOpts['acl'] },
 ): Promise<DataSummary> {
-  const recordCount = await countRecords(db, {
+  const [countRow] = await aggregateRecords(db, {
     orgId: opts.orgId,
     object: opts.object,
+    fields: opts.fields,
+    groups: [],
+    measure: { fn: 'count' },
+    filters: [],
+    acl: opts.acl,
   });
+  const recordCount = countRow?.count ?? 0;
 
   // Picklist group-by counts — a real SQL GROUP BY per field (same
   // aggregateRecords helper record.aggregate uses), top buckets only to keep
@@ -44,6 +54,7 @@ export async function buildDataSummary(
       groups: [{ field: f }],
       measure: { fn: 'count' },
       filters: [],
+      acl: opts.acl,
       limit: BUCKETS_PER_GROUP,
     });
     const counts = buckets
@@ -56,11 +67,16 @@ export async function buildDataSummary(
   const numericField = opts.fields.find((f) => f.type === 'currency' || f.type === 'number');
   let numericSummary: DataSummary['numericSummary'] = null;
   if (numericField && recordCount > 0) {
-    const sum = await sumField(db, {
+    const [sumRow] = await aggregateRecords(db, {
       orgId: opts.orgId,
       object: opts.object,
-      field: numericField,
+      fields: opts.fields,
+      groups: [],
+      measure: { fn: 'sum', field: numericField },
+      filters: [],
+      acl: opts.acl,
     });
+    const sum = sumRow?.value ?? 0;
     numericSummary = {
       fieldKey: numericField.key,
       fieldLabel: numericField.label,
@@ -81,6 +97,7 @@ export async function buildDataSummary(
       groups: [{ field: dateField, grain: 'month' }],
       measure: { fn: 'count' },
       filters: [],
+      acl: opts.acl,
       limit: DATE_BUCKETS_TO_INCLUDE,
     });
     const points = buckets

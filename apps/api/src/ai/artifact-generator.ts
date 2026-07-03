@@ -156,6 +156,41 @@ function fieldLinesFor(fields: FieldRow[], cap: number): string {
     .join('\n');
 }
 
+const REF_PATH_REMOTE_TYPES = new Set([
+  'picklist',
+  'text',
+  'date',
+  'datetime',
+  'checkbox',
+  'number',
+  'currency',
+  'percent',
+]);
+const REF_PATH_FIELD_CAP = 10;
+
+/** One-hop reference paths available from `fields` — 'account.industry'
+ *  style keys, annotated with the remote type. Bounded (≤10 useful remote
+ *  fields per reference) so the block stays small. Empty string when the
+ *  object has no usable references. */
+function refPathLines(fields: FieldRow[], all: ObjectContext[]): string {
+  const byKey = new Map(all.map((o) => [o.object.key, o]));
+  const lines: string[] = [];
+  for (const f of fields) {
+    if (f.type !== 'reference') continue;
+    const targetKey = (f.config as { targetObject?: string } | null)?.targetObject;
+    const target = targetKey ? byKey.get(targetKey) : undefined;
+    if (!target) continue;
+    const remote = target.fields
+      .filter((r) => !r.isSystem && REF_PATH_REMOTE_TYPES.has(r.type))
+      .slice(0, REF_PATH_FIELD_CAP)
+      .map((r) => `${f.key}.${r.key} (${r.type})`);
+    if (remote.length > 0) {
+      lines.push(`- via ${f.label} → ${target.object.label}: ${remote.join(', ')}`);
+    }
+  }
+  return lines.join('\n');
+}
+
 /** Pure prompt assembly — exported so tests can assert the contract (field
  *  cap, data-summary injection, cross-object context, refinement section)
  *  without an API call. Pass `object: null` for WORKSPACE scope (the user's
@@ -167,8 +202,64 @@ export function buildSystemPrompt(
   summary: DataSummary | null,
   currentArtifact?: ArtifactLike,
   otherObjects: ObjectContext[] = [],
+  mode: 'dashboard' | 'detail' = 'dashboard',
 ): string {
   const fieldLines = fieldLinesFor(fields, 40);
+  const detailMode = mode === 'detail' && object !== null;
+
+  // Record-page mode: the three record-bound components + '@record' scoping.
+  // Reference fields on OTHER objects that point back here become RelatedList
+  // candidates — surfaced explicitly so the model never guesses refFieldKeys.
+  const relatedCandidates = detailMode
+    ? otherObjects
+        .flatMap((o) =>
+          o.fields
+            .filter(
+              (f) =>
+                f.type === 'reference' &&
+                (f.config as { targetObject?: string } | null)?.targetObject === object.key,
+            )
+            .map(
+              (f) =>
+                `- { objectKey: '${o.object.key}', refFieldKey: '${f.key}' } — ${o.object.labelPlural} referencing this ${object.label.toLowerCase()}`,
+            ),
+        )
+        .join('\n')
+    : '';
+  const detailSection = detailMode
+    ? `
+
+# RECORD PAGE MODE
+
+You are composing the layout of ONE ${object.label} record's page — not a dashboard.
+The page already has a hero band (name, breadcrumb, stage chevrons) above your
+layout; do NOT emit PageHeader, Greeting, or AttentionQueue.
+
+Three record-bound components join the gallery:
+
+- RecordFields — label/value grid of the CURRENT record's fields.
+  props: { fieldKeys: string[] /* 4-12 keys from the field list */, span? }
+- RelatedList — child records referencing THIS record. Use ONLY the candidate
+  pairs listed below.
+  props: { objectKey: string, refFieldKey: string, limit?: number, span? }
+- StagePath — the record's stage progression (auto-detects the stage field).
+  props: { fieldKey?: string, span?: number /* usually 12 */ }
+
+Scoping live components to THIS record: on Metric/Chart/RecordTable/RecordList,
+a filter value of '@record' on a reference field resolves to the current
+record's id — e.g. this account's open deals:
+  { objectKey: 'deal', filters: [{ fieldKey: 'account', op: 'eq', value: '@record' }] }
+NEVER use org-wide aggregates here unless the user explicitly asks — scope with
+'@record' or use RelatedList.
+
+RelatedList candidates:
+${relatedCandidates || '- (no objects reference this one — skip RelatedList)'}
+
+Layout recipe: StagePath span 12 (stage objects only) → RecordFields span 7 +
+side column span 5 (RelatedList or a '@record'-scoped Metric stack) →
+further RelatedLists / a '@record'-scoped Chart below.`
+    : '';
+  const refLines = object ? refPathLines(fields, [{ object, fields }, ...otherObjects]) : '';
 
   const otherObjectLines = otherObjects
     .filter((o) => o.object.key !== object?.key)
@@ -247,11 +338,22 @@ supporting evidence: distributions, then individual records.
   never use it on an object dashboard.
   props: { subtitle?: string }
 
+- StatBand — a slim one-line stat strip: live values separated by hairline dividers
+  ("$1.8M open pipeline · 9 open deals · …"), optional trailing link. The Home page's
+  KPI treatment — use it INSTEAD of a Metric tile row on workspace dashboards, right
+  under Greeting. Each item is a live aggregate (same spec as Metric).
+  props: {
+    items: { label?: string, objectKey: string, fn: 'count'|'sum'|'avg',
+             fieldKey?: string, filters?: ArtifactFilter[] }[],   // 2-5 items
+    link?: { label: string, href: string }
+  }
+
 - AttentionQueue — the "needs attention" work queue: the user's overdue and due-soon
   activities plus deals closing inside two weeks, each row with a one-click action.
-  Live and self-fetching — no query props to configure. WORKSPACE (home) dashboards
-  only; renders best full width, directly under the greeting/KPI rows.
-  props: {}
+  Live and self-fetching; shows the top items by urgency with a "view all" overflow
+  link. WORKSPACE (home) dashboards only; renders best full width, directly under
+  the greeting/KPI rows.
+  props: { limit?: number }   // rows shown before overflow, default 8, max 50
 
 - Heading — a quiet section break WITHOUT a card. Use between dashboard regions
   instead of stacking SectionCards.
@@ -291,12 +393,18 @@ supporting evidence: distributions, then individual records.
   props: {
     label: string,                     // sentence case, e.g. "Open pipeline"
     objectKey: string,
-    fn: 'count' | 'sum' | 'avg' | 'min' | 'max',
-    fieldKey?: string,                 // REQUIRED unless fn is count — a number/currency/percent field key
+    fn: 'count' | 'sum' | 'avg' | 'min' | 'max' | 'countDistinct' | 'median',
+    fieldKey?: string,                 // REQUIRED unless fn is count — numeric field
+                                       // (countDistinct: ANY field, e.g. distinct industries)
     filters?: ArtifactFilter[],
-    delta?: string,                    // optional signed delta text, e.g. "+12% vs last month"
+    compare?: { dateFieldKey: string, period: 'week' | 'month' | 'quarter' },
+                                       // renders a REAL % change vs the previous period,
+                                       // computed from live data at render time
     span?: number                      // 3 (four tiles) or 4 (three tiles)
   }
+  NEVER write a \`delta\` string — a delta you invent is a fabricated number.
+  When a period-over-period comparison helps, use \`compare\` on a date field;
+  otherwise omit the delta entirely.
 
 - Chart — grouped aggregate over live records (one native GROUP BY, up to two levels).
   props: {
@@ -306,8 +414,11 @@ supporting evidence: distributions, then individual records.
     dateGrain?: ${ARTIFACT_DATE_GRAINS.map((g) => `'${g}'`).join(' | ')},  // ONLY when groupBy is a date/datetime field; default 'month'
     groupBy2?: string,                 // second dimension — stacked bars, multi-series lines/areas, matrix tables
     groupBy2Grain?: same as dateGrain, // ONLY when groupBy2 is a date/datetime field
-    fn: 'count' | 'sum' | 'avg' | 'min' | 'max',
+    fn: 'count' | 'sum' | 'avg' | 'min' | 'max' | 'countDistinct' | 'median',
     measure?: string,                  // REQUIRED unless fn is count — numeric field key
+                                       // (countDistinct: ANY field key)
+    having?: { target: 'value' | 'count', op: 'gt' | 'gte' | 'lt' | 'lte', value: number },
+                                       // "only groups where …" — e.g. owners with ≥ 5 deals
     chartType: ${ARTIFACT_CHART_TYPES.map((t) => `'${t}'`).join(' | ')},
     stacked?: boolean,                 // bar/area with groupBy2: stack the series instead of grouping
     filters?: ArtifactFilter[],
@@ -341,7 +452,8 @@ supporting evidence: distributions, then individual records.
     filters?: ArtifactFilter[],
     sort?: ArtifactSort[],
     columns?: string[],                // 2-5 field keys; lead with name-like, end with the number
-    limit?: number                     // default 10, max 50
+    limit?: number,                    // default 10, max 50
+    rowAction?: RowAction              // one quick per-row action (see Actions below)
   }
   The workhorse for "show me the top N X" / "X matching criteria". Best full-width.
   Renders with a search box, user-editable filters, and click-to-sort headers
@@ -352,10 +464,71 @@ supporting evidence: distributions, then individual records.
   time. The span-4/5 companion piece ("recent deals", "top accounts at a glance") —
   quieter than a table, perfect beside a hero Chart.
   props: { objectKey: string, filters?: ArtifactFilter[], sort?: ArtifactSort[],
-           secondaryField?: string, limit?: number /* default 6, max 20 */ }
+           secondaryField?: string, limit?: number /* default 6, max 20 */,
+           rowAction?: RowAction }
 
 - RecordGrid — card presentation of records; for visual browsing, not rankings.
   props: same as RecordTable, plus { columnsCount?: 1|2|3|4 }
+
+## Actions (optional, earn their place)
+
+- ActionBar — a single row of 1-4 next-step buttons. Include ONE at most, and only
+  when the question implies a next step ("log deals", "follow up"); most dashboards
+  need none. Place it right under the PageHeader (span 12).
+  props: { items: Action[] }
+  Action =
+    | { kind: 'createRecord', label: string, objectKey: string,
+        defaults?: Record<fieldKey, value> }   // opens the create form pre-filled
+    | { kind: 'navigate', label: string, objectKey: string }   // → that object's list page
+    | { kind: 'openComposer', label: string, prompt: string }  // a follow-up question for me
+  Labels are verbs ("New deal", "View accounts", "Analyze churn"). defaults keys MUST
+  be real field keys; picklist defaults MUST be exact option values.
+
+- RowAction (the \`rowAction\` prop on RecordTable/RecordList) — one per-row,
+  one-click field write for stage/status-like workflows:
+  RowAction = { kind: 'setField', label: string, fieldKey: string, value: string | number | boolean }
+  Use ONLY on picklist/checkbox/text fields, with EXACT option values from the field
+  list ("Mark won" → { kind: 'setField', label: 'Mark won', fieldKey: 'stage',
+  value: 'Won' }). The UI confirms before writing; permissions are enforced
+  server-side. Never invent option values.
+
+## Advanced queries (reach for this LAST)
+
+- QueryBlock — a declarative query beyond what Chart/Metric can say: multiple
+  measures side by side, computed ratios, medians/distinct counts, and
+  "with/without related records" conditions. Prefer Chart/Metric whenever they
+  can express the question — they render more polished. Renders as a
+  multi-measure table, or one measure as bars/a stat.
+  props: {
+    title?: string,
+    display?: 'table' | 'bar' | 'kpi',
+    measureKey?: string,               // which measure drives bar/kpi (default first)
+    query: {
+      objectKey: string,
+      where?: Condition,               // Condition = ArtifactFilter | { all: Condition[] }
+                                       //   | { any: Condition[] }
+                                       //   | { exists: { objectKey, refFieldKey, where? }, negate?: boolean }
+                                       // exists = "has related records"; negate = "has NONE".
+                                       // refFieldKey must be a reference field on that object
+                                       // pointing back at query.objectKey.
+      groupBy?: [{ fieldKey: string, grain?: 'day'|'week'|'month'|'quarter'|'year' }],  // 0-2; dot paths OK
+      measures: [{ id: string, fn?: 'count'|'sum'|'avg'|'min'|'max'|'countDistinct'|'median',
+                   fieldKey?: string,
+                   expr?: { op: '+'|'-'|'*'|'/', left: {ref}|{value}, right: {ref}|{value} } }],  // 1-5
+      having?: [{ measure: <measure id or 'count'>, op: 'gt'|'gte'|'lt'|'lte', value: number }],
+      orderBy?: { ref: <'group' or measure id>, direction: 'asc'|'desc' },
+      limit?: number
+    }
+  }
+  Example — win rate and average deal size by owner, only owners with ≥ 5 deals:
+  { objectKey: 'deal', groupBy: [{ fieldKey: 'owner' }],
+    measures: [
+      { id: 'won', fn: 'count' },       // pair with a stage filter in where when needed
+      { id: 'total', fn: 'count' },
+      { id: 'avg_size', fn: 'avg', fieldKey: 'amount' },
+      { id: 'win_rate', expr: { op: '/', left: { ref: 'won' }, right: { ref: 'total' } } }
+    ],
+    having: [{ measure: 'count', op: 'gte', value: 5 }] }
 
 # Filter / Sort schema
 
@@ -363,6 +536,16 @@ ArtifactFilter = { fieldKey: string, op: Op, value?: string | number | boolean |
   - fieldKey MUST come from the field list below for the matching objectKey.
   - Op is one of: ${ARTIFACT_FILTER_OPS.join(', ')}
   - The unary ops (isEmpty, isSet, isTrue, isFalse) take no value.
+  - Date/datetime values may be RELATIVE tokens, which keep the dashboard
+    evergreen — ALWAYS prefer them over hardcoded dates for time windows:
+    '@today', '@startOfWeek', '@startOfMonth', '@startOfQuarter',
+    '@startOfYear', or offsets like '@-7d', '@-30d', '@-90d', '@-1m'.
+    "Last 30 days" = { fieldKey: <date field>, op: 'gte', value: '@-30d' }.
+    "This quarter" = { fieldKey: <date field>, op: 'gte', value: '@startOfQuarter' }.
+  - A filters entry may also be an OR group — { any: ArtifactFilter[] } — for
+    "X or Y" conditions: filters: [{ any: [{ fieldKey: 'stage', op: 'eq',
+    value: 'Won' }, { fieldKey: 'amount', op: 'gt', value: 50000 }] }].
+    One level only (no groups inside groups); entries outside a group AND.
 
 ArtifactSort = { fieldKey: string, direction: 'asc' | 'desc' }
 
@@ -388,15 +571,27 @@ You are composing for the **${object.label}** object (key: \`${object.key}\`).
 
 Fields available to reference:
 ${fieldLines || '- (no fields surfaced)'}
+${
+  refLines
+    ? `
+# Reference paths (one hop)
+
+Filters and Chart groupBy/groupBy2 may traverse ONE reference with a dot key —
+'account.industry' groups ${object.label.toLowerCase()} records by the referenced
+record's field. Available paths (use EXACTLY these keys; not valid in sort,
+columns, or measure):
+${refLines}
 `
+    : ''
+}`
     : `# Workspace context (HOME page)
 
 You are composing the user's HOME page — a workspace-level dashboard that spans all
-objects. Open with Greeting (not PageHeader), lead with the numbers that matter across
-the workspace (open pipeline, record counts), put AttentionQueue where the user will
-act on it, and close with recent records (RecordList over the activity object works
-well). EVERY live node (Metric/Chart/RecordTable/RecordGrid/RecordList) must name its
-objectKey from the objects listed below.
+objects. Open with Greeting (not PageHeader), follow with a StatBand of the numbers
+that matter across the workspace (open pipeline, record counts), put AttentionQueue
+where the user will act on it, and close with recent records (RecordList over the
+activity object works well). EVERY live node (StatBand items/Metric/Chart/RecordTable/
+RecordGrid/RecordList) must name its objectKey from the objects listed below.
 `
 }${
   otherObjectLines
@@ -432,7 +627,7 @@ ${formatDataSummary(summary)}
 - scatter and every sum/avg/min/max carry a numeric measure; matrix carries groupBy2.
 - Time-series (line/area over a date groupBy) never set limit.
 - No number appears twice; titles ≤ 60 chars; bodies ≤ 280 chars.
-- The note cites real numbers and reads like a colleague, not a changelog.${refinement}`;
+- The note cites real numbers and reads like a colleague, not a changelog.${detailSection}${refinement}`;
 }
 
 export type GenerationPartial = { note?: string; artifact?: unknown };
@@ -453,6 +648,9 @@ export function streamArtifact(opts: {
   summary: DataSummary | null;
   currentArtifact?: ArtifactLike;
   otherObjects?: ObjectContext[];
+  /** 'detail' composes a record-page layout for `object` instead of a
+   *  dashboard (requires a non-null object). */
+  mode?: 'dashboard' | 'detail';
 }): { partialStream: AsyncIterable<GenerationPartial>; result: Promise<Generation> } {
   const env = loadEnv();
   if (!env.ANTHROPIC_API_KEY) {
@@ -466,6 +664,7 @@ export function streamArtifact(opts: {
       opts.summary,
       opts.currentArtifact,
       opts.otherObjects ?? [],
+      opts.mode ?? 'dashboard',
     ),
     prompt: opts.prompt,
     schema: generationProviderSchema,

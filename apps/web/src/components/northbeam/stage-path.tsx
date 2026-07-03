@@ -26,11 +26,15 @@ export function StagePath({
   recordId,
   field,
   value,
+  readOnly = false,
 }: {
   objectKey: string;
   recordId: string;
   field: FieldDefLite;
   value: unknown;
+  /** When the caller can't write the record, segments render but don't move
+   *  the stage on click (the backend would reject it anyway). */
+  readOnly?: boolean;
 }) {
   const utils = trpc.useUtils();
   const options = field.config?.options ?? [];
@@ -74,7 +78,7 @@ export function StagePath({
             key={o.value}
             type="button"
             aria-current={state === 'current' ? 'step' : undefined}
-            disabled={update.isPending || state === 'current'}
+            disabled={readOnly || update.isPending || state === 'current'}
             onClick={() =>
               update.mutate({ objectKey, id: recordId, data: { [field.key]: o.value } })
             }

@@ -20,7 +20,12 @@ cat > .env.local <<ENV
 POSTGRES_USER=northbeam
 POSTGRES_PASSWORD=northbeam
 POSTGRES_DB=northbeam
-DATABASE_URL=postgresql://northbeam:northbeam@localhost:5432/northbeam
+# Runtime connects as the RLS-restricted app role; schema tooling (drizzle
+# push/migrate) and scripts/setup-app-role.ts use the owner role below.
+POSTGRES_APP_USER=northbeam_app
+POSTGRES_APP_PASSWORD=northbeam_app
+DATABASE_URL=postgresql://northbeam_app:northbeam_app@localhost:5432/northbeam
+DATABASE_ADMIN_URL=postgresql://northbeam:northbeam@localhost:5432/northbeam
 
 # Better Auth
 BETTER_AUTH_SECRET=${SECRET}

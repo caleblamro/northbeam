@@ -32,22 +32,17 @@ import {
 } from '@/components/northbeam/views/artifact-walker';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { type RouterOutputs, trpc } from '@/lib/api';
 import { formatError } from '@/lib/api/errors';
+import { useCan } from '@/lib/can';
 import { cn } from '@/lib/cn';
+import { COMPOSER_OPEN_EVENT, type ComposerOpenRequest } from '@/lib/composer-bus';
 import { timeAgo } from '@/lib/time';
 import type { ShareTarget, ViewIcon } from '@northbeam/db/views';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUp, BookmarkPlus, History, Plus, Sparkles, Square, Trash2, X } from 'lucide-react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   type ReactNode,
   createContext,
@@ -89,10 +84,37 @@ type ComposerMessage = {
 
 type SessionRow = RouterOutputs['ai']['sessionList'][number];
 
-/** Sentinel objectKey for WORKSPACE scope (the Home page) — the composer
- *  targets the whole workspace instead of one object; ai.preview is called
- *  without an objectKey and saving writes the caller's `home` view. */
+/** Sentinel objectKey for WORKSPACE scope — the composer's DEFAULT. The
+ *  model targets whatever objects fit the request (every live node names its
+ *  own objectKey); ai.preview is called without an objectKey. An explicit
+ *  objectKey only arrives from entry points refining an object's own
+ *  dashboard, where it also enriches the prompt's data summary. */
 export const WORKSPACE_KEY = '__workspace__';
+
+/** Most-used objectKey across the artifact's live nodes — where a saved
+ *  dashboard most plausibly belongs. Null = no live node names an object
+ *  (a workspace-level dashboard). */
+function dominantObjectKey(artifact: Artifact | null): string | null {
+  if (!artifact) return null;
+  const counts = new Map<string, number>();
+  const visit = (node: ArtifactNode) => {
+    const key = (node.props as { objectKey?: unknown } | undefined)?.objectKey;
+    if (typeof key === 'string' && key.length > 0) {
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    for (const child of node.children ?? []) visit(child);
+  };
+  for (const node of artifact.components) visit(node);
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [key, count] of counts) {
+    if (count > bestCount) {
+      best = key;
+      bestCount = count;
+    }
+  }
+  return best;
+}
 
 type OpenOpts = {
   objectKey?: string;
@@ -104,6 +126,10 @@ type OpenOpts = {
   /** Home mode: workspace scope + saving updates the given home view in
    *  place (or creates the caller's `home` view when viewId is null). */
   home?: { viewId?: string | null };
+  /** Detail mode (record pages): generation composes a record-page LAYOUT
+   *  for `objectKey`'s object; saving writes the object's `detail` view
+   *  (updating `viewId` in place when set). Requires `objectKey`. */
+  detail?: { objectId: string; viewId?: string | null };
 };
 
 type ComposerState = {
@@ -142,7 +168,6 @@ function toPreviewArtifact(partial: unknown): Artifact | null {
 
 type InternalState = ComposerState & {
   objectKey: string;
-  setObjectKey: (k: string) => void;
   objects: { id: string; key: string; labelPlural: string }[];
   messages: ComposerMessage[];
   input: string;
@@ -173,10 +198,9 @@ function useInternal(): InternalState {
 
 export function AiComposerScope({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const pathname = usePathname();
   const utils = trpc.useUtils();
   const [isOpen, setIsOpen] = useState(false);
-  const [objectKey, setObjectKey] = useState('');
+  const [objectKey, setObjectKey] = useState(WORKSPACE_KEY);
   const [messages, setMessages] = useState<ComposerMessage[]>([]);
   const [input, setInput] = useState('');
   const [preview, setPreview] = useState<Artifact | null>(null);
@@ -185,8 +209,19 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // Home mode — ONLY when opened via opts.home (the Home page's affordance).
+  // Workspace scope (objectKey === WORKSPACE_KEY) is the default for every
+  // generic open and must NOT imply home: a generic save goes through the
+  // save dialog + AI placement inference, never overwrites the Home page.
+  const [homeMode, setHomeMode] = useState(false);
   // Home mode's save target — the existing home view to update in place.
   const [homeViewId, setHomeViewId] = useState<string | null>(null);
+  // Detail mode's target — the object whose record-page layout is being
+  // composed, plus the existing detail view to update in place (if any).
+  const [detailTarget, setDetailTarget] = useState<{
+    objectId: string;
+    viewId?: string | null;
+  } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const seedRef = useRef<OpenOpts | null>(null);
   // send() needs the thread as it was BEFORE the turn (for the session
@@ -210,7 +245,9 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
     setError(null);
     setSaveOpen(false);
     setSessionId(null);
+    setHomeMode(false);
     setHomeViewId(null);
+    setDetailTarget(null);
     seedRef.current = null;
   }, []);
 
@@ -218,10 +255,19 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
     (opts: OpenOpts = {}) => {
       reset();
       seedRef.current = opts;
+      // Workspace scope is the default — the model targets whatever objects
+      // fit the request. An explicit objectKey (refine flows) narrows the
+      // data summary and pins the save location.
       if (opts.home) {
+        setHomeMode(true);
         setHomeViewId(opts.home.viewId ?? null);
         setObjectKey(WORKSPACE_KEY);
-      } else if (opts.objectKey) setObjectKey(opts.objectKey);
+      } else {
+        setObjectKey(opts.objectKey ?? WORKSPACE_KEY);
+      }
+      if (opts.detail && opts.objectKey) {
+        setDetailTarget(opts.detail);
+      }
       if (opts.artifact) {
         setPreview(opts.artifact);
         setMessages([
@@ -244,28 +290,17 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
     reset();
   }, [reset]);
 
-  // Resolve the target object once the list arrives: explicit seed > the
-  // object page the user is on > first object. Object routes come in two
-  // shapes — /<key> (the dynamic [object] page) and the plural static pages
-  // (/deals → 'deal', /activities → 'Activities'.toLowerCase()) — so match
-  // the segment against key, key+'s', and the slugged plural label.
+  // Modules that can't import this file (the artifact walker's ActionBar
+  // 'openComposer' actions — importing here would be a cycle) open the
+  // composer through the window-event bus instead.
   useEffect(() => {
-    if (!isOpen || objectKey || !objects.data || objects.data.length === 0) return;
-    const seeded = seedRef.current?.objectKey;
-    const segment = (pathname.split('/')[1] ?? '').toLowerCase();
-    const routeMatch = objects.data.find(
-      (o) =>
-        o.key === segment ||
-        `${o.key}s` === segment ||
-        o.labelPlural.toLowerCase().replace(/\s+/g, '-') === segment,
-    );
-    const preferred =
-      (seeded && objects.data.some((o) => o.key === seeded) && seeded) ||
-      routeMatch?.key ||
-      objects.data[0]?.key ||
-      '';
-    setObjectKey(preferred);
-  }, [isOpen, objectKey, objects.data, pathname]);
+    const onRequest = (e: Event) => {
+      const detail = (e as CustomEvent<ComposerOpenRequest>).detail ?? {};
+      open({ prompt: detail.prompt, objectKey: detail.objectKey });
+    };
+    window.addEventListener(COMPOSER_OPEN_EVENT, onRequest);
+    return () => window.removeEventListener(COMPOSER_OPEN_EVENT, onRequest);
+  }, [open]);
 
   const send = useCallback(async () => {
     const instruction = input.trim();
@@ -299,6 +334,8 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
           objectKey: objectKey === WORKSPACE_KEY ? undefined : objectKey,
           prompt: instruction,
           currentArtifact: base ?? undefined,
+          // Detail mode composes a record-page LAYOUT, not a dashboard.
+          mode: detailTarget ? ('detail' as const) : ('dashboard' as const),
         },
         { signal: ac.signal },
       );
@@ -369,6 +406,7 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
     isGenerating,
     preview,
     sessionId,
+    detailTarget,
     utils.client,
     utils.ai.sessionList,
     sessionSave.mutateAsync,
@@ -412,7 +450,7 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
     meta: { context: "Couldn't save your home page" },
   });
 
-  const isHome = objectKey === WORKSPACE_KEY;
+  const isHome = homeMode;
 
   const save = useCallback(
     async ({
@@ -422,6 +460,37 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
     }: { label: string; sharedWith: ShareTarget[]; icon: ViewIcon }) => {
       if (!preview) return;
       const prompts = messages.filter((m) => m.role === 'user').map((m) => m.content);
+
+      // Detail mode: the artifact IS the object's record-page layout — write
+      // the `detail` view (in place when one exists) and stay on the page.
+      if (detailTarget) {
+        const config = {
+          artifact: preview,
+          prompt: prompts[0] ?? '',
+          prompts,
+          model: model ?? undefined,
+          generatedAt: new Date().toISOString(),
+        };
+        if (detailTarget.viewId) {
+          await updateView.mutateAsync({ id: detailTarget.viewId, config });
+        } else {
+          await createView.mutateAsync({
+            objectId: detailTarget.objectId,
+            key: `detail-${Date.now().toString(36)}`,
+            label,
+            type: 'detail',
+            icon,
+            filters: [],
+            sort: [],
+            columns: [],
+            sharedWith,
+            config,
+          });
+        }
+        await utils.view.detail.invalidate({ objectId: detailTarget.objectId });
+        close();
+        return;
+      }
 
       if (isHome) {
         const config = {
@@ -456,8 +525,12 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
         return;
       }
 
-      const objectId = objects.data?.find((o) => o.key === objectKey)?.id;
-      if (!objectId) return;
+      // Placement: an explicit seed (refine flows) wins; otherwise the object
+      // the artifact leans on most; a dashboard whose live nodes span no
+      // single object saves workspace-level (null objectId) and lives at
+      // /dashboards/<id>.
+      const targetKey = objectKey !== WORKSPACE_KEY ? objectKey : dominantObjectKey(preview);
+      const target = targetKey ? objects.data?.find((o) => o.key === targetKey) : undefined;
       const slug =
         label
           .toLowerCase()
@@ -465,7 +538,7 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
           .replace(/^-+|-+$/g, '')
           .slice(0, 48) || 'dashboard';
       const created = await createView.mutateAsync({
-        objectId,
+        objectId: target?.id ?? null,
         key: `${slug}-${Date.now().toString(36)}`,
         label,
         type: 'dashboard',
@@ -485,16 +558,18 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
           generatedAt: new Date().toISOString(),
         },
       });
-      await utils.view.list.invalidate({ objectId });
-      const key = objectKey;
+      await utils.view.list.invalidate();
       close();
-      router.push(`/${key}?view=${created?.id ?? ''}`);
+      router.push(
+        target ? `/${target.key}?view=${created?.id ?? ''}` : `/dashboards/${created?.id ?? ''}`,
+      );
     },
     [
       objects.data,
       objectKey,
       isHome,
       homeViewId,
+      detailTarget,
       preview,
       messages,
       model,
@@ -502,6 +577,7 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
       updateView,
       utils.view.list,
       utils.view.home,
+      utils.view.detail,
       close,
       router,
     ],
@@ -511,12 +587,6 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
   const internal: InternalState = {
     ...state,
     objectKey,
-    setObjectKey: (k) => {
-      setObjectKey(k);
-      setPreview(null);
-      setMessages([]);
-      setError(null);
-    },
     objects: objects.data ?? [],
     messages,
     input,
@@ -550,6 +620,7 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
 export function AiComposerSurface({ children }: { children: ReactNode }) {
   const { preview } = useAiComposer();
   const { setSaveOpen, close, isGenerating, isHome, isSaving, save } = useInternal();
+  const canSave = useCan('view.write');
   return (
     <>
       <div className={cn(preview && 'hidden')}>{children}</div>
@@ -591,17 +662,21 @@ export function AiComposerSurface({ children }: { children: ReactNode }) {
               <Button variant="ghost" size="xs" onClick={close}>
                 Discard
               </Button>
-              <Button
-                size="xs"
-                onClick={() =>
-                  // Home saves in place — no name/share/icon to pick.
-                  isHome ? save({ label: 'Home', sharedWith: [], icon: 'star' }) : setSaveOpen(true)
-                }
-                disabled={isGenerating || isSaving}
-              >
-                <BookmarkPlus />
-                {isHome ? 'Save home' : 'Save as view'}
-              </Button>
+              {canSave && (
+                <Button
+                  size="xs"
+                  onClick={() =>
+                    // Home saves in place — no name/share/icon to pick.
+                    isHome
+                      ? save({ label: 'Home', sharedWith: [], icon: 'star' })
+                      : setSaveOpen(true)
+                  }
+                  disabled={isGenerating || isSaving}
+                >
+                  <BookmarkPlus />
+                  {isHome ? 'Save home' : 'Save as view'}
+                </Button>
+              )}
             </span>
           </div>
           <div className={cn('transition-opacity duration-300', isGenerating && 'opacity-70')}>
@@ -621,7 +696,6 @@ export function AiComposerDrawer() {
     close,
     preview,
     objectKey,
-    setObjectKey,
     objects,
     messages,
     input,
@@ -680,24 +754,11 @@ export function AiComposerDrawer() {
               <p className="font-medium text-sm leading-tight">Compose</p>
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1">
-              <Select value={objectKey} onValueChange={setObjectKey}>
-                <SelectTrigger
-                  className="h-7 w-auto gap-1 border-0 bg-transparent px-2 text-muted-foreground text-xs shadow-none hover:text-foreground"
-                  aria-label="Target object"
-                >
-                  <SelectValue placeholder="Object" />
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {objectKey === WORKSPACE_KEY && (
-                    <SelectItem value={WORKSPACE_KEY}>Workspace (home)</SelectItem>
-                  )}
-                  {objects.map((o) => (
-                    <SelectItem key={o.id} value={o.key}>
-                      {o.labelPlural}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {objectKey !== WORKSPACE_KEY && (
+                <span className="rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground">
+                  {objects.find((o) => o.key === objectKey)?.labelPlural ?? objectKey}
+                </span>
+              )}
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -768,8 +829,8 @@ export function AiComposerDrawer() {
                 <div className="space-y-1">
                   <p className="font-medium text-sm">Describe a dashboard</p>
                   <p className="text-muted-foreground text-xs leading-relaxed">
-                    It composes against your live {objectLabel} data and previews on the page behind
-                    this panel.
+                    It composes against your live {objectLabel} data — pulling from whichever
+                    objects fit — and previews on the page behind this panel.
                   </p>
                 </div>
                 <div className="flex w-full flex-col gap-2">

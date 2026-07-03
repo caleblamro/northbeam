@@ -44,7 +44,8 @@ export function ObjectMappingCard({
   onToggleField,
 }: {
   object: RunObject;
-  onToggleField: (id: string, current: string) => void;
+  /** Omitted for roles without migration.run — statuses render read-only. */
+  onToggleField?: (id: string, current: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const meta = o.meta as { targetKey?: string };
@@ -134,7 +135,8 @@ export function ObjectMappingCard({
                               ? 'outline'
                               : 'ghost'
                         }
-                        onClick={() => onToggleField(f.id, f.status)}
+                        disabled={!onToggleField}
+                        onClick={() => onToggleField?.(f.id, f.status)}
                       >
                         {f.status}
                       </Button>

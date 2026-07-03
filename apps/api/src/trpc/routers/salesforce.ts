@@ -10,7 +10,7 @@ import {
   schema,
 } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { env } from '../../lib/env.js';
 import { enqueueImport } from '../../queue/sf-import.js';
@@ -43,7 +43,7 @@ export const salesforceRouter = router({
     };
   }),
 
-  disconnect: protectedProcedure.mutation(async ({ ctx }) => {
+  disconnect: permissionProcedure('migration.run').mutation(async ({ ctx }) => {
     await deleteConnection(ctx.db, ctx.auth.organizationId);
     return { ok: true as const };
   }),
@@ -82,8 +82,10 @@ export const salesforceRouter = router({
     }
   }),
 
-  /** Describe + auto-map the selected objects into a new migration run. */
-  createRun: protectedProcedure
+  /** Describe + auto-map the selected objects into a new migration run.
+   *  Admin+ like execute — mapping hits the live Salesforce API and writes the
+   *  run/mapping tables, so the whole migration surface shares one gate. */
+  createRun: permissionProcedure('migration.run')
     .input(z.object({ objects: z.array(z.string()).min(1).max(25) }))
     .mutation(async ({ ctx, input }) => {
       const orgId = ctx.auth.organizationId;
@@ -179,7 +181,12 @@ export const salesforceRouter = router({
       const objects = await ctx.db
         .select()
         .from(schema.objectMapping)
-        .where(eq(schema.objectMapping.runId, run.id));
+        .where(
+          and(
+            eq(schema.objectMapping.organizationId, ctx.auth.organizationId),
+            eq(schema.objectMapping.runId, run.id),
+          ),
+        );
       const result = [];
       for (const om of objects) {
         const fields = await ctx.db
@@ -192,7 +199,12 @@ export const salesforceRouter = router({
             meta: schema.fieldMapping.meta,
           })
           .from(schema.fieldMapping)
-          .where(eq(schema.fieldMapping.objectMappingId, om.id));
+          .where(
+            and(
+              eq(schema.fieldMapping.organizationId, ctx.auth.organizationId),
+              eq(schema.fieldMapping.objectMappingId, om.id),
+            ),
+          );
         result.push({
           id: om.id,
           sfObject: om.sfObject,
@@ -206,23 +218,37 @@ export const salesforceRouter = router({
       return { run: { id: run.id, status: run.status, stats: run.stats }, objects: result };
     }),
 
-  setFieldStatus: protectedProcedure
+  setFieldStatus: permissionProcedure('migration.run')
     .input(z.object({ id: z.string(), status: z.enum(['mapped', 'review', 'skip']) }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db
+      const updated = await ctx.db
         .update(schema.fieldMapping)
         .set({ status: input.status })
-        .where(eq(schema.fieldMapping.id, input.id));
+        .where(
+          and(
+            eq(schema.fieldMapping.organizationId, ctx.auth.organizationId),
+            eq(schema.fieldMapping.id, input.id),
+          ),
+        )
+        .returning({ id: schema.fieldMapping.id });
+      if (updated.length === 0) throw new TRPCError({ code: 'NOT_FOUND' });
       return { ok: true as const };
     }),
 
-  setObjectAction: protectedProcedure
+  setObjectAction: permissionProcedure('migration.run')
     .input(z.object({ id: z.string(), action: z.enum(['map', 'create', 'skip']) }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db
+      const updated = await ctx.db
         .update(schema.objectMapping)
         .set({ action: input.action })
-        .where(eq(schema.objectMapping.id, input.id));
+        .where(
+          and(
+            eq(schema.objectMapping.organizationId, ctx.auth.organizationId),
+            eq(schema.objectMapping.id, input.id),
+          ),
+        )
+        .returning({ id: schema.objectMapping.id });
+      if (updated.length === 0) throw new TRPCError({ code: 'NOT_FOUND' });
       return { ok: true as const };
     }),
 

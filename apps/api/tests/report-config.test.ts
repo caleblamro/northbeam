@@ -174,3 +174,37 @@ describe('resolveReportSpec', () => {
     }
   });
 });
+
+describe('resolveReportSpec — countDistinct / median gates', () => {
+  const fields = [
+    { key: 'stage', type: 'picklist', columnName: 'f_stage' },
+    { key: 'amount', type: 'currency', columnName: 'f_amount' },
+    { key: 'tags', type: 'multipicklist', columnName: 'f_tags' },
+  ] as Parameters<typeof resolveReportSpec>[0];
+
+  it('median requires a numeric field', () => {
+    expect(
+      resolveReportSpec(fields, { groupBy: 'stage', measure: { agg: 'median', fieldKey: 'amount' } })
+        .ok,
+    ).toBe(true);
+    expect(
+      resolveReportSpec(fields, { groupBy: 'stage', measure: { agg: 'median', fieldKey: 'stage' } })
+        .ok,
+    ).toBe(false);
+  });
+
+  it('countDistinct takes any scalar field but never multipicklist', () => {
+    expect(
+      resolveReportSpec(fields, {
+        groupBy: 'stage',
+        measure: { agg: 'countDistinct', fieldKey: 'stage' },
+      }).ok,
+    ).toBe(true);
+    expect(
+      resolveReportSpec(fields, {
+        groupBy: 'stage',
+        measure: { agg: 'countDistinct', fieldKey: 'tags' },
+      }).ok,
+    ).toBe(false);
+  });
+});

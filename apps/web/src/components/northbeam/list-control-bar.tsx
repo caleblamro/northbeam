@@ -54,6 +54,9 @@ interface ListControlBarProps {
   searchPlaceholder?: string;
   /** Right-most action slot — the New button. */
   createAction?: ReactNode;
+  /** Gates the save/set-default/delete-view affordances. When false (the
+   *  caller lacks `view.write`), views are still selectable — just read-only. */
+  canWriteViews?: boolean;
 }
 
 export function ListControlBar({
@@ -77,6 +80,7 @@ export function ListControlBar({
   onSearchChange,
   searchPlaceholder,
   createAction,
+  canWriteViews = true,
 }: ListControlBarProps) {
   const byKey = new Map(fields.map((f) => [f.key, f]));
   const real = views.filter((v) => v.id !== '__synthetic__');
@@ -84,6 +88,7 @@ export function ListControlBar({
   const tabViews = real.length > 0 ? real : [activeView];
 
   const canManage = (view: ViewRow) => {
+    if (!canWriteViews) return false;
     if (view.id === '__synthetic__') return false;
     if (view.ownerId === null && view.isDefault) return false;
     return currentUserId ? view.ownerId === currentUserId : false;
@@ -139,14 +144,14 @@ export function ListControlBar({
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-52">
-                    {hasOverrides && (
+                    {hasOverrides && canWriteViews && (
                       <DropdownMenuItem onClick={onSaveAsNew}>
                         <Plus className="size-3.5" />
                         Save as new view…
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem
-                      disabled={v.isDefault || v.id === '__synthetic__'}
+                      disabled={!canWriteViews || v.isDefault || v.id === '__synthetic__'}
                       onClick={() => onSetDefault(v)}
                     >
                       <Pin className="size-3.5" />
@@ -166,14 +171,16 @@ export function ListControlBar({
             </div>
           );
         })}
-        <button
-          type="button"
-          aria-label="Save current state as a new view"
-          onClick={onSaveAsNew}
-          className="flex items-center px-2 text-muted-foreground hover:text-foreground"
-        >
-          <Plus className="size-3.5" />
-        </button>
+        {canWriteViews && (
+          <button
+            type="button"
+            aria-label="Save current state as a new view"
+            onClick={onSaveAsNew}
+            className="flex items-center px-2 text-muted-foreground hover:text-foreground"
+          >
+            <Plus className="size-3.5" />
+          </button>
+        )}
       </nav>
 
       <div className="ml-auto flex flex-wrap items-center gap-2 py-1.5">

@@ -421,3 +421,373 @@ describe('repairArtifact', () => {
     expect(repaired.components[0]?.component).toBe('EmptyState');
   });
 });
+
+/* ── Metric compare + relative-date tokens ──────────────────────────────── */
+
+function metricArtifact(props: Record<string, unknown>): Artifact {
+  return { version: '1', components: [{ component: 'Metric', props }] };
+}
+function metricProps(a: Artifact): Record<string, unknown> {
+  return (a.components[0]?.props ?? {}) as Record<string, unknown>;
+}
+
+describe('repairArtifact — Metric compare', () => {
+  it('keeps a valid compare and strips a co-existing free-text delta', () => {
+    const r = repairArtifact(
+      metricArtifact({
+        objectKey: 'deal',
+        fn: 'count',
+        compare: { dateFieldKey: 'close_date', period: 'month' },
+        delta: '+12% vs last month',
+      }),
+      objectsByKey,
+    );
+    expect(metricProps(r.artifact).compare).toEqual({
+      dateFieldKey: 'close_date',
+      period: 'month',
+    });
+    expect(metricProps(r.artifact).delta).toBeUndefined();
+  });
+
+  it('drops compare on a non-date field', () => {
+    const r = repairArtifact(
+      metricArtifact({
+        objectKey: 'deal',
+        fn: 'count',
+        compare: { dateFieldKey: 'stage', period: 'month' },
+      }),
+      objectsByKey,
+    );
+    expect(metricProps(r.artifact).compare).toBeUndefined();
+    expect(r.notes.some((n) => n.includes('compare'))).toBe(true);
+  });
+
+  it('drops compare with an unknown period', () => {
+    const r = repairArtifact(
+      metricArtifact({
+        objectKey: 'deal',
+        fn: 'count',
+        compare: { dateFieldKey: 'close_date', period: 'fortnight' },
+      }),
+      objectsByKey,
+    );
+    expect(metricProps(r.artifact).compare).toBeUndefined();
+  });
+
+  it('leaves a legacy free-text delta alone when no compare exists', () => {
+    const r = repairArtifact(
+      metricArtifact({ objectKey: 'deal', fn: 'count', delta: '+3 this week' }),
+      objectsByKey,
+    );
+    expect(metricProps(r.artifact).delta).toBe('+3 this week');
+  });
+});
+
+describe('repairArtifact — relative-date filter tokens', () => {
+  it('keeps a known token on a date field', () => {
+    const r = repairArtifact(
+      chartArtifact({
+        objectKey: 'deal',
+        groupBy: 'stage',
+        fn: 'count',
+        filters: [{ fieldKey: 'close_date', op: 'gte', value: '@-30d' }],
+      }),
+      objectsByKey,
+    );
+    expect(chartProps(r.artifact).filters).toEqual([
+      { fieldKey: 'close_date', op: 'gte', value: '@-30d' },
+    ]);
+    expect(r.notes).toEqual([]);
+  });
+
+  it('drops unknown tokens and tokens on non-date fields', () => {
+    const r = repairArtifact(
+      chartArtifact({
+        objectKey: 'deal',
+        groupBy: 'stage',
+        fn: 'count',
+        filters: [
+          { fieldKey: 'close_date', op: 'gte', value: '@yesterday' },
+          { fieldKey: 'stage', op: 'eq', value: '@-30d' },
+          { fieldKey: 'stage', op: 'eq', value: 'Won' },
+        ],
+      }),
+      objectsByKey,
+    );
+    expect(chartProps(r.artifact).filters).toEqual([{ fieldKey: 'stage', op: 'eq', value: 'Won' }]);
+    expect(r.notes).toHaveLength(2);
+  });
+});
+
+describe('buildSystemPrompt — dates everywhere contract', () => {
+  it('documents relative tokens and the compare spec, and forbids invented deltas', () => {
+    const prompt = buildSystemPrompt(object, fields, summary);
+    expect(prompt).toContain("'@-30d'");
+    expect(prompt).toContain("'@startOfQuarter'");
+    expect(prompt).toContain('compare?: { dateFieldKey: string');
+    expect(prompt).toContain('NEVER write a `delta` string');
+  });
+});
+
+/* ── Actions ────────────────────────────────────────────────────────────── */
+
+const dealFieldsWithOptions = [
+  ...dealFields.filter((f) => f.key !== 'stage'),
+  {
+    key: 'stage',
+    label: 'Stage',
+    type: 'picklist',
+    config: { options: [{ value: 'Won' }, { value: 'Lost' }] },
+  },
+] as FieldRow[];
+const objectsWithOptions = new Map([['deal', dealFieldsWithOptions]]);
+
+describe('repairArtifact — ActionBar', () => {
+  function actionBar(items: unknown[]): Artifact {
+    return { version: '1', components: [{ component: 'ActionBar', props: { items } }] };
+  }
+  function items(a: Artifact): unknown[] {
+    return (a.components[0]?.props as { items?: unknown[] })?.items ?? [];
+  }
+
+  it('keeps vocabulary actions and drops unknown kinds / objects', () => {
+    const r = repairArtifact(
+      actionBar([
+        { kind: 'createRecord', label: 'New deal', objectKey: 'deal' },
+        { kind: 'navigate', label: 'View ghosts', objectKey: 'ghost' },
+        { kind: 'openComposer', label: 'Analyze', prompt: 'Analyze churn' },
+        { kind: 'deleteEverything', label: 'Nope' },
+      ]),
+      objectsByKey,
+    );
+    expect(items(r.artifact)).toEqual([
+      { kind: 'createRecord', label: 'New deal', objectKey: 'deal', defaults: undefined },
+      { kind: 'openComposer', label: 'Analyze', prompt: 'Analyze churn' },
+    ]);
+    expect(r.notes).toHaveLength(2);
+  });
+
+  it('strips unknown default keys on createRecord', () => {
+    const r = repairArtifact(
+      actionBar([
+        {
+          kind: 'createRecord',
+          label: 'New deal',
+          objectKey: 'deal',
+          defaults: { stage: 'Won', ghost_field: 'x' },
+        },
+      ]),
+      objectsByKey,
+    );
+    expect(items(r.artifact)[0]).toMatchObject({ defaults: { stage: 'Won' } });
+    expect(r.notes.some((n) => n.includes('default'))).toBe(true);
+  });
+
+  it('removes an ActionBar whose actions all fail (falls into EmptyState alone)', () => {
+    const r = repairArtifact(actionBar([{ kind: 'navigate', label: 'x', objectKey: 'nope' }]), objectsByKey);
+    expect(r.artifact.components[0]?.component).toBe('EmptyState');
+  });
+});
+
+describe('repairArtifact — rowAction', () => {
+  function listWith(rowAction: unknown): Artifact {
+    return {
+      version: '1',
+      components: [{ component: 'RecordList', props: { objectKey: 'deal', rowAction } }],
+    };
+  }
+  function rowActionOf(a: Artifact): unknown {
+    return (a.components[0]?.props as { rowAction?: unknown })?.rowAction;
+  }
+
+  it('keeps a setField whose picklist value is a real option', () => {
+    const r = repairArtifact(
+      listWith({ kind: 'setField', label: 'Mark won', fieldKey: 'stage', value: 'Won' }),
+      objectsWithOptions,
+    );
+    expect(rowActionOf(r.artifact)).toEqual({
+      kind: 'setField',
+      label: 'Mark won',
+      fieldKey: 'stage',
+      value: 'Won',
+    });
+  });
+
+  it('drops a setField with an invented picklist value', () => {
+    const r = repairArtifact(
+      listWith({ kind: 'setField', label: 'Mark maybe', fieldKey: 'stage', value: 'Maybe' }),
+      objectsWithOptions,
+    );
+    expect(rowActionOf(r.artifact)).toBeUndefined();
+    expect(r.notes.some((n) => n.includes("isn't an option"))).toBe(true);
+  });
+
+  it('drops a setField on an unsupported field type', () => {
+    const r = repairArtifact(
+      listWith({ kind: 'setField', label: 'Bump', fieldKey: 'amount', value: 100 }),
+      objectsWithOptions,
+    );
+    expect(rowActionOf(r.artifact)).toBeUndefined();
+  });
+});
+
+describe('buildSystemPrompt — actions contract', () => {
+  it('documents the ActionBar vocabulary and restraint rules', () => {
+    const prompt = buildSystemPrompt(object, fields, summary);
+    expect(prompt).toContain('ActionBar');
+    expect(prompt).toContain("kind: 'createRecord'");
+    expect(prompt).toContain("kind: 'setField'");
+    expect(prompt).toContain('Never invent option values');
+    expect(prompt).toContain('Include ONE at most');
+  });
+});
+
+/* ── Detail mode (record pages) ─────────────────────────────────────────── */
+
+const accountFieldsForDetail = [
+  { key: 'industry', label: 'Industry', type: 'picklist' },
+] as FieldRow[];
+const dealFieldsWithRef = [
+  ...dealFields,
+  {
+    key: 'account',
+    label: 'Account',
+    type: 'reference',
+    config: { targetObject: 'account' },
+  },
+] as FieldRow[];
+const detailObjects = new Map([
+  ['account', accountFieldsForDetail],
+  ['deal', dealFieldsWithRef],
+]);
+const detailOpts = { mode: 'detail' as const, baseObjectKey: 'account' };
+
+describe('repairArtifact — record-context components', () => {
+  it('keeps a valid RelatedList and strips unknown RecordFields keys', () => {
+    const artifact: Artifact = {
+      version: '1',
+      components: [
+        { component: 'RecordFields', props: { fieldKeys: ['industry', 'ghost'] } },
+        { component: 'RelatedList', props: { objectKey: 'deal', refFieldKey: 'account' } },
+        { component: 'StagePath', props: {} },
+      ],
+    };
+    const r = repairArtifact(artifact, detailObjects, detailOpts);
+    expect(r.artifact.components).toHaveLength(3);
+    expect(r.artifact.components[0]?.props?.fieldKeys).toEqual(['industry']);
+  });
+
+  it('removes a RelatedList whose refFieldKey does not point back at the base object', () => {
+    const artifact: Artifact = {
+      version: '1',
+      components: [
+        { component: 'RelatedList', props: { objectKey: 'deal', refFieldKey: 'stage' } },
+      ],
+    };
+    const r = repairArtifact(artifact, detailObjects, detailOpts);
+    expect(r.artifact.components[0]?.component).toBe('EmptyState');
+    expect(r.notes.some((n) => n.includes('RelatedList'))).toBe(true);
+  });
+
+  it('drops record-context components entirely outside detail mode', () => {
+    const artifact: Artifact = {
+      version: '1',
+      components: [
+        { component: 'Text', props: { value: 'hi' } },
+        { component: 'RecordFields', props: { fieldKeys: ['industry'] } },
+      ],
+    };
+    const r = repairArtifact(artifact, detailObjects); // dashboard mode
+    expect(r.artifact.components).toHaveLength(1);
+    expect(r.artifact.components[0]?.component).toBe('Text');
+  });
+});
+
+describe('buildSystemPrompt — detail mode contract', () => {
+  const account = { key: 'account', label: 'Account', labelPlural: 'Accounts' } as ObjectRow;
+  const deal = { key: 'deal', label: 'Deal', labelPlural: 'Deals' } as ObjectRow;
+
+  it('teaches the record components, @record scoping, and RelatedList candidates', () => {
+    const prompt = buildSystemPrompt(
+      account,
+      accountFieldsForDetail,
+      null,
+      undefined,
+      [{ object: deal, fields: dealFieldsWithRef }],
+      'detail',
+    );
+    expect(prompt).toContain('RECORD PAGE MODE');
+    expect(prompt).toContain("value: '@record'");
+    expect(prompt).toContain("{ objectKey: 'deal', refFieldKey: 'account' }");
+    expect(prompt).toContain('do NOT emit PageHeader');
+  });
+
+  it('dashboard mode carries none of the record-page section', () => {
+    const prompt = buildSystemPrompt(account, accountFieldsForDetail, null, undefined, [
+      { object: deal, fields: dealFieldsWithRef },
+    ]);
+    expect(prompt).not.toContain('RECORD PAGE MODE');
+  });
+});
+
+/* ── QueryBlock (advanced queries) ──────────────────────────────────────── */
+
+describe('repairArtifact — QueryBlock', () => {
+  function queryBlock(query: unknown): Artifact {
+    return { version: '1', components: [{ component: 'QueryBlock', props: { query } }] };
+  }
+
+  it('keeps a resolvable spec (expression measure + having)', () => {
+    const r = repairArtifact(
+      queryBlock({
+        objectKey: 'deal',
+        groupBy: [{ fieldKey: 'stage' }],
+        measures: [
+          { id: 'total', fn: 'sum', fieldKey: 'amount' },
+          { id: 'n', fn: 'count' },
+          { id: 'per', expr: { op: '/', left: { ref: 'total' }, right: { ref: 'n' } } },
+        ],
+        having: [{ measure: 'count', op: 'gte', value: 3 }],
+      }),
+      objectsByKey,
+    );
+    expect(r.artifact.components[0]?.component).toBe('QueryBlock');
+    expect(r.notes).toEqual([]);
+  });
+
+  it('drops a spec with an unknown measure field', () => {
+    const r = repairArtifact(
+      queryBlock({
+        objectKey: 'deal',
+        measures: [{ id: 'm', fn: 'sum', fieldKey: 'ghost' }],
+      }),
+      objectsByKey,
+    );
+    expect(r.artifact.components[0]?.component).toBe('EmptyState');
+    expect(r.notes.some((n) => n.includes('QueryBlock'))).toBe(true);
+  });
+
+  it('drops a malformed spec (zod caps, e.g. expr chained off an expr)', () => {
+    const r = repairArtifact(
+      queryBlock({
+        objectKey: 'deal',
+        measures: [
+          { id: 'a', fn: 'count' },
+          { id: 'b', expr: { op: '+', left: { ref: 'a' }, right: { value: 1 } } },
+          { id: 'c', expr: { op: '+', left: { ref: 'b' }, right: { value: 1 } } },
+        ],
+      }),
+      objectsByKey,
+    );
+    expect(r.artifact.components[0]?.component).toBe('EmptyState');
+  });
+});
+
+describe('buildSystemPrompt — QueryBlock contract', () => {
+  it('teaches the advanced query shape with a prefer-Chart/Metric rule', () => {
+    const prompt = buildSystemPrompt(object, fields, summary);
+    expect(prompt).toContain('QueryBlock');
+    expect(prompt).toContain('exists');
+    expect(prompt).toContain('Prefer Chart/Metric');
+  });
+});

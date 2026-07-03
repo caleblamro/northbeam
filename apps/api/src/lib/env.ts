@@ -12,6 +12,9 @@ const Schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(DEV_API_PORT),
   DATABASE_URL: z.string().url(),
+  /** Owner connection for drizzle push/migrate + setup-app-role.ts ONLY.
+   *  Request-path code must never use it — it bypasses RLS. */
+  DATABASE_ADMIN_URL: z.string().url().optional(),
   /** BullMQ backing store. The Salesforce import queue + any future async work
    *  push here. Local dev uses the redis service from infra/docker-compose. */
   REDIS_URL: z.string().url().default('redis://localhost:6379'),

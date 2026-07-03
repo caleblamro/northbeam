@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { trpcServer } from '@hono/trpc-server';
 import { logger } from '@northbeam/core';
+import { assertRlsEnforced, createDb } from '@northbeam/db';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { handleAuthRequest } from './auth/index.js';
@@ -78,6 +79,10 @@ app.use(
     endpoint: '/trpc',
   }),
 );
+
+// Refuse to serve on a connection that bypasses RLS (superuser / table owner
+// without FORCE) — org isolation on the metadata tables would be silently off.
+await assertRlsEnforced(createDb(e.DATABASE_URL));
 
 serve({ fetch: app.fetch, port: e.PORT }, (info) => {
   logger.info({ port: info.port, baseUrl: e.BETTER_AUTH_URL }, 'northbeam-api listening');

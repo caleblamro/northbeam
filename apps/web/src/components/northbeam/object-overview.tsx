@@ -28,7 +28,7 @@ export function ObjectOverview({
   fields: ObjectGet['fields'];
 }) {
   const utils = trpc.useUtils();
-  const canEditLayout = useCan('org.settings.update');
+  const canEditLayout = useCan('object.manage');
   const [editingLayout, setEditingLayout] = useState(false);
 
   // Default view for this object — silent on failure so a missing view table

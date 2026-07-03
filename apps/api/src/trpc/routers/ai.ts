@@ -17,10 +17,11 @@ import { ArtifactLikeSchema } from '@northbeam/core';
 import {
   type AiSessionMessage,
   deleteAiSession,
-  getObjectByKey,
+  isAdminish,
   listAiSessions,
-  listObjects,
+  listObjectsWithFields,
   upsertAiSession,
+  visibleSharedRecordIds,
   withOrgContext,
   writeAuditEvent,
 } from '@northbeam/db';
@@ -29,6 +30,8 @@ import { z } from 'zod';
 import { type ObjectContext, streamArtifact } from '../../ai/artifact-generator.js';
 import { buildDataSummary } from '../../ai/data-summary.js';
 import { type ObjectFieldsByKey, repairArtifact } from '../../ai/repair-artifact.js';
+import { fixedWindow } from '../../lib/rate-limit.js';
+import { redis } from '../../queue/connection.js';
 import { rootDb } from '../context.js';
 import { permissionProcedure, protectedProcedure, router } from '../trpc.js';
 
@@ -41,6 +44,13 @@ const SessionMessageSchema = z.object({
 /** Minimum gap between streamed partial snapshots. Each snapshot re-sends the
  *  whole partial payload, so unthrottled streaming is O(n²) bytes. */
 const PARTIAL_INTERVAL_MS = 150;
+
+/* Cost guard on generation — fixed windows, fail-open (see lib/rate-limit).
+ * Per-user damps a runaway individual; per-org caps the workspace's daily
+ * LLM spend. TOO_MANY_REQUESTS is already mapped to a friendly message in
+ * the web error formatter. */
+const USER_LIMIT = { max: 10, windowSec: 10 * 60 };
+const ORG_LIMIT = { max: 200, windowSec: 24 * 60 * 60 };
 
 export const aiRouter = router({
   /** Streamed generation. Yields `{ type: 'partial' }` snapshots (note text
@@ -56,6 +66,10 @@ export const aiRouter = router({
         objectKey: z.string().min(1).optional(),
         prompt: z.string().min(1).max(2000),
         currentArtifact: ArtifactLikeSchema.optional(),
+        /** 'detail' composes a record-page LAYOUT for objectKey's object
+         *  (RecordFields / RelatedList / StagePath / '@record' scoping)
+         *  instead of a dashboard. Requires objectKey. */
+        mode: z.enum(['dashboard', 'detail']).default('dashboard'),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -68,8 +82,35 @@ export const aiRouter = router({
         });
       }
 
+      // Cost guard before any DB work. Fail-open on Redis trouble.
+      const [userGate, orgGate] = await Promise.all([
+        fixedWindow(
+          redis(),
+          `ai:preview:u:${ctx.auth.userId}`,
+          USER_LIMIT.max,
+          USER_LIMIT.windowSec,
+        ),
+        fixedWindow(
+          redis(),
+          `ai:preview:o:${ctx.auth.organizationId}`,
+          ORG_LIMIT.max,
+          ORG_LIMIT.windowSec,
+        ),
+      ]);
+      const blocked = !userGate.ok ? userGate : !orgGate.ok ? orgGate : null;
+      if (blocked) {
+        const mins = Math.max(1, Math.ceil(blocked.resetSec / 60));
+        throw new TRPCError({
+          code: 'TOO_MANY_REQUESTS',
+          message: `AI generation limit reached — try again in ~${mins} min.`,
+        });
+      }
+
+      // Every org object's fields in two queries: cross-object context for
+      // the prompt AND the ground truth the repair pass checks specs against.
+      const all = await listObjectsWithFields(ctx.db, ctx.auth.organizationId);
       const objectWithFields = input.objectKey
-        ? await getObjectByKey(ctx.db, ctx.auth.organizationId, input.objectKey)
+        ? (all.find((o) => o.object.key === input.objectKey) ?? null)
         : null;
       if (input.objectKey && !objectWithFields) {
         throw new TRPCError({
@@ -77,23 +118,14 @@ export const aiRouter = router({
           message: `object '${input.objectKey}' not found`,
         });
       }
-
-      // Every org object's fields: cross-object context for the prompt AND
-      // the ground truth the repair pass checks query specs against.
-      const others = await listObjects(ctx.db, ctx.auth.organizationId);
-      const otherObjects: ObjectContext[] = [];
-      const objectFields: ObjectFieldsByKey = new Map(
-        objectWithFields ? [[objectWithFields.object.key, objectWithFields.fields]] : [],
+      const otherObjects: ObjectContext[] = all.filter(
+        (o) => o.object.key !== objectWithFields?.object.key,
       );
-      for (const o of others) {
-        if (o.key === objectWithFields?.object.key) continue;
-        const withFields = await getObjectByKey(ctx.db, ctx.auth.organizationId, o.key);
-        if (!withFields) continue;
-        otherObjects.push(withFields);
-        objectFields.set(o.key, withFields.fields);
-      }
+      const objectFields: ObjectFieldsByKey = new Map(all.map((o) => [o.object.key, o.fields]));
 
-      // Pre-flight: pull the live numbers so Claude composes against truth.
+      // Pre-flight: pull the live numbers so Claude composes against truth —
+      // through the caller's OWN visibility (same acl record.aggregate builds),
+      // so the note never cites numbers the rendered dashboard won't show.
       // Wrapped in try/catch — a flaky summary shouldn't block generation,
       // and the prompt explicitly tells Claude to mark sample values when
       // the summary doesn't cover a metric. Workspace scope has no single
@@ -101,10 +133,24 @@ export const aiRouter = router({
       let summary: Awaited<ReturnType<typeof buildDataSummary>> | null = null;
       if (objectWithFields) {
         try {
+          const adminish = isAdminish(ctx.auth.role);
+          const sharedRecordIds =
+            objectWithFields.object.defaultVisibility === 'private' && !adminish
+              ? await visibleSharedRecordIds(
+                  ctx.db,
+                  {
+                    orgId: ctx.auth.organizationId,
+                    userId: ctx.auth.userId,
+                    role: ctx.auth.role,
+                  },
+                  objectWithFields.object.id,
+                )
+              : [];
           summary = await buildDataSummary(ctx.db, {
             orgId: ctx.auth.organizationId,
             object: objectWithFields.object,
             fields: objectWithFields.fields,
+            acl: { userId: ctx.auth.userId, sharedRecordIds, isAdminish: adminish },
           });
         } catch (err) {
           // eslint-disable-next-line no-console
@@ -113,6 +159,10 @@ export const aiRouter = router({
         }
       }
 
+      // Detail mode needs a target object — degrade to dashboard mode when
+      // the caller forgot one rather than failing the generation.
+      const mode = input.mode === 'detail' && objectWithFields ? 'detail' : 'dashboard';
+
       const stream = streamArtifact({
         prompt: input.prompt,
         object: objectWithFields?.object ?? null,
@@ -120,6 +170,7 @@ export const aiRouter = router({
         summary,
         currentArtifact: input.currentArtifact,
         otherObjects,
+        mode,
       });
 
       // Captured for the generator below — ctx.db is dead once it runs.
@@ -136,7 +187,10 @@ export const aiRouter = router({
           yield { type: 'partial' as const, note: partial.note, artifact: partial.artifact };
         }
         const generation = await stream.result;
-        const repaired = repairArtifact(generation.artifact, objectFields);
+        const repaired = repairArtifact(generation.artifact, objectFields, {
+          mode,
+          baseObjectKey: objectKey,
+        });
 
         try {
           await withOrgContext(rootDb(), organizationId, (tx) =>

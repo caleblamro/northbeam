@@ -8,9 +8,9 @@
 // perform are hidden so viewers don't see Billing / Users / Audit links
 // they'd just bounce off of.
 
-import { useCurrentRole } from '@/lib/can';
+import { useCanCheck } from '@/lib/can';
 import { cn } from '@/lib/cn';
-import { type Permission, can } from '@northbeam/core/roles';
+import type { Permission } from '@northbeam/core/roles';
 import {
   Building2,
   CreditCard,
@@ -18,7 +18,7 @@ import {
   FileClock,
   ListChecks,
   Plug,
-  ShieldCheck,
+  ShieldHalf,
   Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -59,7 +59,12 @@ const SETUP_NAV: SetupNavGroup[] = [
         icon: Users,
         permission: 'org.members.invite',
       },
-      { href: '/setup/permissions', label: 'Permissions', icon: ShieldCheck },
+      {
+        href: '/setup/roles',
+        label: 'Roles & permissions',
+        icon: ShieldHalf,
+        permission: 'org.roles.manage',
+      },
     ],
   },
   {
@@ -90,14 +95,12 @@ const SETUP_NAV: SetupNavGroup[] = [
 
 export function SetupShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const role = useCurrentRole();
+  const check = useCanCheck();
   return (
     <div className="grid gap-7 lg:grid-cols-[220px_minmax(0,1fr)]">
       <nav aria-label="Setup navigation" className="flex flex-col gap-5 lg:sticky lg:top-0">
         {SETUP_NAV.map((group) => {
-          const visible = group.items.filter(
-            (it) => !it.permission || (role && can(role, it.permission)),
-          );
+          const visible = group.items.filter((it) => !it.permission || check(it.permission));
           if (visible.length === 0) return null;
           return (
             <div key={group.label} className="flex flex-col gap-1">

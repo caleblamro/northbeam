@@ -6,6 +6,7 @@ import { type Database, type DbExecutor, createDb, schema } from '@northbeam/db'
 import { and, eq } from 'drizzle-orm';
 import { type Session, getSession } from '../auth/index.js';
 import { env } from '../lib/env.js';
+import { resolveGrants } from './permissions.js';
 
 export type Context = {
   /** A query executor — root Database for publicProcedure, a transaction with
@@ -77,6 +78,10 @@ export async function createContext({ req }: { req: Request }): Promise<Context>
     return { db: db(), session, auth: null, req };
   }
 
+  // Resolve the role key into its org-action set + per-object CRUD grants
+  // (custom roles are DB-backed; missing rows fall back to the static matrix).
+  const permissions = await resolveGrants(db(), activeOrganizationId, role);
+
   return {
     db: db(),
     session,
@@ -85,6 +90,7 @@ export async function createContext({ req }: { req: Request }): Promise<Context>
       userEmail: session.user.email,
       organizationId: activeOrganizationId,
       role,
+      permissions,
     },
     req,
   };

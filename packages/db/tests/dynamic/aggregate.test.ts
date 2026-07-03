@@ -313,3 +313,220 @@ describe('buildAggregateQuery', () => {
     expect(two.params).toEqual([1000]);
   });
 });
+
+describe('buildAggregateQuery — countDistinct / median / having', () => {
+  it('countDistinct emits count(distinct col)', () => {
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage],
+        groups: [{ field: stage }],
+        measure: { fn: 'countDistinct', field: stage },
+        filters: [],
+      }),
+    );
+    expect(q.sql).toContain('count(distinct "f_stage")::numeric');
+  });
+
+  it('median emits percentile_cont within group over the numeric cast', () => {
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage, amount],
+        groups: [{ field: stage }],
+        measure: { fn: 'median', field: amount },
+        filters: [],
+      }),
+    );
+    expect(q.sql).toContain(
+      '(percentile_cont(0.5) within group (order by "f_amount"::numeric))::numeric',
+    );
+  });
+
+  it('having binds the threshold and maps ops through the whitelist', () => {
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage],
+        groups: [{ field: stage }],
+        measure: { fn: 'count' },
+        having: { target: 'count', op: 'gte', value: 5 },
+        filters: [],
+      }),
+    );
+    expect(q.sql).toContain('group by 1 having count(*) >= $');
+    expect(q.params).toContain(5);
+  });
+
+  it('having on the measure repeats the aggregate expression', () => {
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage, amount],
+        groups: [{ field: stage }],
+        measure: { fn: 'sum', field: amount },
+        having: { target: 'value', op: 'gt', value: 1000 },
+        filters: [],
+      }),
+    );
+    expect(q.sql).toContain('having coalesce(sum("f_amount"), 0)::numeric > $');
+  });
+
+  it('having is ignored without groupings', () => {
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage],
+        groups: [],
+        measure: { fn: 'count' },
+        having: { target: 'count', op: 'gte', value: 5 },
+        filters: [],
+      }),
+    );
+    expect(q.sql).not.toContain('having');
+  });
+
+  it('OR-group filters land parenthesized in the WHERE clause', () => {
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage, amount],
+        groups: [{ field: stage }],
+        measure: { fn: 'count' },
+        filters: [
+          {
+            any: [
+              { fieldKey: 'stage', op: 'eq', value: 'Won' },
+              { fieldKey: 'amount', op: 'gt', value: 50000 },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(q.sql).toContain(' or ');
+    expect(q.sql).toContain('where (');
+  });
+});
+
+describe('buildAggregateQuery — dot paths (one-hop reference traversal)', () => {
+  const accountObject = {
+    id: 'o2',
+    organizationId: 'abc',
+    key: 'account',
+    tableName: 't_account',
+    defaultVisibility: 'public',
+  } as ObjectRow;
+  const accountRef = field({
+    key: 'account',
+    columnName: 'f_account',
+    type: 'reference',
+    config: { targetObject: 'account' },
+  });
+  const industry = field({
+    key: 'industry',
+    columnName: 'f_industry',
+    type: 'picklist',
+    objectId: 'o2',
+  });
+  const tier = field({ key: 'tier', columnName: 'f_tier', type: 'picklist', objectId: 'o2' });
+  const via = {
+    key: 'account.industry',
+    refField: accountRef,
+    targetObject: accountObject,
+    targetField: industry,
+  };
+
+  it('groups by the lateral-exposed remote column with a correlated PK probe', () => {
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage, accountRef],
+        groups: [{ field: industry, via }],
+        measure: { fn: 'count' },
+        filters: [],
+      }),
+    );
+    expect(q.sql).toContain('"org_abc"."t_deal" b left join lateral');
+    expect(q.sql).toContain('select t."f_industry" as "p0" from "org_abc"."t_account" t');
+    expect(q.sql).toContain('t."id" = b."f_account"');
+    expect(q.sql).toContain('select "r0"."p0" as g');
+  });
+
+  it('dedupes laterals: filter + group through the same reference share one join', () => {
+    const tierPath = {
+      key: 'account.tier',
+      refField: accountRef,
+      targetObject: accountObject,
+      targetField: tier,
+    };
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage, accountRef],
+        groups: [{ field: industry, via }],
+        measure: { fn: 'count' },
+        filters: [{ fieldKey: 'account.tier', op: 'eq', value: 'Enterprise' }],
+        refPaths: [tierPath],
+      }),
+    );
+    const joins = q.sql.match(/left join lateral/g) ?? [];
+    expect(joins).toHaveLength(1);
+    expect(q.sql).toContain('t."f_tier" as "p1"');
+    expect(q.sql).toContain('lower("r0"."p1"::text) = lower($');
+  });
+
+  it('no-path queries stay byte-identical to the pre-dot-path shape (no base alias)', () => {
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage, amount],
+        groups: [{ field: stage }],
+        measure: { fn: 'sum', field: amount },
+        filters: [],
+        limit: 10,
+      }),
+    );
+    expect(q.sql).not.toContain(' b ');
+    expect(q.sql).not.toContain('lateral');
+  });
+
+  it('remote date fields get date_trunc over the lateral column', () => {
+    const renewal = field({
+      key: 'renewal',
+      columnName: 'f_renewal',
+      type: 'date',
+      objectId: 'o2',
+    });
+    const q = render(
+      buildAggregateQuery({
+        orgId: 'abc',
+        object: object(),
+        fields: [stage, accountRef],
+        groups: [
+          {
+            field: renewal,
+            grain: 'quarter' as DateGrain,
+            via: {
+              key: 'account.renewal',
+              refField: accountRef,
+              targetObject: accountObject,
+              targetField: renewal,
+            },
+          },
+        ],
+        measure: { fn: 'count' },
+        filters: [],
+      }),
+    );
+    expect(q.sql).toContain(`date_trunc('quarter', "r0"."p0")`);
+  });
+});

@@ -30,6 +30,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { type RouterOutputs, trpc } from '@/lib/api';
+import { useCan } from '@/lib/can';
 import type { FieldType } from '@northbeam/db/field-types';
 import type {
   DateGrain,
@@ -37,6 +38,7 @@ import type {
   ReportAgg,
   ReportChartType,
   ReportConfig,
+  ReportHaving,
   ShareTarget,
   ViewIcon,
 } from '@northbeam/db/views';
@@ -89,6 +91,8 @@ type Spec = {
   /** Top-N buckets before the tail folds into "Other". null = renderer default. */
   limit: number | null;
   filters: Filter[];
+  /** "Only show groups where …" — HAVING threshold; null = off. */
+  having: ReportHaving | null;
 };
 
 const DEFAULT_SPEC: Spec = {
@@ -102,6 +106,7 @@ const DEFAULT_SPEC: Spec = {
   stacked: false,
   limit: null,
   filters: [],
+  having: null,
 };
 
 function specFromView(view: ViewRow): Spec {
@@ -117,6 +122,7 @@ function specFromView(view: ViewRow): Spec {
     stacked: cfg.stacked ?? false,
     limit: cfg.limit ?? null,
     filters: view.filters ?? [],
+    having: cfg.having ?? null,
   };
 }
 
@@ -176,6 +182,7 @@ function BuilderInner({
   const [spec, setSpec] = useState<Spec>(editView ? specFromView(editView) : DEFAULT_SPEC);
   const [saveOpen, setSaveOpen] = useState(false);
   const composer = useAiComposer();
+  const canSave = useCan('view.write');
 
   const object = objects.find((o) => o.key === objectKey);
   const meta = trpc.object.get.useQuery({ key: objectKey }, { enabled: Boolean(objectKey) });
@@ -189,6 +196,8 @@ function BuilderInner({
     (f) => (GROUPABLE.has(f.type) || DATE_GROUPABLE.has(f.type)) && f.key !== spec.groupBy,
   );
   const measurable = fields.filter((f) => MEASURABLE.has(f.type));
+  // Distinct counts work over any scalar column; arrays compare whole-array.
+  const distinctable = fields.filter((f) => f.type !== 'multipicklist');
   const isDate = (key: string | null) =>
     DATE_GROUPABLE.has(fields.find((f) => f.key === key)?.type as FieldType);
 
@@ -250,6 +259,7 @@ function BuilderInner({
     chartType: spec.chartType,
     ...(spec.stacked && spec.groupBy2 ? { stacked: true } : {}),
     ...(spec.limit ? { limit: spec.limit } : {}),
+    ...(spec.having && spec.groupBy ? { having: spec.having } : {}),
   };
 
   const createView = trpc.view.create.useMutation({
@@ -325,10 +335,12 @@ function BuilderInner({
           label="Compose from prompt"
           onClick={() => composer.open({ objectKey })}
         />
-        <Button onClick={() => setSaveOpen(true)} disabled={!object || !specComplete}>
-          <Save />
-          {editView ? 'Save report' : 'Save report…'}
-        </Button>
+        {canSave && (
+          <Button onClick={() => setSaveOpen(true)} disabled={!object || !specComplete}>
+            <Save />
+            {editView ? 'Save report' : 'Save report…'}
+          </Button>
+        )}
       </PageActions>
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
@@ -437,8 +449,10 @@ function BuilderInner({
                     <SelectItem value="count">Count of records</SelectItem>
                     <SelectItem value="sum">Sum of…</SelectItem>
                     <SelectItem value="avg">Average of…</SelectItem>
+                    <SelectItem value="median">Median of…</SelectItem>
                     <SelectItem value="min">Minimum of…</SelectItem>
                     <SelectItem value="max">Maximum of…</SelectItem>
+                    <SelectItem value="countDistinct">Distinct count of…</SelectItem>
                   </SelectContent>
                 </Select>
                 {spec.agg !== 'count' && (
@@ -447,10 +461,16 @@ function BuilderInner({
                     onValueChange={(v) => patch({ measureFieldKey: v })}
                   >
                     <SelectTrigger aria-label="Measure field" className="w-full">
-                      <SelectValue placeholder="Choose a numeric field…" />
+                      <SelectValue
+                        placeholder={
+                          spec.agg === 'countDistinct'
+                            ? 'Choose a field…'
+                            : 'Choose a numeric field…'
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {measurable.map((f) => (
+                      {(spec.agg === 'countDistinct' ? distinctable : measurable).map((f) => (
                         <SelectItem key={f.key} value={f.key}>
                           {f.label}
                         </SelectItem>
@@ -460,6 +480,73 @@ function BuilderInner({
                 )}
               </div>
             </Field>
+
+            {spec.groupBy && (
+              <Field label="Only show groups where">
+                <div className="flex items-center gap-1.5">
+                  <Select
+                    value={spec.having ? spec.having.target : 'off'}
+                    onValueChange={(v) =>
+                      patch({
+                        having:
+                          v === 'off'
+                            ? null
+                            : {
+                                target: v as ReportHaving['target'],
+                                op: spec.having?.op ?? 'gte',
+                                value: spec.having?.value ?? 1,
+                              },
+                      })
+                    }
+                  >
+                    <SelectTrigger aria-label="Threshold target" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off">Off</SelectItem>
+                      <SelectItem value="count">Record count</SelectItem>
+                      <SelectItem value="value">The measure</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {spec.having && (
+                    <>
+                      <Select
+                        value={spec.having.op}
+                        onValueChange={(v) =>
+                          // biome-ignore lint/style/noNonNullAssertion: guarded by spec.having above
+                          patch({ having: { ...spec.having!, op: v as ReportHaving['op'] } })
+                        }
+                      >
+                        <SelectTrigger aria-label="Threshold operator" className="w-20 shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="gt">&gt;</SelectItem>
+                          <SelectItem value="gte">≥</SelectItem>
+                          <SelectItem value="lt">&lt;</SelectItem>
+                          <SelectItem value="lte">≤</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        aria-label="Threshold value"
+                        className="w-24 shrink-0"
+                        value={spec.having.value}
+                        onChange={(e) =>
+                          patch({
+                            having: {
+                              // biome-ignore lint/style/noNonNullAssertion: guarded by spec.having above
+                              ...spec.having!,
+                              value: Number(e.target.value) || 0,
+                            },
+                          })
+                        }
+                      />
+                    </>
+                  )}
+                </div>
+              </Field>
+            )}
 
             <Field label="Filters">
               <div className="flex items-center gap-2">

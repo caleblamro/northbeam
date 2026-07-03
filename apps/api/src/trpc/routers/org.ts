@@ -2,11 +2,14 @@
 // Lets the dashboard create, switch, list, update, delete orgs and manage
 // members + pending invitations without a separate client SDK.
 
+import { SYSTEM_ROLE_SEEDS } from '@northbeam/core';
 import {
   ROLES,
   getObjectByKey,
+  getRoleByKey,
   recomputeObjectPage,
   schema,
+  seedRoles,
   seedSampleRecords,
   seedStandardObjects,
   withOrgContext,
@@ -26,15 +29,16 @@ import {
   updateOrganization,
 } from '../../auth/index.js';
 import { rootDb } from '../context.js';
+import { invalidatePermissions } from '../permissions.js';
 import { permissionProcedure, protectedProcedure, publicProcedure, router } from '../trpc.js';
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
+// Invitations go through Better Auth, which only knows the 4 system roles, so
+// invites are limited to those (custom roles are assigned after join via
+// setMemberRole, which writes member.role directly).
 const InvitableRoleEnum = z.enum(ROLES);
-// `setMemberRole` deliberately excludes 'owner' — that role is mutable only
-// through `transferOwnership`, which atomically demotes the current owner.
-// Letting admins promote anyone to 'owner' via setMemberRole would silently
-// create a second owner or fail mid-flight in Better Auth.
-const AssignableRoleEnum = z.enum(['admin', 'member', 'viewer'] as const);
+
+type MemberRoleValue = (typeof schema.member.$inferInsert)['role'];
 
 export const orgRouter = router({
   /** Create a new org. Caller becomes the owner and it's made active. */
@@ -65,6 +69,22 @@ export const orgRouter = router({
         // INSERTs pass the RLS policy. We also get atomicity: if the seed
         // fails halfway through, none of the partial metadata sticks around.
         await withOrgContext(rootDb(), result.id, async (tx) => {
+          // Seed the 4 system roles (owner/admin/member/viewer) so the roles
+          // editor + custom-role assignment work out of the gate. Computed from
+          // the static matrix, so behavior matches the pre-custom-roles model.
+          await seedRoles(
+            tx,
+            result.id,
+            SYSTEM_ROLE_SEEDS.map((s) => ({
+              key: s.key,
+              name: s.name,
+              description: s.description,
+              rank: s.rank,
+              isSystem: true,
+              orgPermissions: s.orgPermissions,
+              defaultGrant: s.defaultGrant,
+            })),
+          );
           await seedStandardObjects(tx, result.id);
           // Sample records — accounts + contacts + deals + activities with
           // real references between them so dashboards / list views aren't
@@ -197,15 +217,50 @@ export const orgRouter = router({
       return { ok: true as const };
     }),
 
-  /** Change a member's role. Admin+. The 'owner' role can't be assigned
-   *  here — use transferOwnership for that. */
+  /** Change a member's role to any role defined in the org — system or custom.
+   *  Admin+. 'owner' can't be assigned here (use transferOwnership). Writes
+   *  member.role directly rather than through Better Auth, whose org plugin
+   *  only knows the statically-configured system roles and would reject a
+   *  custom key. */
   setMemberRole: permissionProcedure('org.members.role')
-    .input(z.object({ memberId: z.string(), role: AssignableRoleEnum }))
+    .input(z.object({ memberId: z.string(), role: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      await updateMemberRole(
-        { organizationId: ctx.auth.organizationId, memberId: input.memberId, role: input.role },
-        ctx.req.headers,
-      );
+      if (input.role === 'owner') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'assign ownership via transferOwnership, not setMemberRole',
+        });
+      }
+      // The target role must exist in this org (system or custom).
+      const target = await getRoleByKey(ctx.db, ctx.auth.organizationId, input.role);
+      if (!target) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: `role '${input.role}' does not exist` });
+      }
+      const updated = await ctx.db
+        .update(schema.member)
+        // Column is typed to the 4 system keys, but holds custom keys too — the
+        // value is validated above against the org's role table.
+        .set({ role: input.role as MemberRoleValue })
+        .where(
+          and(
+            eq(schema.member.organizationId, ctx.auth.organizationId),
+            eq(schema.member.id, input.memberId),
+          ),
+        )
+        .returning({ id: schema.member.id, userId: schema.member.userId });
+      if (updated.length === 0) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'member not found' });
+      }
+      // Bust the grant cache so the member's next request sees the new role.
+      invalidatePermissions(ctx.auth.organizationId);
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'member.role.changed',
+        targetType: 'member',
+        targetId: input.memberId,
+        meta: { role: input.role, memberUserId: updated[0]?.userId },
+      });
       return { ok: true as const };
     }),
 

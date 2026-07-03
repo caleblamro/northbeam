@@ -101,9 +101,9 @@ describe('buildFilterPredicates — numeric ops', () => {
     expect(one({ fieldKey: 'amount', op: 'gt', value: null }).params).toEqual([0]);
   });
 
-  it('drops gt/lt on non-numeric columns (would be a per-row ::numeric cast error)', () => {
+  it('drops gt/lt on non-numeric, non-date columns (would be a per-row ::numeric cast error)', () => {
     dropped({ fieldKey: 'name', op: 'gt', value: '5' });
-    dropped({ fieldKey: 'close_date', op: 'lt', value: '5' });
+    dropped({ fieldKey: 'close_date', op: 'lt', value: 'not a date' });
   });
 });
 
@@ -128,6 +128,33 @@ describe('buildFilterPredicates — date ops', () => {
   it('drops before/after on non-date columns', () => {
     dropped({ fieldKey: 'name', op: 'before', value: '2026-01-15' });
     dropped({ fieldKey: 'amount', op: 'after', value: '2026-01-15' });
+  });
+
+  it('gte/lte on date columns compare as instants (inclusive relative windows)', () => {
+    const q = one({ fieldKey: 'close_date', op: 'gte', value: '2026-01-15' });
+    expect(q.sql).toBe(`"f_close_date"::timestamptz >= $1::timestamptz`);
+    expect(q.params).toEqual([new Date('2026-01-15').toISOString()]);
+
+    const lte = one({ fieldKey: 'close_date', op: 'lte', value: '2026-01-15' });
+    expect(lte.sql).toContain('::timestamptz <= $1::timestamptz');
+  });
+
+  it('resolves relative-date tokens through the shared module and binds ISO', () => {
+    const q = one({ fieldKey: 'close_date', op: 'gte', value: '@-30d' });
+    expect(q.sql).toBe(`"f_close_date"::timestamptz >= $1::timestamptz`);
+    const bound = String(q.params[0]);
+    // Start-of-UTC-day anchor, 30 days back — exact instant depends on the
+    // wall clock, so assert the shape + midnight anchor.
+    expect(bound).toMatch(/T00:00:00\.000Z$/);
+    expect(Date.parse(bound)).toBeLessThan(Date.now());
+
+    const before = one({ fieldKey: 'close_date', op: 'before', value: '@today' });
+    expect(String(before.params[0])).toMatch(/T00:00:00\.000Z$/);
+  });
+
+  it('drops unknown relative tokens instead of comparing them as text', () => {
+    dropped({ fieldKey: 'close_date', op: 'gte', value: '@yesterday' });
+    dropped({ fieldKey: 'close_date', op: 'before', value: '@-30x' });
   });
 });
 
@@ -215,5 +242,59 @@ describe('buildOrderBy', () => {
   it('drops unknown sort keys but keeps the order total via the tiebreaker', () => {
     const q = render(buildOrderBy(FIELDS, [{ fieldKey: 'ghost', direction: 'asc' }]));
     expect(q.sql).toBe(`order by "created_at" desc`);
+  });
+});
+
+describe('buildFilterPredicates — OR groups', () => {
+  it('OR-combines surviving leaves inside a group, parenthesized', () => {
+    const [pred] = buildFilterPredicates(FIELDS, [
+      {
+        any: [
+          { fieldKey: 'stage', op: 'eq', value: 'Won' },
+          { fieldKey: 'amount', op: 'gt', value: 50000 },
+        ],
+      },
+    ]);
+    expect(pred).toBeDefined();
+    // biome-ignore lint/style/noNonNullAssertion: asserted above
+    const q = render(pred!);
+    expect(q.sql).toContain(' or ');
+    expect(q.sql.startsWith('(')).toBe(true);
+  });
+
+  it('a group with one surviving leaf renders just that predicate', () => {
+    const [pred, ...rest] = buildFilterPredicates(FIELDS, [
+      {
+        any: [
+          { fieldKey: 'ghost', op: 'eq', value: 'x' },
+          { fieldKey: 'stage', op: 'eq', value: 'Won' },
+        ],
+      },
+    ]);
+    expect(rest).toHaveLength(0);
+    expect(pred).toBeDefined();
+    // biome-ignore lint/style/noNonNullAssertion: asserted above
+    expect(render(pred!).sql).not.toContain(' or ');
+  });
+
+  it('drops a group whose leaves all drop — it must not constrain the query', () => {
+    expect(
+      buildFilterPredicates(FIELDS, [
+        {
+          any: [
+            { fieldKey: 'ghost', op: 'eq', value: 'x' },
+            { fieldKey: 'close_date', op: 'before', value: 'not a date' },
+          ],
+        },
+      ]),
+    ).toHaveLength(0);
+  });
+
+  it('AND-combines groups with sibling leaves', () => {
+    const preds = buildFilterPredicates(FIELDS, [
+      { fieldKey: 'stage', op: 'eq', value: 'Won' },
+      { any: [{ fieldKey: 'amount', op: 'gt', value: 1 }, { fieldKey: 'amount', op: 'lt', value: -1 }] },
+    ]);
+    expect(preds).toHaveLength(2);
   });
 });
