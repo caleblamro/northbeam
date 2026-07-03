@@ -347,6 +347,44 @@ export function buildResearchTools(
           return { id: row.id, name: row.name, ...row.data };
         }),
       });
+    } else if (def.id === 'inspect_metadata') {
+      tools.inspect_metadata = tool({
+        description: def.description,
+        inputSchema: z.object({
+          /** Omit for the object list; set for one object's full field detail. */
+          objectKey: z.string().optional(),
+        }),
+        execute: guarded(def, async (raw, tx) => {
+          const input = raw as { objectKey?: string };
+          if (!input.objectKey) {
+            return ctx.readable.map((o) => ({
+              objectKey: o.object.key,
+              label: o.object.label,
+              fieldCount: o.fields.length,
+            }));
+          }
+          const target = requireObject(input.objectKey);
+          const fields = await hydratePicklistOptions(tx, ctx.orgId, target.fields);
+          return fields
+            .filter((f) => !f.isSystem || f.key === 'name')
+            .map((f) => {
+              const config = f.config as {
+                options?: { value: string; label?: string }[];
+                targetObject?: string;
+              } | null;
+              return {
+                key: f.key,
+                label: f.label,
+                type: f.type,
+                required: f.required,
+                ...(config?.targetObject ? { targetObject: config.targetObject } : {}),
+                ...(config?.options
+                  ? { options: config.options.slice(0, 25).map((o) => o.value) }
+                  : {}),
+              };
+            });
+        }),
+      });
     }
   }
   return tools;

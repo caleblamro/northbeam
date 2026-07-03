@@ -148,7 +148,7 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('- Name (name, type: text)'); // system `name` is kept
     expect(prompt).toContain('- Total records: 42');
     expect(prompt).toContain('Won (12)');
-    expect(prompt).not.toContain('Refinement mode');
+    expect(prompt).not.toContain('# Refinement mode');
   });
 
   it('caps the field list at 40', () => {
@@ -161,11 +161,14 @@ describe('buildSystemPrompt', () => {
     expect(prompt).not.toContain('- Field 40 (f40, type: text)');
   });
 
-  it('appends the refinement section with the current artifact', () => {
+  it('appends the refinement section: indexed components + patch ops', () => {
     const prompt = buildSystemPrompt(object, fields, summary, validArtifact);
     expect(prompt).toContain('# Refinement mode');
-    expect(prompt).toContain(JSON.stringify(validArtifact));
-    expect(prompt).toContain('keep every node the');
+    // Each top-level component rides in BY INDEX so patch ops can address it.
+    expect(prompt).toContain(`[0] ${JSON.stringify(validArtifact.components[0])}`);
+    expect(prompt).toContain(`[2] ${JSON.stringify(validArtifact.components[2])}`);
+    expect(prompt).toContain("PREFER returning \"patch\"");
+    expect(prompt).toContain("{ op: 'props', index, props }");
   });
 
   it('teaches the expanded chart vocabulary', () => {

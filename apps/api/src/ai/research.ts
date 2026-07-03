@@ -10,7 +10,7 @@ import { loadEnv } from '@northbeam/config';
 import type { ObjectWithFields } from '@northbeam/db';
 import { type Tool, generateText, stepCountIs } from 'ai';
 
-const MAX_STEPS = 4;
+const MAX_STEPS = 6;
 const FINDINGS_CHAR_CAP = 4_000;
 
 function objectLines(objects: ObjectWithFields[]): string {
@@ -48,12 +48,26 @@ comparison the user implied actually holds. Only call a tool when its answer
 would change how the dashboard should be composed; skip straight to your
 summary when the request is self-evident.
 
+BE EXPLORATIVE when the question names a specific entity ("how is Acme
+doing?", "what's up with the Northwind deal?"):
+1. search_records on the right object with that name to find the record —
+   note its exact id.
+2. get_record it, and query its children (aggregate/search filtered on the
+   reference field eq that id) to see what's actually happening.
+3. Put the record's id AND name in your findings — composition scopes live
+   components with reference-field filters on that exact id.
+If nothing matches the name, say so in the findings — the dashboard should
+say "no record named X" rather than guess. When field names are unclear,
+inspect_metadata (when available) beats guessing keys.
+
 Objects available (use these exact objectKeys and field keys):
 ${objectLines(opts.objects)}
 
-When done, reply with a SHORT findings summary (≤ 10 bullet lines): concrete
-numbers, notable skews, and which fields/groupings look most informative.
-No prose introductions. If a tool call was declined, work without it.`,
+When done, reply with a SHORT findings summary (≤ 12 bullet lines): concrete
+numbers, notable skews, entity ids you found, which fields/groupings look
+most informative, and anything the user should be ASKED if the request is
+genuinely ambiguous. No prose introductions. If a tool call was declined,
+work without it.`,
       prompt: 'Research the workspace as needed, then give your findings summary.',
       tools: opts.tools,
       stopWhen: stepCountIs(MAX_STEPS),

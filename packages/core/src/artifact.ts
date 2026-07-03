@@ -171,6 +171,37 @@ export const ArtifactSchema = z.object({
   components: z.array(ArtifactNodeSchema).min(1).max(20),
 });
 
+/* ── Refinement patches ─────────────────────────────────────────────────────
+   Small edits shouldn't regenerate the whole tree: in refinement mode the
+   model may return PATCH OPS against the current artifact's top-level
+   components (by index) instead of a full artifact — cheaper, faster, and
+   structurally incapable of drifting nodes the instruction didn't touch. */
+
+export const ArtifactPatchOpSchema = z.discriminatedUnion('op', [
+  z.object({
+    op: z.literal('set'),
+    index: z.number().int().min(0).max(19),
+    node: ArtifactNodeSchema,
+  }),
+  z.object({
+    op: z.literal('insert'),
+    index: z.number().int().min(0).max(20),
+    node: ArtifactNodeSchema,
+  }),
+  z.object({ op: z.literal('remove'), index: z.number().int().min(0).max(19) }),
+  z.object({
+    op: z.literal('props'),
+    index: z.number().int().min(0).max(19),
+    /** Shallow-merged into the node's props; a null value deletes the key. */
+    props: z.record(z.string(), z.unknown()),
+  }),
+]);
+
+export const ArtifactPatchSchema = z.array(ArtifactPatchOpSchema).min(1).max(10);
+
+export type ArtifactPatchOp = z.infer<typeof ArtifactPatchOpSchema>;
+export type ArtifactPatch = z.infer<typeof ArtifactPatchSchema>;
+
 export type Artifact = z.infer<typeof ArtifactSchema>;
 export type ArtifactLeafNode = z.infer<typeof ArtifactLeafNodeSchema>;
 export type ArtifactSectionNode = z.infer<typeof ArtifactSectionNodeSchema>;

@@ -31,6 +31,7 @@ import {
 } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { applyArtifactPatch } from '../../ai/apply-patch.js';
 import { type ObjectContext, streamArtifact } from '../../ai/artifact-generator.js';
 import { buildDataSummary } from '../../ai/data-summary.js';
 import { type ObjectFieldsByKey, repairArtifact } from '../../ai/repair-artifact.js';
@@ -248,10 +249,27 @@ export const aiRouter = router({
           yield { type: 'partial' as const, note: partial.note, artifact: partial.artifact };
         }
         const generation = await stream.result;
-        const repaired = repairArtifact(generation.artifact, objectFields, {
-          mode,
-          baseObjectKey: objectKey,
-        });
+        // Three reply modes: patch (refinement edit against the current
+        // artifact), full artifact, or note-only (an answer / clarifying
+        // question — nothing changes on the page).
+        let artifact: typeof generation.artifact | undefined;
+        let patchNote: string | null = null;
+        if (generation.patch && currentArtifact) {
+          const patched = applyArtifactPatch(currentArtifact, generation.patch);
+          artifact = patched.artifact as NonNullable<typeof generation.artifact>;
+          if (patched.skipped > 0) {
+            patchNote = `${patched.skipped} edit(s) referenced components that no longer exist`;
+          }
+        } else {
+          artifact = generation.artifact;
+        }
+        const repaired = artifact
+          ? repairArtifact(artifact, objectFields, { mode, baseObjectKey: objectKey })
+          : null;
+        const repairNotes = [
+          ...(repaired?.notes ?? []),
+          ...(patchNote ? [patchNote] : []),
+        ];
 
         try {
           await withOrgContext(rootDb(), organizationId, (tx) =>
@@ -265,8 +283,9 @@ export const aiRouter = router({
                 objectKey: objectKey ?? 'workspace',
                 model: env.ANTHROPIC_MODEL,
                 promptLength: prompt.length,
-                nodeCount: repaired.artifact.components.length,
-                repairs: repaired.notes.length,
+                nodeCount: repaired?.artifact.components.length ?? 0,
+                repairs: repairNotes.length,
+                replyMode: generation.patch ? 'patch' : repaired ? 'artifact' : 'note',
                 refinement: Boolean(currentArtifact),
               },
             }),
@@ -280,9 +299,9 @@ export const aiRouter = router({
 
         yield {
           type: 'done' as const,
-          artifact: repaired.artifact,
+          artifact: repaired?.artifact ?? null,
           note: generation.note,
-          repairs: repaired.notes,
+          repairs: repairNotes,
           summary,
           model: env.ANTHROPIC_MODEL,
         };

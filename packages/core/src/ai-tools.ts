@@ -51,6 +51,13 @@ export const AI_TOOLS: readonly AiToolDef[] = [
     description: 'Fetch a single record by id with all its field values.',
     kind: 'read',
   },
+  {
+    id: 'inspect_metadata',
+    title: 'Inspect metadata',
+    description:
+      'Field definitions for an object — types, picklist options, required flags, reference targets. No record data.',
+    kind: 'read',
+  },
 ] as const;
 
 export const AI_TOOL_IDS = AI_TOOLS.map((t) => t.id);

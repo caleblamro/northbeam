@@ -22,6 +22,7 @@ import {
   ARTIFACT_LEAF_COMPONENTS,
   type Artifact,
   type ArtifactLike,
+  ArtifactPatchSchema,
   ArtifactSchema,
 } from '@northbeam/core';
 import type { FieldRow, ObjectRow } from '@northbeam/db';
@@ -33,10 +34,15 @@ export type { Artifact, ArtifactLike };
 export type ObjectContext = { object: ObjectRow; fields: FieldRow[] };
 
 const GenerationSchema = z.object({
-  /** One conversational sentence for the chat thread — what was built or
-   *  changed and why. Declared before `artifact` so it streams first. */
+  /** Conversational text for the chat thread — what was built/changed, an
+   *  answer, or a clarifying question. Declared first so it streams first. */
   note: z.string(),
-  artifact: ArtifactSchema,
+  /** Omitted for NOTE-ONLY turns (a question answered from research, or a
+   *  clarifying question back) — the current preview stays untouched. */
+  artifact: ArtifactSchema.optional(),
+  /** Refinement-only alternative to a full artifact: ops against the current
+   *  artifact's top-level components (by index, applied sequentially). */
+  patch: ArtifactPatchSchema.optional(),
 });
 
 export type Generation = z.infer<typeof GenerationSchema>;
@@ -90,8 +96,24 @@ const generationProviderSchema = jsonSchema<Generation>(
         required: ['version', 'components'],
         additionalProperties: false,
       },
+      patch: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 10,
+        items: {
+          type: 'object',
+          properties: {
+            op: { type: 'string', enum: ['set', 'insert', 'remove', 'props'] },
+            index: { type: 'integer', minimum: 0, maximum: 20 },
+            node: { anyOf: [LEAF_NODE_JSON, SECTION_NODE_JSON] },
+            props: OPEN_PROPS,
+          },
+          required: ['op', 'index'],
+          additionalProperties: false,
+        },
+      },
     },
-    required: ['note', 'artifact'],
+    required: ['note'],
     additionalProperties: false,
   },
   {
@@ -275,14 +297,20 @@ further RelatedLists / a '@record'-scoped Chart below.`
 
 # Refinement mode
 
-The user already has a dashboard and is asking for a change. Current artifact:
+The user already has a dashboard and is asking for a change. Current
+top-level components, BY INDEX:
 
-${JSON.stringify(currentArtifact)}
+${currentArtifact.components.map((c, i) => `[${i}] ${JSON.stringify(c)}`).join('\n')}
 
 Treat the user's message as an edit instruction against this artifact, NOT a
-new dashboard request. Return the FULL updated artifact: keep every node the
-instruction doesn't touch exactly as-is (same component, same props, same
-order), and only add / remove / modify what the instruction requires.`
+new dashboard request. PREFER returning "patch" (and NO artifact) — ops
+against the indices above, applied in order (an insert shifts later indices):
+- { op: 'set', index, node }      replace one component
+- { op: 'insert', index, node }   insert before index
+- { op: 'remove', index }         delete one component
+- { op: 'props', index, props }   shallow-merge props (null deletes a key)
+Return a full "artifact" only when the change restructures most of the tree.
+Never return both.`
     : '';
 
   return `You are Northbeam's dashboard composer — a product designer who turns one sentence of
@@ -292,10 +320,18 @@ doesn't carry information. You compose with React components that query the work
 REAL data at render time.
 
 Respond with valid JSON matching the requested schema — no commentary, no markdown fences.
-Two keys, in order:
-- "note": ONE conversational sentence (≤ 280 chars) for the chat thread — what you built
+Keys, in order:
+- "note": conversational text (≤ 280 chars) for the chat thread — what you built
   or changed, citing 1-2 real numbers from the data summary. Plain text.
 - "artifact": the component tree described below.
+Reply modes:
+- Compose: note + artifact (the normal case).
+- ANSWER OR ASK: note ONLY (no artifact, no patch) when the user asked a
+  question your research findings already answer ("does Acme have open
+  deals?" → answer with the numbers), or when the request is too ambiguous
+  to compose responsibly (ask ONE crisp clarifying question). The current
+  preview stays as-is.
+- Patch (refinement only — see Refinement mode when present).
 
 # How to read a request
 
