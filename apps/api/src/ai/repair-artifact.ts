@@ -174,6 +174,9 @@ const AGG_FNS: ReadonlySet<string> = new Set([
   'max',
   'countDistinct',
   'median',
+  'stddev',
+  'p90',
+  'p10',
 ]);
 
 /** Can `fn` run over this measure field? countDistinct takes any scalar

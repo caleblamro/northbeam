@@ -13,13 +13,17 @@
 // completion audit opens its own org context on the root db.
 
 import { loadEnv } from '@northbeam/config';
-import { ArtifactLikeSchema } from '@northbeam/core';
+import { AI_TOOLS, ArtifactLikeSchema, canObject, effectiveTools } from '@northbeam/core';
 import {
   type AiSessionMessage,
   deleteAiSession,
   isAdminish,
   listAiSessions,
+  listAiToolPolicies,
+  listAiToolPrefs,
   listObjectsWithFields,
+  setAiToolPolicy,
+  setAiToolPref,
   upsertAiSession,
   visibleSharedRecordIds,
   withOrgContext,
@@ -30,6 +34,13 @@ import { z } from 'zod';
 import { type ObjectContext, streamArtifact } from '../../ai/artifact-generator.js';
 import { buildDataSummary } from '../../ai/data-summary.js';
 import { type ObjectFieldsByKey, repairArtifact } from '../../ai/repair-artifact.js';
+import { runResearch } from '../../ai/research.js';
+import {
+  type ToolEvent,
+  buildResearchTools,
+  createEventChannel,
+  resolveToolApproval,
+} from '../../ai/tools.js';
 import { fixedWindow } from '../../lib/rate-limit.js';
 import { redis } from '../../queue/connection.js';
 import { rootDb } from '../context.js';
@@ -108,11 +119,18 @@ export const aiRouter = router({
 
       // Every org object's fields in two queries: cross-object context for
       // the prompt AND the ground truth the repair pass checks specs against.
-      const all = await listObjectsWithFields(ctx.db, ctx.auth.organizationId);
+      // Filtered to objects the caller's role can READ — a role without the
+      // deal grant must not see deal fields in the prompt, get deal numbers
+      // in the summary, or have repair bless deal-targeting components the
+      // render-time procedures would then 403.
+      const all = (await listObjectsWithFields(ctx.db, ctx.auth.organizationId)).filter((o) =>
+        canObject(ctx.auth.permissions, o.object.id, 'read'),
+      );
       const objectWithFields = input.objectKey
         ? (all.find((o) => o.object.key === input.objectKey) ?? null)
         : null;
       if (input.objectKey && !objectWithFields) {
+        // Unknown and unreadable look identical on purpose.
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: `object '${input.objectKey}' not found`,
@@ -163,22 +181,65 @@ export const aiRouter = router({
       // the caller forgot one rather than failing the generation.
       const mode = input.mode === 'detail' && objectWithFields ? 'detail' : 'dashboard';
 
-      const stream = streamArtifact({
-        prompt: input.prompt,
-        object: objectWithFields?.object ?? null,
-        fields: objectWithFields?.fields ?? [],
-        summary,
-        currentArtifact: input.currentArtifact,
-        otherObjects,
-        mode,
-      });
+      // Research tools: what the admin allows for this role, with the user's
+      // auto-approve friction. Loaded eagerly (ctx.db dies with the tx).
+      const [policyRows, prefRows] = await Promise.all([
+        listAiToolPolicies(ctx.db, ctx.auth.organizationId),
+        listAiToolPrefs(ctx.db, { orgId: ctx.auth.organizationId, userId: ctx.auth.userId }),
+      ]);
+      const allowedTools = effectiveTools(
+        policyRows.map((p) => ({ roleKey: p.roleKey, toolId: p.toolId, allowed: p.allowed })),
+        prefRows.map((p) => ({ toolId: p.toolId, autoApprove: p.autoApprove })),
+        ctx.auth.role,
+        ctx.auth.permissions.isOwner,
+      );
 
       // Captured for the generator below — ctx.db is dead once it runs.
-      const { organizationId, userId } = ctx.auth;
+      const { organizationId, userId, role } = ctx.auth;
       const objectId = objectWithFields?.object.id ?? null;
       const { objectKey, prompt, currentArtifact } = input;
+      const composeInputs = {
+        object: objectWithFields?.object ?? null,
+        fields: objectWithFields?.fields ?? [],
+        otherObjects,
+      };
+      const readableObjects = all;
 
       return (async function* () {
+        // ── Phase 1: agentic research. Tool lifecycle streams to the drawer
+        // as chips; non-auto-approved calls pause on the approval broker.
+        let research = '';
+        if (allowedTools.length > 0) {
+          const channel = createEventChannel<ToolEvent>();
+          const tools = buildResearchTools(allowedTools, {
+            orgId: organizationId,
+            userId,
+            role,
+            readable: readableObjects,
+            runInOrg: (fn) => withOrgContext(rootDb(), organizationId, fn),
+            emit: (ev) => channel.push(ev),
+          });
+          const researchDone = runResearch({
+            prompt,
+            objects: readableObjects,
+            tools,
+          }).finally(() => channel.close());
+          for await (const ev of channel.drain()) {
+            yield ev;
+          }
+          research = await researchDone;
+        }
+
+        // ── Phase 2: compose the artifact, grounded in the findings.
+        const stream = streamArtifact({
+          prompt,
+          ...composeInputs,
+          summary,
+          currentArtifact,
+          mode,
+          research,
+        });
+
         let lastYield = 0;
         for await (const partial of stream.partialStream) {
           const now = Date.now();
@@ -226,6 +287,78 @@ export const aiRouter = router({
           model: env.ANTHROPIC_MODEL,
         };
       })();
+    }),
+
+  /* ── Research tools: approval, caller catalog, prefs, admin policy ────── */
+
+  /** Approve/deny a parked tool call (the drawer's chip buttons). Ok:false =
+   *  the call already timed out or resolved — the chip shows it as denied. */
+  resolveTool: protectedProcedure
+    .input(z.object({ callId: z.string().uuid(), approved: z.boolean() }))
+    .mutation(({ input }) => ({ ok: resolveToolApproval(input.callId, input.approved) })),
+
+  /** The caller's effective tool list — what their AI may use, with the
+   *  auto-approve friction. Drives the drawer's tools popover. */
+  tools: protectedProcedure.query(async ({ ctx }) => {
+    const [policyRows, prefRows] = await Promise.all([
+      listAiToolPolicies(ctx.db, ctx.auth.organizationId),
+      listAiToolPrefs(ctx.db, { orgId: ctx.auth.organizationId, userId: ctx.auth.userId }),
+    ]);
+    return effectiveTools(
+      policyRows.map((p) => ({ roleKey: p.roleKey, toolId: p.toolId, allowed: p.allowed })),
+      prefRows.map((p) => ({ toolId: p.toolId, autoApprove: p.autoApprove })),
+      ctx.auth.role,
+      ctx.auth.permissions.isOwner,
+    );
+  }),
+
+  /** Flip auto-approve for one of the caller's allowed tools. */
+  toolPrefSet: protectedProcedure
+    .input(z.object({ toolId: z.string().min(1), autoApprove: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await setAiToolPref(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        toolId: input.toolId,
+        autoApprove: input.autoApprove,
+      });
+      return { ok: true as const };
+    }),
+
+  /** Admin: the full catalog + per-role allowance matrix. */
+  toolPolicyList: permissionProcedure('org.roles.manage').query(async ({ ctx }) => {
+    const rows = await listAiToolPolicies(ctx.db, ctx.auth.organizationId);
+    return {
+      catalog: AI_TOOLS,
+      overrides: rows.map((r) => ({ roleKey: r.roleKey, toolId: r.toolId, allowed: r.allowed })),
+    };
+  }),
+
+  /** Admin: allow/deny one tool for one role. */
+  toolPolicySet: permissionProcedure('org.roles.manage')
+    .input(
+      z.object({
+        roleKey: z.string().min(1).max(48),
+        toolId: z.string().min(1),
+        allowed: z.boolean(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await setAiToolPolicy(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        roleKey: input.roleKey,
+        toolId: input.toolId,
+        allowed: input.allowed,
+      });
+      await writeAuditEvent(ctx.db, {
+        organizationId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        action: 'ai.tool_policy_changed',
+        targetType: 'organization',
+        targetId: null,
+        meta: { roleKey: input.roleKey, toolId: input.toolId, allowed: input.allowed },
+      });
+      return { ok: true as const };
     }),
 
   /* ── Sessions — the composer's personal, resumable threads ─────────────

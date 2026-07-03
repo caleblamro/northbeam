@@ -597,6 +597,51 @@ export const aiSession = pgTable(
   ],
 );
 
+/** Admin policy: which AI tools a role may use (per-org override rows over
+ *  the code defaults in @northbeam/core/ai-tools — read tools default
+ *  allowed, write tools admin-only). Keyed by role KEY, not role id, so
+ *  policy survives the static-matrix fallback for roles without a row. */
+export const aiToolPolicy = pgTable(
+  'ai_tool_policy',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    roleKey: text('role_key').notNull(),
+    toolId: text('tool_id').notNull(),
+    allowed: boolean('allowed').notNull(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('ai_tool_policy_uq').on(t.organizationId, t.roleKey, t.toolId),
+    orgIsolation('ai_tool_policy_org_isolation'),
+  ],
+);
+
+/** Per-user friction setting: an ALLOWED tool either runs automatically or
+ *  pauses generation for an in-thread approval. Missing row = the tool-kind
+ *  default (read auto-approves, write asks). */
+export const aiToolPref = pgTable(
+  'ai_tool_pref',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    toolId: text('tool_id').notNull(),
+    autoApprove: boolean('auto_approve').notNull(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('ai_tool_pref_uq').on(t.organizationId, t.userId, t.toolId),
+    orgIsolation('ai_tool_pref_org_isolation'),
+  ],
+);
+
 /* ────────────────────────────────────────────────────────────────────────────
    SALESFORCE MIGRATION / MAPPING
    ────────────────────────────────────────────────────────────────────────── */

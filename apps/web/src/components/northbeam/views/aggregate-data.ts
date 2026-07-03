@@ -7,9 +7,30 @@ import type { ChartDatum } from '@/components/northbeam/charts';
 import type { FieldDefLite } from '@/components/northbeam/field-render';
 import type { DateGrain } from '@northbeam/db/views';
 
-export type AggregateFn = 'count' | 'sum' | 'avg' | 'min' | 'max' | 'countDistinct' | 'median';
+export type AggregateFn =
+  | 'count'
+  | 'sum'
+  | 'avg'
+  | 'min'
+  | 'max'
+  | 'countDistinct'
+  | 'median'
+  | 'stddev'
+  | 'p90'
+  | 'p10';
 
-const AGG_FNS: readonly string[] = ['count', 'sum', 'avg', 'min', 'max', 'countDistinct', 'median'];
+const AGG_FNS: readonly string[] = [
+  'count',
+  'sum',
+  'avg',
+  'min',
+  'max',
+  'countDistinct',
+  'median',
+  'stddev',
+  'p90',
+  'p10',
+];
 
 /** Aggregates that are NOT part-to-whole safe — a donut/funnel of medians or
  *  distinct counts reads as nonsense. Used by chart-type coercion. */
@@ -19,6 +40,9 @@ export const NON_ADDITIVE_FNS: ReadonlySet<string> = new Set([
   'max',
   'median',
   'countDistinct',
+  'stddev',
+  'p90',
+  'p10',
 ]);
 const GRAINS: readonly string[] = ['day', 'week', 'month', 'quarter', 'year'];
 
@@ -154,9 +178,9 @@ export function totalOf(buckets: AggBucket[], agg: AggregateFn): number {
   if (buckets.length === 0) return 0;
   if (agg === 'min') return Math.min(...buckets.map((b) => b.value));
   if (agg === 'max') return Math.max(...buckets.map((b) => b.value));
-  // median folds count-weighted like avg — an APPROXIMATION (the true grand
-  // median needs the raw rows); good enough for a header strip.
-  if (agg === 'avg' || agg === 'median') {
+  // Distribution stats fold count-weighted like avg — an APPROXIMATION (the
+  // true grand value needs the raw rows); good enough for a header strip.
+  if (agg === 'avg' || agg === 'median' || agg === 'stddev' || agg === 'p90' || agg === 'p10') {
     const n = buckets.reduce((acc, b) => acc + b.count, 0);
     return n > 0 ? buckets.reduce((acc, b) => acc + b.value * b.count, 0) / n : 0;
   }
@@ -177,7 +201,7 @@ function combine(
   const count = a.count + b.count;
   if (agg === 'min') return { value: Math.min(a.value, b.value), count };
   if (agg === 'max') return { value: Math.max(a.value, b.value), count };
-  if (agg === 'avg' || agg === 'median') {
+  if (agg === 'avg' || agg === 'median' || agg === 'stddev' || agg === 'p90' || agg === 'p10') {
     return { value: count > 0 ? (a.value * a.count + b.value * b.count) / count : 0, count };
   }
   return { value: a.value + b.value, count };

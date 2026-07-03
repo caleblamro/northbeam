@@ -32,6 +32,9 @@ import {
 } from '@/components/northbeam/views/artifact-walker';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { type RouterOutputs, trpc } from '@/lib/api';
 import { formatError } from '@/lib/api/errors';
@@ -41,7 +44,19 @@ import { COMPOSER_OPEN_EVENT, type ComposerOpenRequest } from '@/lib/composer-bu
 import { timeAgo } from '@/lib/time';
 import type { ShareTarget, ViewIcon } from '@northbeam/db/views';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowUp, BookmarkPlus, History, Plus, Sparkles, Square, Trash2, X } from 'lucide-react';
+import {
+  ArrowUp,
+  BookmarkPlus,
+  Check,
+  History,
+  Loader2,
+  Plus,
+  Sparkles,
+  Square,
+  Trash2,
+  Wrench,
+  X,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   type ReactNode,
@@ -80,6 +95,17 @@ type ComposerMessage = {
   pending?: boolean;
   /** Repair-pass notes attached to the final assistant message. */
   repairs?: string[];
+};
+
+/** One research tool call, rendered as a chip in the thread (Claude-style):
+ *  awaiting = paused on the approval broker, buttons live in the chip. */
+type ToolCallRow = {
+  callId: string;
+  toolId: string;
+  title: string;
+  input: unknown;
+  status: 'awaiting' | 'running' | 'done' | 'denied' | 'error';
+  summary?: string;
 };
 
 type SessionRow = RouterOutputs['ai']['sessionList'][number];
@@ -186,6 +212,8 @@ type InternalState = ComposerState & {
   sessionId: string | null;
   loadSession: (row: SessionRow) => void;
   newThread: () => void;
+  /** This turn's research tool calls — rendered as chips in the thread. */
+  toolCalls: ToolCallRow[];
 };
 
 const InternalContext = createContext<InternalState | null>(null);
@@ -209,6 +237,9 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // The current turn's research tool calls — chips in the thread. Reset per
+  // send; not persisted into sessions (they're process, not conversation).
+  const [toolCalls, setToolCalls] = useState<ToolCallRow[]>([]);
   // Home mode — ONLY when opened via opts.home (the Home page's affordance).
   // Workspace scope (objectKey === WORKSPACE_KEY) is the default for every
   // generic open and must NOT imply home: a generic save goes through the
@@ -248,6 +279,7 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
     setHomeMode(false);
     setHomeViewId(null);
     setDetailTarget(null);
+    setToolCalls([]);
     seedRef.current = null;
   }, []);
 
@@ -315,6 +347,7 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
     setError(null);
     setIsGenerating(true);
     setInput('');
+    setToolCalls([]);
     setMessages((m) => [
       ...m,
       { role: 'user', content: instruction },
@@ -340,7 +373,43 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
         { signal: ac.signal },
       );
       for await (const event of stream) {
-        if (event.type === 'partial') {
+        if (event.type === 'tool-approval') {
+          setToolCalls((t) => [
+            ...t,
+            {
+              callId: event.callId,
+              toolId: event.toolId,
+              title: event.title,
+              input: event.input,
+              status: 'awaiting',
+            },
+          ]);
+        } else if (event.type === 'tool-start') {
+          setToolCalls((t) => {
+            const exists = t.some((c) => c.callId === event.callId);
+            if (exists) {
+              return t.map((c) => (c.callId === event.callId ? { ...c, status: 'running' } : c));
+            }
+            return [
+              ...t,
+              {
+                callId: event.callId,
+                toolId: event.toolId,
+                title: event.title,
+                input: event.input,
+                status: 'running',
+              },
+            ];
+          });
+        } else if (event.type === 'tool-end') {
+          setToolCalls((t) =>
+            t.map((c) =>
+              c.callId === event.callId
+                ? { ...c, status: event.status, summary: event.summary }
+                : c,
+            ),
+          );
+        } else if (event.type === 'partial') {
           if (event.note) patchAssistant({ content: event.note });
           const partial = toPreviewArtifact(event.artifact);
           if (partial) setPreview(partial);
@@ -603,6 +672,7 @@ export function AiComposerScope({ children }: { children: ReactNode }) {
     sessionId,
     loadSession,
     newThread,
+    toolCalls,
   };
 
   return (
@@ -711,6 +781,7 @@ export function AiComposerDrawer() {
     sessionId,
     loadSession,
     newThread,
+    toolCalls,
   } = useInternal();
   const [showHistory, setShowHistory] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -770,6 +841,7 @@ export function AiComposerDrawer() {
               >
                 <Plus />
               </Button>
+              <ToolsPopover />
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -901,6 +973,13 @@ export function AiComposerDrawer() {
                       </div>
                     </motion.div>
                   ),
+                )}
+                {toolCalls.length > 0 && (
+                  <div className="mr-6 ml-6 flex flex-col gap-1.5">
+                    {toolCalls.map((call) => (
+                      <ToolCallChip key={call.callId} call={call} />
+                    ))}
+                  </div>
                 )}
               </div>
             )}
@@ -1074,5 +1153,128 @@ function SessionHistory({
         </motion.div>
       ))}
     </div>
+  );
+}
+
+/* ── Research tool calls (chips) ─────────────────────────────────────────────
+   One row per tool call, Claude-style: name + a one-glance input summary +
+   status. `awaiting` renders Allow / Deny — the server generation is parked
+   on the approval broker until one is clicked (or it times out to deny). */
+
+function toolInputSummary(input: unknown): string {
+  if (!input || typeof input !== 'object') return '';
+  const o = input as Record<string, unknown>;
+  const bits: string[] = [];
+  if (typeof o.objectKey === 'string') bits.push(o.objectKey);
+  if (typeof o.groupBy === 'string') bits.push(`by ${o.groupBy}`);
+  if (typeof o.search === 'string' && o.search) bits.push(`"${o.search}"`);
+  const s = bits.join(' · ') || JSON.stringify(o).slice(0, 60);
+  return s.length > 60 ? `${s.slice(0, 60)}…` : s;
+}
+
+function ToolCallChip({ call }: { call: ToolCallRow }) {
+  const resolve = trpc.ai.resolveTool.useMutation({ meta: { silent: true } });
+  const summary = toolInputSummary(call.input);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: EASE }}
+      className={cn(
+        'flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs',
+        call.status === 'awaiting' && 'border-[var(--accent-ring)] bg-[var(--accent-soft)]',
+        (call.status === 'denied' || call.status === 'error') && 'opacity-70',
+      )}
+    >
+      {call.status === 'running' ? (
+        <Loader2 className="size-3.5 shrink-0 animate-spin text-link" />
+      ) : call.status === 'done' ? (
+        <Check className="size-3.5 shrink-0 text-link" />
+      ) : call.status === 'awaiting' ? (
+        <Wrench className="size-3.5 shrink-0 text-link" />
+      ) : (
+        <X className="size-3.5 shrink-0 text-muted-foreground" />
+      )}
+      <span className="min-w-0 flex-1 truncate">
+        <span className="font-medium">{call.title}</span>
+        {summary && <span className="text-muted-foreground"> — {summary}</span>}
+        {call.status === 'denied' && <span className="text-muted-foreground"> · declined</span>}
+        {call.status === 'error' && <span className="text-muted-foreground"> · failed</span>}
+      </span>
+      {call.status === 'awaiting' && (
+        <span className="flex shrink-0 gap-1">
+          <Button
+            size="xs"
+            disabled={resolve.isPending}
+            onClick={() => resolve.mutate({ callId: call.callId, approved: true })}
+          >
+            Allow
+          </Button>
+          <Button
+            variant="outline"
+            size="xs"
+            disabled={resolve.isPending}
+            onClick={() => resolve.mutate({ callId: call.callId, approved: false })}
+          >
+            Deny
+          </Button>
+        </span>
+      )}
+    </motion.div>
+  );
+}
+
+/* ── Tools popover ──────────────────────────────────────────────────────────
+   The caller's allowed tools (admin policy already applied server-side) with
+   the per-user auto-approve switch: on = runs without asking, off = every
+   call pauses for an in-thread Allow/Deny. */
+
+function ToolsPopover() {
+  const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false);
+  const tools = trpc.ai.tools.useQuery(undefined, { enabled: open });
+  const setPref = trpc.ai.toolPrefSet.useMutation({
+    meta: { silent: true },
+    onSuccess: () => utils.ai.tools.invalidate(),
+  });
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label="AI tools">
+          <Wrench />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-3">
+        <p className="font-medium text-sm">Research tools</p>
+        <p className="mt-0.5 text-muted-foreground text-xs">
+          What the AI may look at while composing. Auto-approve runs a tool
+          without asking; otherwise each call pauses for your OK.
+        </p>
+        <div className="mt-3 flex flex-col gap-2.5">
+          {tools.isLoading && <Skeleton className="h-10" />}
+          {(tools.data ?? []).map((t) => (
+            <div key={t.id} className="flex items-start gap-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-xs">{t.title}</p>
+                <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground leading-snug">
+                  {t.description}
+                </p>
+              </div>
+              <Switch
+                checked={t.autoApprove}
+                aria-label={`Auto-approve ${t.title}`}
+                onCheckedChange={(on) => setPref.mutate({ toolId: t.id, autoApprove: on })}
+              />
+            </div>
+          ))}
+          {tools.data && tools.data.length === 0 && (
+            <p className="text-muted-foreground text-xs">
+              Your role has no AI tools enabled — ask an admin.
+            </p>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

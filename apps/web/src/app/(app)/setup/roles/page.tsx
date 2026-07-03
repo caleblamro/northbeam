@@ -4,6 +4,7 @@
 // per-object CRUD grid. The whole surface is gated on 'org.roles.manage' (the
 // nav hides it otherwise; the API enforces it regardless).
 
+import { AiToolPolicyMatrix } from '@/components/northbeam/ai-tool-policy';
 import { EmptyState } from '@/components/northbeam/empty-state';
 import { RolesManager } from '@/components/northbeam/roles-manager';
 import { useCan } from '@/lib/can';
@@ -20,5 +21,10 @@ export default function RolesSetupPage() {
       />
     );
   }
-  return <RolesManager />;
+  return (
+    <div className="flex flex-col gap-5">
+      <RolesManager />
+      <AiToolPolicyMatrix />
+    </div>
+  );
 }

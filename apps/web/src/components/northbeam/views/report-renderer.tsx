@@ -33,6 +33,9 @@ const AGG_WORD: Record<string, string> = {
   max: 'Maximum',
   median: 'Median',
   countDistinct: 'Distinct count',
+  stddev: 'Std deviation',
+  p90: '90th percentile',
+  p10: '10th percentile',
 };
 
 /** Props for the standalone report surface — shared by the saved-view
@@ -252,7 +255,18 @@ const ReportConfigSchema = z
     groupBy2: z.string().nullable().optional(),
     groupBy2Grain: DateGrainSchema.optional(),
     measure: z.object({
-      agg: z.enum(['count', 'sum', 'avg', 'min', 'max', 'countDistinct', 'median']),
+      agg: z.enum([
+        'count',
+        'sum',
+        'avg',
+        'min',
+        'max',
+        'countDistinct',
+        'median',
+        'stddev',
+        'p90',
+        'p10',
+      ]),
       fieldKey: z.string().optional(),
     }),
     chartType: z.enum([

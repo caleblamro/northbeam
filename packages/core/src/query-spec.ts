@@ -18,6 +18,9 @@ export const QUERY_MEASURE_FNS = [
   'max',
   'countDistinct',
   'median',
+  'stddev',
+  'p90',
+  'p10',
 ] as const;
 
 const MeasureIdSchema = z.string().regex(/^[a-z][a-z0-9_]{0,23}$/, 'lowercase measure id');
@@ -41,6 +44,11 @@ export const QueryMeasureSchema = z.object({
       right: OperandSchema,
     })
     .optional(),
+  /** Running total across buckets, chronological — requires the query to
+   *  have exactly one DATE grouping. */
+  cumulative: z.boolean().optional(),
+  /** This bucket's share of the grand total (0–1) — requires ≥1 grouping. */
+  share: z.boolean().optional(),
 });
 
 export type QueryMeasure = z.infer<typeof QueryMeasureSchema>;

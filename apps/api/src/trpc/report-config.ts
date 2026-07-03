@@ -40,6 +40,9 @@ export const ReportAggSchema = z.enum([
   'max',
   'countDistinct',
   'median',
+  'stddev',
+  'p90',
+  'p10',
 ]) satisfies z.ZodType<ReportAgg>;
 
 export const ReportHavingSchema = z.object({

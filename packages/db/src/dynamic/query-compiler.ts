@@ -54,6 +54,10 @@ export type QueryMeasureLike = {
     left: { ref: string } | { value: number };
     right: { ref: string } | { value: number };
   };
+  /** Running total, chronological — exactly one DATE grouping required. */
+  cumulative?: boolean;
+  /** Share of the grand total (0–1) — at least one grouping required. */
+  share?: boolean;
 };
 
 export type QuerySpecLike = {
@@ -78,7 +82,14 @@ type ResolvedExists = {
 export type ResolvedQueryPlan = {
   base: ObjectWithFields;
   groups: AggregateGrouping[];
-  measures: { id: string; fn?: AggregateFn; field?: FieldRow; expr?: QueryMeasureLike['expr'] }[];
+  measures: {
+    id: string;
+    fn?: AggregateFn;
+    field?: FieldRow;
+    expr?: QueryMeasureLike['expr'];
+    cumulative?: boolean;
+    share?: boolean;
+  }[];
   where?: QueryConditionLike;
   /** exists keyed by a synthetic marker used during condition compilation. */
   existsByMarker: Map<QueryConditionLike, ResolvedExists>;
@@ -190,14 +201,28 @@ export function resolveQuerySpec(
 
   // Measures — same field gates as resolveReportSpec.
   const measures: ResolvedQueryPlan['measures'] = [];
+  const singleDateGroup =
+    groups.length === 1 && groups[0] && DATE_GROUPABLE_TYPES.has(groups[0].field.type);
   for (const m of spec.measures) {
+    // Window options gate on the query's SHAPE — a running total needs one
+    // chronological axis; a share needs buckets to be a share OF.
+    if (m.cumulative && !singleDateGroup) {
+      return {
+        ok: false,
+        message: `measure '${m.id}': cumulative needs exactly one date grouping`,
+      };
+    }
+    if (m.share && groups.length === 0) {
+      return { ok: false, message: `measure '${m.id}': share needs a grouping` };
+    }
+    const windowOpts = { cumulative: m.cumulative === true, share: m.share === true };
     if (m.expr) {
-      measures.push({ id: m.id, expr: m.expr });
+      measures.push({ id: m.id, expr: m.expr, ...windowOpts });
       continue;
     }
     const fn = m.fn ?? 'count';
     if (fn === 'count') {
-      measures.push({ id: m.id, fn });
+      measures.push({ id: m.id, fn, ...windowOpts });
       continue;
     }
     const f = m.fieldKey ? byKey.get(m.fieldKey) : undefined;
@@ -206,7 +231,7 @@ export function resolveQuerySpec(
     if (!ok) {
       return { ok: false, message: `measure '${m.id}': '${m.fieldKey ?? ''}' can't be ${fn}'d` };
     }
-    measures.push({ id: m.id, fn, field: f });
+    measures.push({ id: m.id, fn, field: f, ...windowOpts });
   }
   const measureIds = new Set(measures.map((m) => m.id));
 
@@ -405,7 +430,15 @@ export function buildQuery(orgId: string, plan: ResolvedQueryPlan, acl: QueryAcl
   if (g1) selects.push(sql`${g1} as g`);
   if (g2) selects.push(sql`${g2} as g2`);
   plan.measures.forEach((m, i) => {
-    const expr = exprById.get(m.id) ?? sql`null`;
+    // Window options wrap ONLY the select expression — HAVING/ORDER BY keep
+    // the base aggregate (PG forbids window fns in HAVING). `share` divides
+    // by the grand total across buckets; `cumulative` runs a total in group
+    // order (resolution guaranteed a single date grouping, so g1 is the
+    // chronological axis — the window must repeat the EXPRESSION, an ordinal
+    // would be the constant 1).
+    let expr = exprById.get(m.id) ?? sql`null`;
+    if (m.share) expr = sql`(${expr} / nullif(sum(${expr}) over (), 0))`;
+    if (m.cumulative && g1) expr = sql`sum(${expr}) over (order by ${g1})`;
     selects.push(sql`${expr} as ${sql.raw(qid(`m${i}`))}`);
   });
   selects.push(sql`count(*)::int as n`);
@@ -429,10 +462,12 @@ export function buildQuery(orgId: string, plan: ResolvedQueryPlan, acl: QueryAcl
 
   let orderBy = sql``;
   if (groups.length > 0) {
+    // A cumulative measure only reads chronologically — force group order.
+    const hasCumulative = plan.measures.some((m) => m.cumulative);
     const dir = plan.orderBy?.direction === 'asc' ? sql`asc` : sql`desc`;
     const target =
-      !plan.orderBy || plan.orderBy.ref === 'group'
-        ? sql`1 ${plan.orderBy ? dir : sql`asc`}`
+      hasCumulative || !plan.orderBy || plan.orderBy.ref === 'group'
+        ? sql`1 ${!hasCumulative && plan.orderBy ? dir : sql`asc`}`
         : sql`${exprById.get(plan.orderBy.ref) ?? sql`1`} ${dir}`;
     orderBy = sql` order by ${target} nulls last`;
   }

@@ -215,3 +215,86 @@ describe('buildQuery', () => {
     expect(q.params).toEqual(expect.arrayContaining(['Won', 50000, 'Lost']));
   });
 });
+
+describe('buildQuery — distribution fns + window measures', () => {
+  const closeDate = field({ key: 'close_date', columnName: 'f_close_date', type: 'date' });
+  const dealWithDate: ObjectWithFields = {
+    object: deal.object,
+    fields: [...deal.fields, closeDate],
+  };
+  const planFor = (spec: QuerySpecLike) => {
+    const r = resolveQuerySpec(dealWithDate, targets, spec);
+    if (!r.ok) throw new Error(r.message);
+    return r.plan;
+  };
+
+  it('p90 and stddev compile to percentile_cont / stddev_samp', () => {
+    const q = render(
+      buildQuery(
+        'abc',
+        planFor({
+          objectKey: 'deal',
+          groupBy: [{ fieldKey: 'stage' }],
+          measures: [
+            { id: 'p', fn: 'p90', fieldKey: 'amount' },
+            { id: 's', fn: 'stddev', fieldKey: 'amount' },
+          ],
+        }),
+        ACL,
+      ),
+    );
+    expect(q.sql).toContain('percentile_cont(0.9) within group');
+    expect(q.sql).toContain('stddev_samp("f_amount"::numeric)');
+  });
+
+  it('share wraps the select expr in a grand-total window; having stays base', () => {
+    const q = render(
+      buildQuery(
+        'abc',
+        planFor({
+          objectKey: 'deal',
+          groupBy: [{ fieldKey: 'stage' }],
+          measures: [{ id: 'total', fn: 'sum', fieldKey: 'amount', share: true }],
+          having: [{ measure: 'total', op: 'gt', value: 0 }],
+        }),
+        ACL,
+      ),
+    );
+    expect(q.sql).toContain('/ nullif(sum(coalesce(sum("f_amount"), 0)::numeric) over (), 0)');
+    // HAVING references the base aggregate, never the window.
+    expect(q.sql).toContain('having coalesce(sum("f_amount"), 0)::numeric > $');
+  });
+
+  it('cumulative runs a total over the date-group expression and forces chronological order', () => {
+    const q = render(
+      buildQuery(
+        'abc',
+        planFor({
+          objectKey: 'deal',
+          groupBy: [{ fieldKey: 'close_date', grain: 'month' }],
+          measures: [{ id: 'run', fn: 'sum', fieldKey: 'amount', cumulative: true }],
+          orderBy: { ref: 'run', direction: 'desc' },
+        }),
+        ACL,
+      ),
+    );
+    expect(q.sql).toContain('over (order by (date_trunc(');
+    expect(q.sql).toContain('order by 1 asc nulls last');
+  });
+
+  it('rejects cumulative without a single date grouping and share without groups', () => {
+    expect(
+      resolveQuerySpec(dealWithDate, targets, {
+        objectKey: 'deal',
+        groupBy: [{ fieldKey: 'stage' }],
+        measures: [{ id: 'm', fn: 'count', cumulative: true }],
+      }).ok,
+    ).toBe(false);
+    expect(
+      resolveQuerySpec(dealWithDate, targets, {
+        objectKey: 'deal',
+        measures: [{ id: 'm', fn: 'count', share: true }],
+      }).ok,
+    ).toBe(false);
+  });
+});

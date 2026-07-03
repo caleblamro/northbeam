@@ -259,6 +259,9 @@ const AGG_NOUN: Record<AggregateFn, string> = {
   max: 'Max',
   countDistinct: 'Distinct',
   median: 'Median',
+  stddev: 'Std dev',
+  p90: 'P90',
+  p10: 'P10',
 };
 
 /** Aggregate buckets as a plain table — Chart `table` type, and the report

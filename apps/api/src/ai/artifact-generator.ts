@@ -203,6 +203,7 @@ export function buildSystemPrompt(
   currentArtifact?: ArtifactLike,
   otherObjects: ObjectContext[] = [],
   mode: 'dashboard' | 'detail' = 'dashboard',
+  research = '',
 ): string {
   const fieldLines = fieldLinesFor(fields, 40);
   const detailMode = mode === 'detail' && object !== null;
@@ -393,7 +394,8 @@ supporting evidence: distributions, then individual records.
   props: {
     label: string,                     // sentence case, e.g. "Open pipeline"
     objectKey: string,
-    fn: 'count' | 'sum' | 'avg' | 'min' | 'max' | 'countDistinct' | 'median',
+    fn: 'count' | 'sum' | 'avg' | 'min' | 'max' | 'countDistinct' | 'median'
+      | 'stddev' | 'p90' | 'p10',
     fieldKey?: string,                 // REQUIRED unless fn is count — numeric field
                                        // (countDistinct: ANY field, e.g. distinct industries)
     filters?: ArtifactFilter[],
@@ -414,7 +416,8 @@ supporting evidence: distributions, then individual records.
     dateGrain?: ${ARTIFACT_DATE_GRAINS.map((g) => `'${g}'`).join(' | ')},  // ONLY when groupBy is a date/datetime field; default 'month'
     groupBy2?: string,                 // second dimension — stacked bars, multi-series lines/areas, matrix tables
     groupBy2Grain?: same as dateGrain, // ONLY when groupBy2 is a date/datetime field
-    fn: 'count' | 'sum' | 'avg' | 'min' | 'max' | 'countDistinct' | 'median',
+    fn: 'count' | 'sum' | 'avg' | 'min' | 'max' | 'countDistinct' | 'median'
+      | 'stddev' | 'p90' | 'p10',
     measure?: string,                  // REQUIRED unless fn is count — numeric field key
                                        // (countDistinct: ANY field key)
     having?: { target: 'value' | 'count', op: 'gt' | 'gte' | 'lt' | 'lte', value: number },
@@ -512,9 +515,13 @@ supporting evidence: distributions, then individual records.
                                        // refFieldKey must be a reference field on that object
                                        // pointing back at query.objectKey.
       groupBy?: [{ fieldKey: string, grain?: 'day'|'week'|'month'|'quarter'|'year' }],  // 0-2; dot paths OK
-      measures: [{ id: string, fn?: 'count'|'sum'|'avg'|'min'|'max'|'countDistinct'|'median',
+      measures: [{ id: string,
+                   fn?: 'count'|'sum'|'avg'|'min'|'max'|'countDistinct'|'median'|'stddev'|'p90'|'p10',
                    fieldKey?: string,
-                   expr?: { op: '+'|'-'|'*'|'/', left: {ref}|{value}, right: {ref}|{value} } }],  // 1-5
+                   expr?: { op: '+'|'-'|'*'|'/', left: {ref}|{value}, right: {ref}|{value} },
+                   cumulative?: boolean,   // running total — needs exactly ONE date grouping
+                   share?: boolean }],     // this bucket's share of the total (0-1) — needs a grouping
+                                           // 1-5 measures
       having?: [{ measure: <measure id or 'count'>, op: 'gt'|'gte'|'lt'|'lte', value: number }],
       orderBy?: { ref: <'group' or measure id>, direction: 'asc'|'desc' },
       limit?: number
@@ -627,7 +634,18 @@ ${formatDataSummary(summary)}
 - scatter and every sum/avg/min/max carry a numeric measure; matrix carries groupBy2.
 - Time-series (line/area over a date groupBy) never set limit.
 - No number appears twice; titles ≤ 60 chars; bodies ≤ 280 chars.
-- The note cites real numbers and reads like a colleague, not a changelog.${detailSection}${refinement}`;
+- The note cites real numbers and reads like a colleague, not a changelog.${
+    research
+      ? `
+
+# Research findings (from live tool calls you just made)
+
+Ground the composition in these — they came from real queries moments ago.
+Prefer the fields/groupings they flag as informative; don't contradict them.
+
+${research}`
+      : ''
+  }${detailSection}${refinement}`;
 }
 
 export type GenerationPartial = { note?: string; artifact?: unknown };
@@ -651,6 +669,8 @@ export function streamArtifact(opts: {
   /** 'detail' composes a record-page layout for `object` instead of a
    *  dashboard (requires a non-null object). */
   mode?: 'dashboard' | 'detail';
+  /** Findings block from the research phase — appended to the system prompt. */
+  research?: string;
 }): { partialStream: AsyncIterable<GenerationPartial>; result: Promise<Generation> } {
   const env = loadEnv();
   if (!env.ANTHROPIC_API_KEY) {
@@ -665,6 +685,7 @@ export function streamArtifact(opts: {
       opts.currentArtifact,
       opts.otherObjects ?? [],
       opts.mode ?? 'dashboard',
+      opts.research ?? '',
     ),
     prompt: opts.prompt,
     schema: generationProviderSchema,

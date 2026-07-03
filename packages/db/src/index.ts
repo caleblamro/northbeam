@@ -290,3 +290,10 @@ export {
   type AiSessionMessage,
   type UpsertAiSessionInput,
 } from './queries/ai-sessions.js';
+// AI tool policy (admin, per role) + per-user auto-approve preferences.
+export {
+  listAiToolPolicies,
+  setAiToolPolicy,
+  listAiToolPrefs,
+  setAiToolPref,
+} from './queries/ai-tools.js';

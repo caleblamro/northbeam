@@ -21,7 +21,17 @@ import { type ResolvedRefPath, planRefJoins } from './ref-joins.js';
 
 export type { DateGrain } from '../views.js';
 
-export type AggregateFn = 'count' | 'sum' | 'avg' | 'min' | 'max' | 'countDistinct' | 'median';
+export type AggregateFn =
+  | 'count'
+  | 'sum'
+  | 'avg'
+  | 'min'
+  | 'max'
+  | 'countDistinct'
+  | 'median'
+  | 'stddev'
+  | 'p90'
+  | 'p10';
 
 /** Bucket-level threshold ("only groups where …"). `target: 'count'` gates on
  *  the bucket's record count, `'value'` on the measure. Ignored when there
@@ -143,6 +153,12 @@ export function measureExpr(fn: AggregateFn, c: SQL): SQL {
       // percentile_cont needs an orderable numeric — validation guarantees
       // NUMERIC_TYPES, the cast keeps numeric(18,2) exact.
       return sql`(percentile_cont(0.5) within group (order by ${c}::numeric))::numeric`;
+    case 'p90':
+      return sql`(percentile_cont(0.9) within group (order by ${c}::numeric))::numeric`;
+    case 'p10':
+      return sql`(percentile_cont(0.1) within group (order by ${c}::numeric))::numeric`;
+    case 'stddev':
+      return sql`coalesce(stddev_samp(${c}::numeric), 0)::numeric`;
     default:
       return sql`count(*)::numeric`;
   }

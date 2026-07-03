@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./roles": "./src/roles.ts",
     "./errors": "./src/errors.ts",
-    "./artifact": "./src/artifact.ts"
+    "./artifact": "./src/artifact.ts",
+    "./ai-tools": "./src/ai-tools.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

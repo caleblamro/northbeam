@@ -453,6 +453,8 @@ function BuilderInner({
                     <SelectItem value="min">Minimum of…</SelectItem>
                     <SelectItem value="max">Maximum of…</SelectItem>
                     <SelectItem value="countDistinct">Distinct count of…</SelectItem>
+                    <SelectItem value="p90">90th percentile of…</SelectItem>
+                    <SelectItem value="stddev">Std deviation of…</SelectItem>
                   </SelectContent>
                 </Select>
                 {spec.agg !== 'count' && (

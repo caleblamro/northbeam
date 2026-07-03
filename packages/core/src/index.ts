@@ -42,6 +42,18 @@ export {
   type ArtifactSort,
 } from './artifact.js';
 export {
+  AI_TOOLS,
+  AI_TOOL_IDS,
+  effectiveTools,
+  toolAllowedForRole,
+  toolAutoApproveDefault,
+  type AiToolDef,
+  type AiToolKind,
+  type AiToolPolicyRow,
+  type AiToolPrefRow,
+  type EffectiveTool,
+} from './ai-tools.js';
+export {
   QUERY_MEASURE_FNS,
   QueryConditionSchema,
   QueryHavingSchema,
