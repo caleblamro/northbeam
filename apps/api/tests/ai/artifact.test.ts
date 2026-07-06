@@ -167,7 +167,7 @@ describe('buildSystemPrompt', () => {
     // Each top-level component rides in BY INDEX so patch ops can address it.
     expect(prompt).toContain(`[0] ${JSON.stringify(validArtifact.components[0])}`);
     expect(prompt).toContain(`[2] ${JSON.stringify(validArtifact.components[2])}`);
-    expect(prompt).toContain("PREFER returning \"patch\"");
+    expect(prompt).toContain('PREFER returning "patch"');
     expect(prompt).toContain("{ op: 'props', index, props }");
   });
 
