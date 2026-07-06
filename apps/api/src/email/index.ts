@@ -6,6 +6,7 @@
 import { logger } from '@northbeam/core';
 import { Resend } from 'resend';
 import { env } from '../lib/env.js';
+import { automationTemplate } from './templates/automation.js';
 import { invitationTemplate } from './templates/invitation.js';
 import { magicLinkTemplate } from './templates/magic-link.js';
 
@@ -26,11 +27,13 @@ export type EmailTemplate = {
 type TemplateMap = {
   'magic-link': { email: string; url: string };
   invitation: { email: string; inviterName: string; orgName: string; acceptUrl: string };
+  automation: { subject: string; body: string; flowName?: string };
 };
 
 const TEMPLATES: { [K in keyof TemplateMap]: (p: TemplateMap[K]) => EmailTemplate } = {
   'magic-link': magicLinkTemplate,
   invitation: invitationTemplate,
+  automation: automationTemplate,
 };
 
 export async function send<K extends keyof TemplateMap>(

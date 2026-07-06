@@ -7,10 +7,13 @@ import { logger } from '@northbeam/core';
 import { assertRlsEnforced, createDb } from '@northbeam/db';
 import { env } from '../lib/env.js';
 import { startComputeWorker } from './compute-worker.js';
+import { startFlowWorker } from './flow-worker.js';
 import { startSfImportWorker } from './sf-import-worker.js';
 
 // Fail-fast on missing env, and refuse an RLS-bypassing DB connection —
 // workers write org data and must be subject to the same isolation as the API.
+// (The flow worker's sweeper/reconciler additionally hold a DATABASE_ADMIN_URL
+// connection for their cross-org reads only — see flow-worker.ts.)
 const e = env();
 await assertRlsEnforced(createDb(e.DATABASE_URL));
 
@@ -20,9 +23,12 @@ logger.info({ worker: 'sf-import' }, 'worker.started');
 const compute = startComputeWorker();
 logger.info({ worker: 'compute' }, 'worker.started');
 
+const flows = startFlowWorker();
+logger.info({ worker: 'flow-runs' }, 'worker.started');
+
 async function shutdown(signal: NodeJS.Signals) {
   logger.info({ signal }, 'worker.shutting_down');
-  await Promise.all([sfImport.close(), compute.close()]);
+  await Promise.all([sfImport.close(), compute.close(), flows.close()]);
   process.exit(0);
 }
 

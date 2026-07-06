@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   boolean,
   index,
   integer,
@@ -13,7 +14,15 @@ import {
 } from 'drizzle-orm/pg-core';
 import type { FieldConfig, FieldType, ObjectLayout, PicklistOption } from './field-types.js';
 import type { Role } from './roles.js';
-import type { Filter, FormatRule, ShareTarget, ViewIcon, ViewSort, ViewType } from './views.js';
+import type {
+  Filter,
+  FilterEntry,
+  FormatRule,
+  ShareTarget,
+  ViewIcon,
+  ViewSort,
+  ViewType,
+} from './views.js';
 
 type DefSource = 'system' | 'custom' | 'salesforce' | 'ai';
 
@@ -201,6 +210,12 @@ export const objectPermission = pgTable(
     canRead: boolean('can_read').notNull().default(false),
     canUpdate: boolean('can_update').notNull().default(false),
     canDelete: boolean('can_delete').notNull().default(false),
+    /** Optional row-level (criteria) scope — a FilterEntry[] (same model as
+     *  views/lists). When set, the role can only see/act on records of this
+     *  object matching the filter, AND-ed into the ACL predicate at the
+     *  RecordAccess chokepoint. Null/empty = all records of the type. Fields
+     *  referenced here are auto-indexed on save so the predicate stays fast. */
+    filter: jsonb('filter').$type<FilterEntry[]>(),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
@@ -554,21 +569,74 @@ export const auditLog = pgTable(
 );
 
 /* ────────────────────────────────────────────────────────────────────────────
+   AI AGENTS — org-level agent presets the composer runs as. Each row bundles a
+   system prompt with scoping knobs: which models it may run on, which AI tools
+   it exposes (intersected with the caller's effective tools), and which roles
+   may use it. One system agent ('composer') is seeded per org; admins add more.
+   ────────────────────────────────────────────────────────────────────────── */
+export const aiAgent = pgTable(
+  'ai_agent',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    /** Slug, unique per org (e.g. 'composer', 'pipeline-analyst'). */
+    key: text('key').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    /** Prepended to the composer's base prompt. Empty for the system agent —
+     *  the API layer supplies the composer behavior. */
+    systemPrompt: text('system_prompt').notNull().default(''),
+    /** Model ids (see @northbeam/core AVAILABLE_AI_MODELS) the agent may run
+     *  on. Empty = the org default model only. */
+    models: jsonb('models').$type<string[]>().notNull().default([]),
+    /** AI tool ids the agent exposes. null = all of the caller's effective
+     *  tools; non-null = intersection with the caller's effective tools. */
+    toolIds: jsonb('tool_ids').$type<string[] | null>().default(null),
+    /** Role keys allowed to use the agent. null = every role. */
+    roleKeys: jsonb('role_keys').$type<string[] | null>().default(null),
+    /** Seeded agents — not deletable, key is stable. */
+    isSystem: boolean('is_system').notNull().default(false),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('ai_agent_org_key_uq').on(t.organizationId, t.key),
+    orgIsolation('ai_agent_org_isolation'),
+  ],
+);
+
+/* ────────────────────────────────────────────────────────────────────────────
    AI COMPOSER SESSIONS — a user's conversations with the dashboard composer.
-   Personal (never shared): each row is one thread — the messages, the latest
+   Personal by default: each row is one thread — the messages, the latest
    composed artifact, and the target object — so a user can reopen the drawer
-   and pick up where they left off. Saving a dashboard still goes through the
-   `view` table; sessions are the working drafts.
+   and pick up where they left off. `sharedWith` opt-in shares a thread
+   (read-only) with the org / a role / specific users. Saving a dashboard
+   still goes through the `view` table; sessions are the working drafts.
    ────────────────────────────────────────────────────────────────────────── */
 
 /** One chat turn persisted on an aiSession row. Mirrors the composer's
- *  in-memory shape minus transient flags (pending). */
-export type AiSessionMessage = {
-  role: 'user' | 'assistant';
-  content: string;
-  /** Repair-pass notes attached to an assistant turn. */
-  repairs?: string[];
-};
+ *  in-memory shape minus transient flags (pending). Discriminated on `kind`;
+ *  legacy rows predate the field, so no `kind` means a text turn. */
+export type AiSessionMessage =
+  | {
+      kind?: 'text';
+      role: 'user' | 'assistant';
+      content: string;
+      /** Repair-pass notes attached to an assistant turn. */
+      repairs?: string[];
+    }
+  | {
+      kind: 'tool';
+      toolId: string;
+      title: string;
+      status: 'done' | 'denied' | 'error';
+      inputSummary?: string;
+      resultSummary?: string;
+    }
+  | { kind: 'artifact'; note?: string };
 
 export const aiSession = pgTable(
   'ai_session',
@@ -582,6 +650,12 @@ export const aiSession = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     /** Object key the session composes against ('deal', 'account', …). */
     objectKey: text('object_key').notNull(),
+    /** Agent preset the thread runs as. Null = the default composer. */
+    agentId: uuid('agent_id').references(() => aiAgent.id, { onDelete: 'set null' }),
+    /** Model id picked for the thread. Null = the org default model. */
+    model: text('model'),
+    /** Read-only shares — same ShareTarget vocabulary as saved views. */
+    sharedWith: jsonb('shared_with').$type<ShareTarget[]>().notNull().default([]),
     /** First user prompt, trimmed — the list label. */
     title: text('title').notNull(),
     messages: jsonb('messages').$type<AiSessionMessage[]>().notNull().default([]),
@@ -702,6 +776,18 @@ export const migrationRun = pgTable(
         viewsSkipped?: number;
         reportsError?: string;
         skippedViews?: Array<{ label: string; reason: string }>;
+        // Automation import phase (import-flows.ts) — same best-effort
+        // contract: its own error slot, never fails the run.
+        flowsFound?: number;
+        flowsTranslated?: number;
+        /** Reference rows (needs_rebuild) across flows, workflow rules, and
+         *  apex triggers — the "rebuild manually" count. */
+        flowsReferenced?: number;
+        workflowRulesFound?: number;
+        workflowRulesTranslated?: number;
+        automationsSkipped?: number;
+        skippedAutomations?: Array<{ label: string; reason: string }>;
+        automationsError?: string;
       }>()
       .notNull()
       .default({}),
@@ -764,4 +850,268 @@ export const fieldMapping = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   () => [orgIsolation('field_mapping_org_isolation')],
+);
+
+/* ────────────────────────────────────────────────────────────────────────────
+   FLOW AUTOMATION — visual flow engine (docs plan: noble-watching-allen).
+   Trigger/graph documents are authored + validated against the zod contracts
+   in @northbeam/core (flow.ts). db CANNOT import core (core already depends
+   on db), so the jsonb columns are $type'd to the loose structural mirrors
+   below — core's schemas remain the source of truth and the API layer parses
+   before every write.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/** Structural mirror of core's FlowNode. `config` widens the per-type
+ *  discriminated configs to a plain object — enough for typed storage. */
+export type FlowNodeJson = {
+  id: string;
+  type: string;
+  config: Record<string, unknown>;
+  name?: string;
+  description?: string;
+};
+
+/** Structural mirror of core's FlowTrigger (the 3 trigger node types). */
+export type FlowTriggerJson = FlowNodeJson & {
+  type: 'trigger_record' | 'trigger_scheduled' | 'trigger_webhook';
+};
+
+/** Structural mirror of core's FlowEdge. `sourceHandle` is a decision
+ *  outcome id, 'default', or 'body'/'done' on loop nodes. */
+export type FlowEdgeJson = {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string;
+};
+
+/** Structural mirror of core's FlowGraph. */
+export type FlowGraphJson = {
+  nodes: FlowNodeJson[];
+  edges: FlowEdgeJson[];
+};
+
+/** Read-only payload for Salesforce automations we could not translate —
+ *  the flow row is a "rebuild manually" reference (status needs_rebuild). */
+export type FlowReferenceMeta = {
+  sfId: string;
+  apiName: string;
+  sfType: 'flow' | 'process-builder' | 'workflow-rule' | 'apex-trigger';
+  sfObject?: string;
+  description?: string;
+  activeInSf: boolean;
+  reason: string;
+};
+
+export type FlowStatus = 'draft' | 'active' | 'paused' | 'needs_rebuild';
+export type FlowSource = 'native' | 'salesforce';
+export type FlowTriggerType = FlowTriggerJson['type'];
+
+export type FlowRunStatus = 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
+
+export type FlowRunTriggerType =
+  | 'record_created'
+  | 'record_updated'
+  | 'record_deleted'
+  | 'scheduled'
+  | 'webhook'
+  | 'test';
+
+/** Serialized engine state — everything the walker needs to resume a parked
+ *  run. Shapes are engine-owned (apps/api/src/automation); storage stays
+ *  permissive so engine iterations don't need schema changes. */
+export type FlowRunContext = {
+  record?: Record<string, unknown>;
+  oldRecord?: Record<string, unknown>;
+  changedKeys?: string[];
+  vars?: Record<string, unknown>;
+  loopFrames?: unknown[];
+  cursorNodeId?: string;
+  actorUserId?: string | null;
+  webhookBody?: unknown;
+};
+
+export type FlowRunStepStatus = 'completed' | 'failed' | 'skipped';
+
+// An automation flow. Draft trigger/graph live here (edited in place); the
+// engine only ever executes the snapshot referenced by activeVersionId.
+// `activeTrigger`/`activeTriggerType` are denormalized copies of the active
+// version's trigger, written by setActiveVersion — the dispatcher matches
+// flows on the hot path without joining flow_version or parsing graphs.
+export const flow = pgTable(
+  'flow',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    /** NULL = global flow (scheduled/webhook triggers) or an SF reference on
+     *  a non-imported object. */
+    objectId: uuid('object_id').references(() => objectDef.id, { onDelete: 'cascade' }),
+    /** Slug-style API name. Unique per org — SF import idempotency
+     *  (onConflictDoNothing) depends on it. */
+    key: text('key').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    status: text('status').$type<FlowStatus>().notNull().default('draft'),
+    source: text('source').$type<FlowSource>().notNull().default('native'),
+    salesforceId: text('salesforce_id'),
+    referenceMeta: jsonb('reference_meta').$type<FlowReferenceMeta>(),
+    /** Editable working copy. NULL only for needs_rebuild references. */
+    draftTrigger: jsonb('draft_trigger').$type<FlowTriggerJson>(),
+    draftGraph: jsonb('draft_graph').$type<FlowGraphJson>(),
+    /** Soft pointer into flow_version (no FK — the tables reference each
+     *  other; version rows already cascade via their own flowId FK). */
+    activeVersionId: uuid('active_version_id'),
+    activeTrigger: jsonb('active_trigger').$type<FlowTriggerJson>(),
+    /** Denormalized activeTrigger.type so schedule/webhook lookups filter on
+     *  a plain column instead of a jsonb path. */
+    activeTriggerType: text('active_trigger_type').$type<FlowTriggerType>(),
+    /** HMAC secret for trigger_webhook flows. */
+    webhookSecret: text('webhook_secret'),
+    createdById: text('created_by_id').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('flow_org_key_uq').on(t.organizationId, t.key),
+    index('flow_org_object_status_idx').on(t.organizationId, t.objectId, t.status),
+    orgIsolation('flow_org_isolation'),
+  ],
+);
+
+// Immutable snapshot taken at activate time. Runs pin the version they
+// executed so history stays truthful after later edits.
+export const flowVersion = pgTable(
+  'flow_version',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    flowId: uuid('flow_id')
+      .notNull()
+      .references(() => flow.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    trigger: jsonb('trigger').$type<FlowTriggerJson>().notNull(),
+    graph: jsonb('graph').$type<FlowGraphJson>().notNull(),
+    createdById: text('created_by_id').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('flow_version_flow_version_uq').on(t.flowId, t.version),
+    orgIsolation('flow_version_org_isolation'),
+  ],
+);
+
+// One execution. Inserted `queued` inside the triggering transaction (outbox
+// pattern); a worker claims it with the status-guarded UPDATE in
+// queries/flow-runs.ts — that claim is the sole idempotency gate. Run rows +
+// their steps ARE the automation log (auditLog gets lifecycle events only).
+export const flowRun = pgTable(
+  'flow_run',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    flowId: uuid('flow_id')
+      .notNull()
+      .references(() => flow.id, { onDelete: 'cascade' }),
+    flowVersionId: uuid('flow_version_id')
+      .notNull()
+      .references(() => flowVersion.id, { onDelete: 'cascade' }),
+    triggerType: text('trigger_type').$type<FlowRunTriggerType>().notNull(),
+    /** Kept on object delete — run history outlives the object. */
+    objectId: uuid('object_id').references(() => objectDef.id, { onDelete: 'set null' }),
+    /** Soft pointer into the org's dynamic schema (org_<id>.t_<key>). */
+    recordId: uuid('record_id'),
+    status: text('status').$type<FlowRunStatus>().notNull().default('queued'),
+    context: jsonb('context').$type<FlowRunContext>().notNull().default({}),
+    /** Flows-triggering-flows recursion counter; dispatch skips at maxDepth. */
+    depth: integer('depth').notNull().default(0),
+    triggeredByRunId: uuid('triggered_by_run_id').references((): AnyPgColumn => flowRun.id, {
+      onDelete: 'set null',
+    }),
+    /** `waiting` runs: when the sweeper should resume them (NULL = a delayed
+     *  job owns the wake-up exclusively). */
+    resumeAt: timestamp('resume_at'),
+    /** One-shot claim token — resume paths race the sweeper, so claims match
+     *  on it (WHERE status='waiting' AND resume_token = ?). */
+    resumeToken: text('resume_token'),
+    stepCount: integer('step_count').notNull().default(0),
+    error: text('error'),
+    startedAt: timestamp('started_at'),
+    completedAt: timestamp('completed_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    /** Doubles as the worker heartbeat — the sweeper fails `running` runs
+     *  whose updatedAt has gone stale. */
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('flow_run_org_created_idx').on(t.organizationId, t.createdAt),
+    index('flow_run_flow_created_idx').on(t.flowId, t.createdAt),
+    // Partial index for the sweeper's stale-queued / overdue-waiting scans —
+    // terminal rows dominate the table and never match.
+    index('flow_run_sweeper_idx')
+      .on(t.status, t.createdAt)
+      .where(sql`status in ('queued', 'waiting')`),
+    orgIsolation('flow_run_org_isolation'),
+  ],
+);
+
+// Per-node execution trace. `stepIndex` is assigned by insertStep from the
+// run's stepCount so ordering is deterministic (startedAt can tie).
+export const flowRunStep = pgTable(
+  'flow_run_step',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => flowRun.id, { onDelete: 'cascade' }),
+    stepIndex: integer('step_index').notNull().default(0),
+    nodeId: text('node_id').notNull(),
+    /** A core FlowNodeType literal — stored as text (contract lives in core). */
+    nodeType: text('node_type').notNull(),
+    status: text('status').$type<FlowRunStepStatus>().notNull(),
+    /** Small human-readable result payload (executors cap it at ~8KB). */
+    summary: jsonb('summary').$type<Record<string, unknown>>().notNull().default({}),
+    error: text('error'),
+    startedAt: timestamp('started_at').notNull().defaultNow(),
+    durationMs: integer('duration_ms').notNull().default(0),
+  },
+  (t) => [
+    index('flow_run_step_run_idx').on(t.runId, t.stepIndex),
+    orgIsolation('flow_run_step_org_isolation'),
+  ],
+);
+
+/* ────────────────────────────────────────────────────────────────────────────
+   IN-APP NOTIFICATIONS — written by the flow engine's `notify` node (and any
+   future producer); surfaced by the topbar bell. readAt NULL = unread.
+   ────────────────────────────────────────────────────────────────────────── */
+export const notification = pgTable(
+  'notification',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    body: text('body'),
+    /** In-app deep link (path), e.g. '/o/deal/r/<id>'. */
+    link: text('link'),
+    readAt: timestamp('read_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('notification_user_org_created_idx').on(t.userId, t.organizationId, t.createdAt),
+    orgIsolation('notification_org_isolation'),
+  ],
 );

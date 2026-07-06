@@ -9,6 +9,7 @@
 import { ConfirmDialog } from '@/components/northbeam/confirm-dialog';
 import { CreateRoleDialog } from '@/components/northbeam/create-role-dialog';
 import { EmptyState } from '@/components/northbeam/empty-state';
+import { RoleObjectCriteria } from '@/components/northbeam/role-object-criteria';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -25,6 +26,7 @@ import {
   type ObjectAction,
   PERMISSION_GROUPS,
 } from '@northbeam/core/roles';
+import type { Filter } from '@northbeam/db/views';
 import { Loader2, Lock, Plus, RotateCcw, ShieldHalf, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -165,10 +167,10 @@ function RoleEditor({ roleId, onDeleted }: { roleId: string; onDeleted: () => vo
     update: false,
     delete: false,
   });
-  // objectId → { grant, overridden }. Non-overridden rows follow defaultGrant.
-  const [objects, setObjects] = useState<Map<string, { grant: CrudGrant; overridden: boolean }>>(
-    new Map(),
-  );
+  // objectId → { grant, overridden, filter }. Non-overridden rows follow
+  // defaultGrant; `filter` is the optional row-level (criteria) scope.
+  type ObjState = { grant: CrudGrant; overridden: boolean; filter: Filter[] };
+  const [objects, setObjects] = useState<Map<string, ObjState>>(new Map());
   const [snapshot, setSnapshot] = useState('');
 
   // Seed local state whenever the fetched role changes.
@@ -178,8 +180,14 @@ function RoleEditor({ roleId, onDeleted }: { roleId: string; onDeleted: () => vo
     setDescription(detail.role.description);
     setOrgPerms(new Set(detail.role.orgPermissions));
     setDefaultGrant(detail.role.defaultGrant);
-    const map = new Map<string, { grant: CrudGrant; overridden: boolean }>();
-    for (const o of detail.objects) map.set(o.id, { grant: o.grant, overridden: o.overridden });
+    const map = new Map<string, ObjState>();
+    for (const o of detail.objects) {
+      map.set(o.id, {
+        grant: o.grant,
+        overridden: o.overridden,
+        filter: (o.filter ?? []) as Filter[],
+      });
+    }
     setObjects(map);
     setSnapshot(
       JSON.stringify({
@@ -191,6 +199,7 @@ function RoleEditor({ roleId, onDeleted }: { roleId: string; onDeleted: () => vo
           id: o.id,
           grant: o.grant,
           overridden: o.overridden,
+          filter: o.filter ?? [],
         })),
       }),
     );
@@ -207,6 +216,7 @@ function RoleEditor({ roleId, onDeleted }: { roleId: string; onDeleted: () => vo
           id,
           grant: v.grant,
           overridden: v.overridden,
+          filter: v.filter,
         })),
       }),
     [name, description, orgPerms, defaultGrant, objects],
@@ -228,14 +238,31 @@ function RoleEditor({ roleId, onDeleted }: { roleId: string; onDeleted: () => vo
       const next = new Map(prev);
       const cur = next.get(objectId);
       const base = cur?.overridden ? cur.grant : defaultGrant;
-      next.set(objectId, { grant: { ...base, [action]: checked }, overridden: true });
+      next.set(objectId, {
+        grant: { ...base, [action]: checked },
+        overridden: true,
+        filter: cur?.filter ?? [],
+      });
+      return next;
+    });
+  };
+  const setObjectFilter = (objectId: string, filter: Filter[]) => {
+    setObjects((prev) => {
+      const next = new Map(prev);
+      const cur = next.get(objectId);
+      // A criteria implies an explicit override (it only lives on override rows).
+      next.set(objectId, {
+        grant: cur?.overridden ? cur.grant : defaultGrant,
+        overridden: cur?.overridden || filter.length > 0,
+        filter,
+      });
       return next;
     });
   };
   const resetObject = (objectId: string) => {
     setObjects((prev) => {
       const next = new Map(prev);
-      next.set(objectId, { grant: defaultGrant, overridden: false });
+      next.set(objectId, { grant: defaultGrant, overridden: false, filter: [] });
       return next;
     });
   };
@@ -244,7 +271,7 @@ function RoleEditor({ roleId, onDeleted }: { roleId: string; onDeleted: () => vo
     setSaving(true);
     try {
       const initial = JSON.parse(snapshot) as {
-        objects: { id: string; grant: CrudGrant; overridden: boolean }[];
+        objects: { id: string; grant: CrudGrant; overridden: boolean; filter: Filter[] }[];
       };
       const initialById = new Map(initial.objects.map((o) => [o.id, o]));
 
@@ -261,12 +288,14 @@ function RoleEditor({ roleId, onDeleted }: { roleId: string; onDeleted: () => vo
         const changed =
           !before ||
           before.overridden !== v.overridden ||
-          JSON.stringify(before.grant) !== JSON.stringify(v.grant);
+          JSON.stringify(before.grant) !== JSON.stringify(v.grant) ||
+          JSON.stringify(before.filter ?? []) !== JSON.stringify(v.filter);
         if (!changed) continue;
         await setObjPerm.mutateAsync({
           roleId,
           objectId: id,
           grant: v.overridden ? v.grant : null,
+          filter: v.overridden && v.filter.length > 0 ? v.filter : null,
         });
       }
 
@@ -440,6 +469,9 @@ function RoleEditor({ roleId, onDeleted }: { roleId: string; onDeleted: () => vo
                     {ACTION_LABEL[a]}
                   </th>
                 ))}
+                <th className="w-16 px-2 py-2.5 text-center font-medium text-[0.6875rem] text-muted-foreground uppercase tracking-wider">
+                  Records
+                </th>
                 <th className="w-10" />
               </tr>
             </thead>
@@ -472,6 +504,8 @@ function RoleEditor({ roleId, onDeleted }: { roleId: string; onDeleted: () => vo
                     </div>
                   </td>
                 ))}
+                {/* Record conditions apply per-object only, not to the default. */}
+                <td className="text-center text-muted-foreground/40 text-xs">—</td>
                 <td />
               </tr>
 
@@ -508,6 +542,19 @@ function RoleEditor({ roleId, onDeleted }: { roleId: string; onDeleted: () => vo
                         </div>
                       </td>
                     ))}
+                    <td className="px-2 py-2.5 text-center">
+                      {!isOwner && (
+                        <div className="flex justify-center">
+                          <RoleObjectCriteria
+                            objectKey={o.key}
+                            objectLabel={o.labelPlural}
+                            value={entry?.filter ?? []}
+                            disabled={locked}
+                            onChange={(f) => setObjectFilter(o.id, f)}
+                          />
+                        </div>
+                      )}
+                    </td>
                     <td className="pr-4 text-right">
                       {overridden && !locked && (
                         <Tooltip>

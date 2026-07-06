@@ -1,15 +1,6 @@
-import { Wordmark } from '@/components/northbeam/primitives';
+import { AuthSplitShell } from '@/components/northbeam/auth-shell';
 
-// Centered card shell for sign-in / verify.
+// A1 split-panel shell for sign-in / verify: brand panel left, form right.
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6">
-      <div className="w-full max-w-[400px]">
-        <div className="mb-6">
-          <Wordmark size={18} />
-        </div>
-        <div className="rounded-lg border border-border bg-card p-8">{children}</div>
-      </div>
-    </div>
-  );
+  return <AuthSplitShell width={400}>{children}</AuthSplitShell>;
 }

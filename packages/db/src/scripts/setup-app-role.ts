@@ -13,25 +13,13 @@ import postgres from 'postgres';
 
 const APP_ROLE = 'northbeam_app';
 
-// Keep in sync with the orgIsolation() policies in ../schema.ts.
-const RLS_TABLES = [
-  'object_def',
-  'field_def',
-  'record_type',
-  'layout_def',
-  'global_picklist',
-  'validation_rule',
-  'record_share',
-  'view',
-  'audit_log',
-  'ai_session',
-  'salesforce_connection',
-  'migration_run',
-  'object_mapping',
-  'field_mapping',
-  'role',
-  'object_permission',
-];
+// Org-scoped tables are discovered dynamically (any public table with an
+// `organization_id` column) rather than hand-listed, so a new metadata table
+// is enforced automatically instead of relying on someone updating a list.
+// These two are Better Auth-managed and queried WITHOUT the `app.org_id` GUC
+// (context.ts / session.ts), so they must NOT get an RLS policy — enforcing
+// one would return 0 rows and break auth. They filter by org explicitly.
+const RLS_EXCLUDE = ['member', 'invitation'];
 
 async function main() {
   const url = process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL;
@@ -71,16 +59,23 @@ async function main() {
       END $$;
     `);
 
-    // Enable RLS + (re)create the org-isolation policy on each table.
-    // `drizzle-kit push` (dev's schema sync) creates the policy shell but
-    // drops the USING/WITH CHECK expressions — an empty policy denies every
-    // row. Recreating them here, mirroring drizzle/0009+0010, is what actually
-    // makes dev enforce. Idempotent via DROP POLICY IF EXISTS. Skips tables
-    // that don't exist yet (push creates them first).
+    // Enable RLS + FORCE + (re)create the org-isolation policy on EVERY
+    // org-scoped table (any public table with an `organization_id` column),
+    // minus the Better Auth denylist. Discovering them dynamically means new
+    // metadata tables are enforced without editing this script.
+    //
+    // Why recreate policies every run: `drizzle-kit push` (dev's schema sync)
+    // creates the policy shell but drops the USING/WITH CHECK expressions — an
+    // empty policy denies every row. Idempotent via DROP POLICY IF EXISTS.
     await sql.unsafe(`
       DO $$ DECLARE t text; p text; BEGIN
-        FOREACH t IN ARRAY ARRAY[${RLS_TABLES.map((x) => `'${x}'`).join(', ')}] LOOP
-          IF to_regclass('public.' || t) IS NULL THEN CONTINUE; END IF;
+        FOR t IN
+          SELECT c.table_name
+          FROM information_schema.columns c
+          WHERE c.table_schema = 'public'
+            AND c.column_name = 'organization_id'
+            AND c.table_name NOT IN (${RLS_EXCLUDE.map((x) => `'${x}'`).join(', ')})
+        LOOP
           p := t || '_org_isolation';
           EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
           EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', t);

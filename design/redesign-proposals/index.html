@@ -48,7 +48,8 @@
   <header class="hero reveal reveal-1">
     <span class="eyebrow">Design exploration · July 2026</span>
     <h1>Page redesign proposals</h1>
-    <p>Nine layout concepts for the three highest-traffic surfaces. All of them keep the existing
+    <p>Twenty layout concepts across eight surfaces — round 1 (home, lists, record detail:
+    shipped) and round 2 (reports, dashboards, migrate, setup, sign-in). All keep the existing
     token system — near-black brand, single indigo accent, Inter, hairline borders — and only
     rework composition, hierarchy, and density. Same seed data everywhere so comparisons are fair.</p>
     <span class="note"><svg class="i" data-icon="sun" style="width:13px;height:13px"></svg> Use the sun/moon toggle in the topbar of any mockup — every concept is themed for light and dark.</span>
@@ -127,6 +128,158 @@
         <span class="k">D3</span><span class="nm">Document view</span>
         <span class="ds">Linear-issue feel: centered 760px column, H1 title, editable meta pills, flat hover-to-edit field rows, collapsible related groups, and a sticky scrollspy nav on the left.</span>
         <span class="fix"><b>Fixes:</b> heavyweight boxed sections; reads like a document, edits inline.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- Round 2 · July 5 -->
+  <section class="grp reveal reveal-4">
+    <div class="hd"><h2>Views — one library for everything</h2><span class="cur">supersedes the separate Reports + Dashboards pages below</span></div>
+    <p class="pain">There are no dashboards or reports in this product — there are saved views (list · report · dashboard · record layout). One surface should hold all of them: browse, preview, filter, create, manage defaults.</p>
+    <div class="cards">
+      <a class="v" href="views-1-library.html">
+        <span class="k">V1</span><span class="nm">The library</span>
+        <span class="ds">Every saved view is a rich preview card in one filterable library — type-aware mini-previews (table skeletons, bar lists, widget grids, form skeletons), default stars, scope pills, owners, and a New-view menu covering all four types + AI.</span>
+        <span class="fix"><b>Fixes:</b> the artificial reports/dashboards split; carries the rich-tiles direction further.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="views-2-explorer.html">
+        <span class="k">V2</span><span class="nm">Explorer</span>
+        <span class="ds">Organized the way the data model is: an object rail (with per-object type-mix dots) beside compact type-grouped rows, each with an inline micro-preview and manage actions.</span>
+        <span class="fix"><b>Fixes:</b> view sprawl across objects; mirrors how views actually attach to objects.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="views-3-workbench.html">
+        <span class="k">V3</span><span class="nm">Workbench</span>
+        <span class="ds">Split master-detail for views: searchable grouped list on the left, a live render of the selected view on the right with Set default / Edit / Open — browse and preview without navigating.</span>
+        <span class="fix"><b>Fixes:</b> information-poor tiles; you see the actual view before opening it.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="grp reveal reveal-4">
+    <div class="hd"><h2>Reports <span style="font-weight:400;color:var(--ink-subtle)">(superseded by Views)</span></h2><span class="cur">currently: hardcoded showcase (fake forecast, mock insights) + tiny saved-report rows; builder is a form dump</span></div>
+    <p class="pain">The index's most prominent real estate is non-functional mock data, saved reports have no previews, and the builder's nine-button chart grid + select stack reads like a settings form.</p>
+    <div class="cards">
+      <a class="v" href="reports-1-live-canvas.html">
+        <span class="k">R1</span><span class="nm">Live canvas</span>
+        <span class="ds">Everything real: a slim ask bar, saved reports as preview cards (mini bar lists + sparklines, summary line, freshness), and an AI-insights strip that's labelled as generated and grounded in actual pipeline numbers.</span>
+        <span class="fix"><b>Fixes:</b> the mock-data showcase; reports you can recognize at a glance.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="reports-2-builder-studio.html">
+        <span class="k">R2</span><span class="nm">Builder studio</span>
+        <span class="ds">Preview-forward studio: a flat grouped config rail (Data → Summarize → Refine → Present) beside a large canvas with an editable title, a query-sentence strip, the live chart + result table, and a persistent save bar.</span>
+        <span class="fix"><b>Fixes:</b> the form-dump builder; the preview becomes the workspace.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="grp reveal reveal-4">
+    <div class="hd"><h2>Dashboards <span style="font-weight:400;color:var(--ink-subtle)">(superseded by Views)</span></h2><span class="cur">currently: icon + name + scope tiles — nothing about what's inside</span></div>
+    <p class="pain">Tiles are information-poor placeholder cards, and creation is prompt-only with no visible manual path or templates.</p>
+    <div class="cards">
+      <a class="v" href="dashboards-1-rich-tiles.html">
+        <span class="k">B1</span><span class="nm">Rich tiles</span>
+        <span class="ds">Tiles carry a mini live preview (metric pair + tiny chart), widget count, scope, freshness, and owner — plus a template row and a split "New with AI / Browse templates" entry.</span>
+        <span class="fix"><b>Fixes:</b> indistinguishable tiles; adds a non-AI creation path.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="dashboards-2-gallery-hero.html">
+        <span class="k">B2</span><span class="nm">Gallery hero</span>
+        <span class="ds">The default dashboard renders as a scaled-down live hero up top; everything else collapses to compact list rows, with an AI-suggestions rail feeding the composer.</span>
+        <span class="fix"><b>Fixes:</b> the empty-scaffold feel; one dashboard is always worth looking at.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="grp reveal reveal-4">
+    <div class="hd"><h2>Migrate</h2><span class="cur">currently: flat connect card, one aggregate progress bar, mapping hidden in collapsed accordions</span></div>
+    <p class="pain">For the hero feature, the run screen shows no per-object momentum or live activity, and the auto-mapping magic (confidence scores exist in the data!) is invisible unless you dig.</p>
+    <div class="cards">
+      <a class="v" href="migrate-1-mission-control.html">
+        <span class="k">M1</span><span class="nm">Mission control</span>
+        <span class="ds">A live ops view: stepper (Connect → Discover → Map → Import → Verify), stat band, per-object progress lanes with counts and status, and a streaming mono activity log.</span>
+        <span class="fix"><b>Fixes:</b> the single flat progress bar; momentum you can watch.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="migrate-2-mapping-review.html">
+        <span class="k">M2</span><span class="nm">Confidence lens</span>
+        <span class="ds">Mapping as the star: an object rail with mapped/review/skip meters, filter chips, and a table with populated bars, tiered confidence meters, and 3-state Map/Review/Skip controls per field.</span>
+        <span class="fix"><b>Fixes:</b> invisible auto-mapping; surfaces the confidence data that already exists.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="migrate-3-arrival.html">
+        <span class="k">M3</span><span class="nm">The arrival · rev 2</span>
+        <span class="ds">The connect moment explains the real pipeline (describe → map → build tables → paged import → link &amp; compute) as a step strip; completion is a sync-report dashboard — six instrument cards with counts, progress bars, timings — plus an honest "what didn't come across" block.</span>
+        <span class="fix"><b>Fixes:</b> marketing fluff; the ceremony is backed by an audit trail. ★ Picked, revised per feedback.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="grp reveal reveal-4">
+    <div class="hd"><h2>Setup</h2><span class="cur">currently: monochrome nav with gray-fill active state, headerless pages, sparse 5-column object table</span></div>
+    <p class="pain">The section feels like a flat settings list: no page titles, no accent on the active nav item, and tables with no search/counts that won't scale past a handful of objects.</p>
+    <div class="cards">
+      <a class="v" href="setup-1-console.html">
+        <span class="k">S1</span><span class="nm">Console</span>
+        <span class="ds">A proper admin console: accent-railed nav, page-header blocks with descriptions and actions, and an object manager with search, Standard/Custom filter chips, and field/record counts per row.</span>
+        <span class="fix"><b>Fixes:</b> the headerless drift; tables that scale.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="setup-2-object-hero.html">
+        <span class="k">S2</span><span class="nm">Object hero</span>
+        <span class="ds">Object detail opens with an identity hero (chip, mono api name, description, field/record/type stats) over count-badged tabs and a searchable, type-filterable fields table.</span>
+        <span class="fix"><b>Fixes:</b> detail pages that open cold into a tab strip.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="grp reveal reveal-4">
+    <div class="hd"><h2>Roles &amp; permissions</h2><span class="cur">currently: two save models on one screen, opacity-only inheritance cues, seed-locked toggles that look editable, members invisible</span></div>
+    <p class="pain">The two-pane editor works but can't be trusted at a glance: batched Save beside instant-save checkboxes, inherited cells at 60% opacity, system grants that silently can't be revoked, and no way to see who holds a role.</p>
+    <div class="cards">
+      <a class="v" href="roles-1-studio.html">
+        <span class="k">P1</span><span class="nm">Role studio</span>
+        <span class="ds">The two-pane made trustworthy: one visible save model with dirty markers, members managed in context ("delete requires zero members — move them here"), explicit Inherits/Override chips on the object grid, and AI tools as a section of the role itself.</span>
+        <span class="fix"><b>Fixes:</b> all five audit findings in one coherent surface.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="roles-2-matrix.html">
+        <span class="k">P2</span><span class="nm">Access matrix</span>
+        <span class="ds">Roles as columns, permissions as rows — "who can do X" in one glance. Legend-backed cell states (granted / not / seed-locked), CRUD letter clusters per object, instant saves declared in the footer with an audit-log link.</span>
+        <span class="fix"><b>Fixes:</b> auditability; makes seed-granted immutability honest with lock glyphs.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="roles-3-personas.html">
+        <span class="k">P3</span><span class="nm">Personas</span>
+        <span class="ds">Roles as people first: cards with member avatars and capability meters, a focused drill-in editor, and a "Preview the workspace as this role" simulation affordance.</span>
+        <span class="fix"><b>Fixes:</b> the invisible-members problem; adds role simulation.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="grp reveal reveal-4">
+    <div class="hd"><h2>Sign-in &amp; onboarding</h2><span class="cur">currently: one generic 400px card on a flat background</span></div>
+    <p class="pain">Clean but unbranded — nothing signals Northbeam beyond a small wordmark, and the magic-link success state is plain text with no resend affordance.</p>
+    <div class="cards">
+      <a class="v" href="auth-1-split-panel.html">
+        <span class="k">A1</span><span class="nm">Split panel</span>
+        <span class="ds">A near-black brand panel — beam monogram, "The CRM that migrates itself", an animated accent beam — beside a focused magic-link form. Flips elegantly in dark mode.</span>
+        <span class="fix"><b>Fixes:</b> the unbranded first impression.</span>
+        <span class="open">Open mockup →</span>
+      </a>
+      <a class="v" href="auth-2-beam-minimal.html">
+        <span class="k">A2</span><span class="nm">Beam minimal</span>
+        <span class="ds">Centered but considered: dot-grid texture, gradient monogram tile, soft-shadow card — with the "check your inbox" state designed properly (expiry, resend countdown, change email).</span>
+        <span class="fix"><b>Fixes:</b> the afterthought success state.</span>
         <span class="open">Open mockup →</span>
       </a>
     </div>

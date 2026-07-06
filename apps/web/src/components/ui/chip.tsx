@@ -12,7 +12,12 @@ const chipVariants = cva(
   {
     variants: {
       selected: {
-        true: 'border-accent text-accent ring-1 ring-accent hover:bg-accent/5',
+        // NOTE: Tailwind's `accent` utilities resolve to the light-gray
+        // shadcn surface token, NOT the indigo accent — the chromatic accent
+        // lives in the CSS vars (--accent / --accent-soft / --accent-ring).
+        // Same soft-fill treatment as the list page's filter chips, legible
+        // in both themes.
+        true: 'border-[var(--accent-ring)] bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-soft)]',
         false: '',
       },
     },

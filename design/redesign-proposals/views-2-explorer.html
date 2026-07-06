@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Views · Explorer — Northbeam redesign V2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 1120px; }
+
+  .head { display: flex; align-items: center; gap: var(--sp-3); padding-top: var(--sp-2); }
+  .head h1 { margin: 0; font-size: var(--text-xl); font-weight: var(--fw-semibold); letter-spacing: -0.02em; }
+  .head .count { font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .head .btn { margin-left: auto; }
+
+  .wrap { margin-top: var(--sp-6); display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--sp-10); align-items: start; }
+
+  /* Type icon tiles + dots — the type system */
+  .ticon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--radius-md); flex: none; }
+  .ticon svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .ticon.list { background: var(--surface-sunken); border: 1px solid var(--border); color: var(--ink-muted); }
+  .ticon.report { background: var(--info-bg); color: var(--info); }
+  .ticon.dashboard { background: var(--success-bg); color: var(--success); }
+  .ticon.layout { background: var(--warning-bg); color: var(--warning); }
+  .dots { display: flex; gap: 3px; align-items: center; }
+  .dot { width: 4px; height: 4px; border-radius: 999px; }
+  .dot.list { background: var(--ink-subtle); }
+  .dot.report { background: var(--info); }
+  .dot.dashboard { background: var(--success); }
+  .dot.layout { background: var(--warning); }
+  .star { width: 11px; height: 11px; color: var(--accent); flex: none; }
+  .star, .star * { fill: currentColor; stroke: currentColor; stroke-width: 1; }
+
+  /* Left rail */
+  .rail .grp { margin-bottom: var(--sp-6); }
+  .rail .eyebrow { display: block; padding: 0 10px 8px; }
+  .obj { position: relative; display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px 10px; border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: var(--fw-medium); color: var(--ink-secondary); text-align: left; transition: background 0.12s var(--ease); }
+  .obj:hover { background: var(--surface-hover); color: var(--ink); }
+  .obj.on { background: var(--accent-soft); color: var(--ink); box-shadow: inset 2px 0 0 var(--accent); }
+  .obj .oc { width: 20px; height: 20px; font-size: 10px; border-radius: var(--radius-md); }
+  .obj .cnt { margin-left: auto; font-size: var(--text-xs); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .obj .ticon { width: 20px; height: 20px; border-radius: var(--radius-md); }
+  .obj .ticon svg { width: 11px; height: 11px; }
+
+  /* Right pane */
+  .rh { display: flex; align-items: center; gap: 10px; }
+  .rh h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+  .rh .count { font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .rh .btn { margin-left: auto; }
+  .sec { margin-top: var(--sp-6); }
+  .se { display: flex; align-items: baseline; gap: 7px; padding-bottom: var(--sp-2); border-bottom: 1px solid var(--border); }
+  .se .n { font-size: var(--text-xs); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+
+  .vr { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr) 120px 92px 52px; gap: var(--sp-4); align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--divider); transition: background 0.12s var(--ease); }
+  .vr:hover, .vr.hover { background: var(--surface-hover); }
+  .vr .bd { min-width: 0; }
+  .vr .nm { display: flex; align-items: center; gap: 6px; font-size: var(--text-base); font-weight: var(--fw-medium); color: var(--ink); white-space: nowrap; overflow: hidden; }
+  .vr .sum { margin-top: 1px; font-size: var(--text-xs); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vr .upd { font-size: var(--text-xs); color: var(--ink-subtle); text-align: right; font-variant-numeric: tabular-nums; }
+  .vr .pill { justify-self: start; }
+  .acts { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 2px; padding: 3px 4px; border-radius: var(--radius-md); background: var(--surface-hover); opacity: 0; transition: opacity 0.15s var(--ease); }
+  .vr:hover .acts, .vr.hover .acts { opacity: 1; }
+  .qb { display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-sm); color: var(--ink-muted); }
+  .qb:hover { background: var(--surface-active); color: var(--ink); }
+  .qb svg { width: 12px; height: 12px; }
+  .setdef { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; margin-right: 4px; border: 1px solid var(--border-field); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-btn); font-size: var(--text-xs); font-weight: var(--fw-medium); color: var(--ink-secondary); white-space: nowrap; }
+  .setdef:hover { background: var(--surface-hover); color: var(--ink); }
+  .setdef svg { width: 11px; height: 11px; color: var(--ink-muted); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* 120px micro previews per type */
+  .mprev { width: 120px; height: 44px; padding: 5px 7px; border: 1px solid var(--divider); border-radius: var(--radius-sm); background: var(--surface-sunken); overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
+  .mp-list .ln { display: flex; justify-content: space-between; align-items: center; padding: 3.5px 0; border-bottom: 1px solid var(--divider); }
+  .mp-list .ln:last-child { border-bottom: 0; }
+  .mp-list i { display: block; height: 3px; border-radius: 2px; background: var(--border-strong); }
+  .mp-bars { gap: 4px; }
+  .mp-bars .tr { height: 5px; border-radius: 2px; background: var(--accent-soft); overflow: hidden; }
+  .mp-bars .tr + .tr { margin-top: 4px; }
+  .mp-bars i { display: block; height: 100%; border-radius: 2px; background: var(--accent); opacity: 0.75; }
+  .mp-spark { color: var(--accent); align-items: center; }
+  .mp-dash { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+  .mp-dash .c { display: flex; flex-direction: column; justify-content: center; padding: 1px 5px; background: var(--surface); border: 1px solid var(--divider); border-radius: 3px; min-height: 15px; }
+  .mp-dash .v { font-size: 8px; font-weight: var(--fw-semibold); line-height: 1.3; font-variant-numeric: tabular-nums; }
+  .mp-dash .spark { color: var(--accent); }
+  .mp-dash .bars i { display: block; height: 3px; border-radius: 2px; background: var(--accent); opacity: 0.6; }
+  .mp-dash .bars i + i { margin-top: 2px; }
+  .mp-form .fh { display: flex; align-items: center; gap: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--divider); }
+  .mp-form .fh .c { width: 9px; height: 9px; border-radius: 3px; background: linear-gradient(135deg, var(--brand), var(--ink-secondary)); }
+  .mp-form .fh i { display: block; width: 44px; height: 3px; border-radius: 2px; background: var(--border-strong); }
+  .mp-form .fp { display: flex; gap: 6px; align-items: center; padding: 4px 0 0; }
+  .mp-form .fp i { display: block; height: 3px; border-radius: 2px; }
+  .mp-form .fp .k { width: 22px; background: var(--ink-disabled); opacity: 0.5; }
+  .mp-form .fp .w { width: 62px; background: var(--border-strong); }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+  NB_ICONS.star = '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>';
+  NB_ICONS.rows = '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M21 9H3"/><path d="M21 15H3"/>';
+  NB_ICONS.chart = '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>';
+  NB_ICONS.dash = '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>';
+  NB_ICONS.layout = '<rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/>';
+  nbTopbar('Home');
+</script>
+
+<main class="page">
+  <div class="head reveal reveal-1">
+    <h1>Views</h1>
+    <span class="count">18 across 5 objects</span>
+    <button class="btn primary"><svg class="i" data-icon="plus"></svg> New view</button>
+  </div>
+
+  <div class="wrap">
+    <!-- Left rail: workspace + objects -->
+    <nav class="rail reveal reveal-2">
+      <div class="grp">
+        <span class="eyebrow">Workspace</span>
+        <button class="obj"><span class="ticon dashboard"><svg data-icon="dash"></svg></span> Home <svg class="star" data-icon="star" style="margin-left:2px"></svg><span class="cnt">1</span></button>
+      </div>
+      <div class="grp">
+        <span class="eyebrow">Objects</span>
+        <button class="obj on"><span class="obj-chip oc">D</span> Deal <span class="dots"><span class="dot list"></span><span class="dot report"></span><span class="dot dashboard"></span><span class="dot layout"></span></span><span class="cnt">9</span></button>
+        <button class="obj"><span class="obj-chip oc">A</span> Activity <span class="dots"><span class="dot list"></span><span class="dot report"></span></span><span class="cnt">4</span></button>
+        <button class="obj"><span class="obj-chip oc">A</span> Account <span class="dots"><span class="dot list"></span><span class="dot dashboard"></span><span class="dot layout"></span></span><span class="cnt">3</span></button>
+        <button class="obj"><span class="obj-chip oc">C</span> Contact <span class="dots"><span class="dot list"></span></span><span class="cnt">1</span></button>
+        <button class="obj"><span class="obj-chip oc">P</span> Property <span class="dots"></span><span class="cnt">0</span></button>
+      </div>
+    </nav>
+
+    <!-- Right: Deal views grouped by type -->
+    <section class="reveal reveal-3">
+      <div class="rh">
+        <h2>Deal views</h2>
+        <span class="count">9</span>
+        <button class="btn outline"><svg class="i" data-icon="plus"></svg> New Deal view</button>
+      </div>
+
+      <div class="sec">
+        <div class="se"><span class="eyebrow">Lists</span><span class="n">4</span></div>
+        <a class="vr" href="#">
+          <span class="ticon list"><svg data-icon="rows"></svg></span>
+          <span class="bd"><span class="nm">All open <svg class="star" data-icon="star"></svg></span><span class="sum">4 filters · sorted by Close date</span></span>
+          <span class="mprev mp-list"><span class="ln"><i style="width:52px"></i><i style="width:22px"></i></span><span class="ln"><i style="width:44px"></i><i style="width:18px"></i></span><span class="ln"><i style="width:58px"></i><i style="width:26px"></i></span></span>
+          <span class="pill info plain">Workspace</span>
+          <span class="upd">2h ago</span>
+          <span class="acts"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></span>
+        </a>
+        <a class="vr hover" href="#">
+          <span class="ticon list"><svg data-icon="rows"></svg></span>
+          <span class="bd"><span class="nm">My deals</span><span class="sum">3 filters · sorted by Amount</span></span>
+          <span class="mprev mp-list"><span class="ln"><i style="width:48px"></i><i style="width:20px"></i></span><span class="ln"><i style="width:56px"></i><i style="width:16px"></i></span><span class="ln"><i style="width:40px"></i><i style="width:24px"></i></span></span>
+          <span class="pill neutral plain">Personal</span>
+          <span class="upd">5h ago</span>
+          <span class="acts"><span class="setdef"><svg data-icon="star"></svg> Set as default</span><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></span>
+        </a>
+        <a class="vr" href="#">
+          <span class="ticon list"><svg data-icon="rows"></svg></span>
+          <span class="bd"><span class="nm">Closing this month</span><span class="sum">2 filters · sorted by Close date</span></span>
+          <span class="mprev mp-list"><span class="ln"><i style="width:56px"></i><i style="width:18px"></i></span><span class="ln"><i style="width:42px"></i><i style="width:24px"></i></span><span class="ln"><i style="width:50px"></i><i style="width:20px"></i></span></span>
+          <span class="pill info plain">Workspace</span>
+          <span class="upd">1d ago</span>
+          <span class="acts"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></span>
+        </a>
+        <a class="vr" href="#">
+          <span class="ticon list"><svg data-icon="rows"></svg></span>
+          <span class="bd"><span class="nm">Won · Q2</span><span class="sum">3 filters · grouped by Owner</span></span>
+          <span class="mprev mp-list"><span class="ln"><i style="width:46px"></i><i style="width:22px"></i></span><span class="ln"><i style="width:54px"></i><i style="width:16px"></i></span><span class="ln"><i style="width:38px"></i><i style="width:26px"></i></span></span>
+          <span class="pill info plain">Workspace</span>
+          <span class="upd">3d ago</span>
+          <span class="acts"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></span>
+        </a>
+      </div>
+
+      <div class="sec">
+        <div class="se"><span class="eyebrow">Reports</span><span class="n">3</span></div>
+        <a class="vr" href="#">
+          <span class="ticon report"><svg data-icon="chart"></svg></span>
+          <span class="bd"><span class="nm">Pipeline by stage</span><span class="sum">Sum of Amount by Stage</span></span>
+          <span class="mprev mp-bars"><span class="tr"><i style="width:100%"></i></span><span class="tr"><i style="width:93%"></i></span><span class="tr"><i style="width:87%"></i></span><span class="tr"><i style="width:82%"></i></span></span>
+          <span class="pill info plain">Workspace</span>
+          <span class="upd">2d ago</span>
+          <span class="acts"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></span>
+        </a>
+        <a class="vr" href="#">
+          <span class="ticon report"><svg data-icon="chart"></svg></span>
+          <span class="bd"><span class="nm">Revenue trend</span><span class="sum">Sum of Amount by Close date · month</span></span>
+          <span class="mprev mp-spark"><svg class="spark" data-points="210,246,238,292,315,301,348,396,382,441,470,455,512,548" data-w="104" data-h="30" data-fill></svg></span>
+          <span class="pill info plain">Workspace</span>
+          <span class="upd">5h ago</span>
+          <span class="acts"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></span>
+        </a>
+        <a class="vr" href="#">
+          <span class="ticon report"><svg data-icon="chart"></svg></span>
+          <span class="bd"><span class="nm">Win rate by owner</span><span class="sum">Won ÷ Closed by Owner</span></span>
+          <span class="mprev mp-bars"><span class="tr"><i style="width:84%"></i></span><span class="tr"><i style="width:70%"></i></span><span class="tr"><i style="width:56%"></i></span><span class="tr"><i style="width:44%"></i></span></span>
+          <span class="pill warning plain">Role</span>
+          <span class="upd">4d ago</span>
+          <span class="acts"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></span>
+        </a>
+      </div>
+
+      <div class="sec">
+        <div class="se"><span class="eyebrow">Dashboards</span><span class="n">1</span></div>
+        <a class="vr" href="#">
+          <span class="ticon dashboard"><svg data-icon="dash"></svg></span>
+          <span class="bd"><span class="nm">Pipeline overview</span><span class="sum">6 widgets · shared with workspace</span></span>
+          <span class="mprev mp-dash"><span class="c"><span class="v">$4.0M</span></span><span class="c"><span class="v">48</span></span><span class="c"><svg class="spark" data-points="30,34,33,38,41,44,47,52" data-w="44" data-h="10"></svg></span><span class="c bars"><i style="width:90%"></i><i style="width:62%"></i></span></span>
+          <span class="pill info plain">Workspace</span>
+          <span class="upd">2d ago</span>
+          <span class="acts"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></span>
+        </a>
+      </div>
+
+      <div class="sec">
+        <div class="se"><span class="eyebrow">Layouts</span><span class="n">1</span></div>
+        <a class="vr" href="#">
+          <span class="ticon layout"><svg data-icon="layout"></svg></span>
+          <span class="bd"><span class="nm">Deal detail <svg class="star" data-icon="star"></svg></span><span class="sum">Record page · 3 sections · 14 fields</span></span>
+          <span class="mprev mp-form"><span class="fh"><span class="c"></span><i></i></span><span class="fp"><i class="k"></i><i class="w"></i></span><span class="fp"><i class="k"></i><i class="w" style="width:48px"></i></span></span>
+          <span class="pill info plain">Workspace</span>
+          <span class="upd">2w ago</span>
+          <span class="acts"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></span>
+        </a>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>nbBadge('V2', 'Explorer');</script>
+</body>
+</html>

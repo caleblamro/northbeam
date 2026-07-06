@@ -73,24 +73,41 @@ function bindValue(field: FieldRow, value: unknown): SQL {
 
 const col = (name: string): SQL => sql.raw(qid(name));
 
-/** Row-visibility predicate for private objects — the caller owns the row, has
- *  an explicit share, or is admin+ (in which case no predicate applies). Public
- *  objects and missing ACLs also yield null (no restriction). Shared between
- *  listRecords and aggregateRecords so report visibility ≡ list visibility. */
-export function aclPredicate(
-  object: ObjectRow,
-  acl?: { userId: string; sharedRecordIds: string[]; isAdminish: boolean },
-): SQL | null {
-  if (!acl || object.defaultVisibility !== 'private' || acl.isAdminish) return null;
-  const visParts: SQL[] = [sql`${col(SYS.ownerId)} = ${acl.userId}`];
-  if (acl.sharedRecordIds.length > 0) {
-    const ids = sql.join(
-      acl.sharedRecordIds.map((id) => sql`${id}::uuid`),
-      sql`, `,
-    );
-    visParts.push(sql`${col(SYS.id)} in (${ids})`);
+/** ACL row predicate, combining two AND-ed axes:
+ *   1. Role criteria (row-level permission scope) — `acl.criteria`, a
+ *      precompiled predicate. Applies ALWAYS, even to recordAdmin, because it
+ *      defines the role's window onto the object.
+ *   2. Ownership/share visibility — only for private objects with a non-admin
+ *      caller (owner OR explicit share). recordAdmin/public skip this axis.
+ *  Null when neither axis restricts. Shared by listRecords / countRecords /
+ *  sumField / aggregate / query so scope ≡ everywhere. */
+export type RecordAcl = {
+  userId: string;
+  sharedRecordIds: string[];
+  isAdminish: boolean;
+  /** Precompiled role-criteria predicate (built by RecordAccess). */
+  criteria?: SQL | null;
+};
+
+export function aclPredicate(object: ObjectRow, acl?: RecordAcl): SQL | null {
+  if (!acl) return null;
+  const parts: SQL[] = [];
+  if (acl.criteria) parts.push(acl.criteria);
+  if (object.defaultVisibility === 'private' && !acl.isAdminish) {
+    const visParts: SQL[] = [sql`${col(SYS.ownerId)} = ${acl.userId}`];
+    if (acl.sharedRecordIds.length > 0) {
+      const ids = sql.join(
+        acl.sharedRecordIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      );
+      visParts.push(sql`${col(SYS.id)} in (${ids})`);
+    }
+    parts.push(sql`(${sql.join(visParts, sql` or `)})`);
   }
-  return sql`(${sql.join(visParts, sql` or `)})`;
+  if (parts.length === 0) return null;
+  // Single axis: return it unwrapped (keeps the historical shape); combine
+  // multiple axes with AND.
+  return parts.length === 1 ? (parts[0] ?? null) : sql`(${sql.join(parts, sql` and `)})`;
 }
 
 /** Case-insensitive substring search over every text-backed column plus the
@@ -128,7 +145,7 @@ export async function listRecords(
      *  rows are restricted to ones the caller owns, has been explicitly shared
      *  (via recordShare), or any row if the caller is admin+. Public objects
      *  ignore this filter. */
-    acl?: { userId: string; sharedRecordIds: string[]; isAdminish: boolean };
+    acl?: RecordAcl;
   },
 ): Promise<RecordRow[]> {
   const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
@@ -162,11 +179,16 @@ export async function getRecord(
      *  caller isn't admin+ / owner / explicitly shared, the function returns
      *  null (treated as "not found" so we don't leak existence). */
     acl?: { userId: string; isAdminish: boolean; hasShare: boolean };
+    /** Role-criteria predicate (row-level scope). Folded into the WHERE so a
+     *  record outside the role's scope reads as not-found — applies even to
+     *  recordAdmin, matching aclPredicate. */
+    criteria?: SQL | null;
   },
 ): Promise<RecordRow | null> {
   const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
+  const crit = opts.criteria ? sql` and ${opts.criteria}` : sql``;
   const res = await db.execute(
-    sql`select * from ${tbl} where ${col(SYS.id)} = ${opts.id}::uuid limit 1`,
+    sql`select * from ${tbl} where ${col(SYS.id)} = ${opts.id}::uuid${crit} limit 1`,
   );
   const row = asRows(res)[0];
   if (!row) return null;
@@ -183,13 +205,21 @@ export async function getRecord(
   return record;
 }
 
-/** count(*) on the object's table — used by home/dashboard summary panels. */
+/** count(*) on the object's table — used by home/dashboard summary panels.
+ *  Pass `acl` (same shape as listRecords) so private objects only count rows
+ *  the caller can see. */
 export async function countRecords(
   db: DbExecutor,
-  opts: { orgId: string; object: ObjectRow },
+  opts: {
+    orgId: string;
+    object: ObjectRow;
+    acl?: RecordAcl;
+  },
 ): Promise<number> {
   const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
-  const res = await db.execute(sql`select count(*)::int as n from ${tbl}`);
+  const vis = aclPredicate(opts.object, opts.acl);
+  const where = vis ? sql`where ${vis}` : sql``;
+  const res = await db.execute(sql`select count(*)::int as n from ${tbl} ${where}`);
   const row = asRows(res)[0];
   return Number((row?.n as number | undefined) ?? 0);
 }
@@ -232,11 +262,15 @@ export async function sumField(
     field: FieldRow;
     whereField?: FieldRow;
     whereIn?: string[];
+    /** Same ACL gate as listRecords — private objects only sum visible rows. */
+    acl?: RecordAcl;
   },
 ): Promise<number> {
   const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
   const valCol = col(opts.field.columnName);
-  let where = sql``;
+  const clauses: SQL[] = [];
+  const vis = aclPredicate(opts.object, opts.acl);
+  if (vis) clauses.push(vis);
   if (opts.whereField && opts.whereIn && opts.whereIn.length > 0) {
     const wCol = col(opts.whereField.columnName);
     // Use IN (...) with explicit param-per-value joining — passing the JS
@@ -246,8 +280,9 @@ export async function sumField(
       opts.whereIn.map((v) => sql`${v}`),
       sql`, `,
     );
-    where = sql`where ${wCol} in (${values})`;
+    clauses.push(sql`${wCol} in (${values})`);
   }
+  const where = clauses.length ? sql`where ${sql.join(clauses, sql` and `)}` : sql``;
   const res = await db.execute(
     sql`select coalesce(sum(${valCol}), 0)::numeric as s from ${tbl} ${where}`,
   );
@@ -333,6 +368,22 @@ export async function updateRecord(
   );
   const row = asRows(res)[0];
   return row ? rowToRecord(fields, row) : null;
+}
+
+/** Repoints the owner_id system column (`null` clears ownership). Kept apart
+ *  from updateRecord, which deliberately never touches system columns — the
+ *  automation assign_owner executor is the intended caller. Membership of the
+ *  new owner is the caller's check; this only guards the row's existence. */
+export async function updateRecordOwner(
+  db: DbExecutor,
+  opts: { orgId: string; object: ObjectRow; id: string; ownerId: string | null },
+): Promise<boolean> {
+  const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
+  const owner = opts.ownerId === null ? sql`null` : sql`${opts.ownerId}`;
+  const res = await db.execute(
+    sql`update ${tbl} set ${col(SYS.ownerId)} = ${owner}, ${col(SYS.updatedAt)} = now() where ${col(SYS.id)} = ${opts.id}::uuid returning ${col(SYS.id)}`,
+  );
+  return asRows(res).length > 0;
 }
 
 export async function deleteRecord(
@@ -447,14 +498,22 @@ export async function listChildrenByRef(
   return asRows(res).map((r) => rowToRecord(opts.fields, r));
 }
 
-/** Records on OTHER objects that reference this record (reverse lookups). */
+/** Records on OTHER objects that reference this record (reverse lookups).
+ *  `rowPredicate` (from RecordAccess) returns a per-child SQL predicate — the
+ *  role's ACL + row-criteria scope — AND-ed into each child query so the
+ *  Related panel never surfaces records outside the caller's scope. Returning
+ *  `false` for a child object drops the whole group (no read grant). */
 export async function listRelated(
   db: DbExecutor,
   orgId: string,
   parentObjectKey: string,
   recordId: string,
-  perGroup = 6,
+  opts?: {
+    perGroup?: number;
+    rowPredicate?: (object: ObjectRow, fields: FieldRow[]) => SQL | false | null;
+  },
 ): Promise<RelatedGroup[]> {
+  const perGroup = opts?.perGroup ?? 6;
   const refFields = await db
     .select()
     .from(fieldDef)
@@ -466,9 +525,12 @@ export async function listRelated(
   for (const via of pointers) {
     const target = await getObjectById(db, orgId, via.objectId);
     if (!target) continue;
+    const pred = opts?.rowPredicate?.(target.object, target.fields);
+    if (pred === false) continue; // caller can't read this object — drop the group
+    const scope = pred ? sql` and ${pred}` : sql``;
     const tbl = sql.raw(qualified(orgId, target.object.tableName));
     const res = await db.execute(
-      sql`select * from ${tbl} where ${col(via.columnName)} = ${recordId}::uuid order by ${col(SYS.createdAt)} desc limit ${perGroup}`,
+      sql`select * from ${tbl} where ${col(via.columnName)} = ${recordId}::uuid${scope} order by ${col(SYS.createdAt)} desc limit ${perGroup}`,
     );
     const rs = asRows(res).map((r) => rowToRecord(target.fields, r));
     if (rs.length) groups.push({ object: target.object, via, fields: target.fields, rows: rs });

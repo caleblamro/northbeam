@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Migrate · Confidence lens — Northbeam redesign M2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 1120px; }
+
+  /* Header */
+  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); }
+  .head .title { margin-top: var(--sp-2); display: flex; align-items: center; gap: 12px; }
+  .head h1 { margin: 0; font-size: var(--text-2xl); font-weight: var(--fw-semibold); letter-spacing: -0.02em; line-height: var(--lh-tight); font-variant-numeric: tabular-nums; }
+  .head h1 .arr { color: var(--ink-subtle); font-weight: var(--fw-regular); }
+  .head .acts { display: flex; align-items: center; gap: 8px; padding-top: var(--sp-5); }
+
+  /* Layout: rail + main */
+  .body { margin-top: var(--sp-8); display: grid; grid-template-columns: 240px 1fr; gap: var(--sp-8); align-items: start; }
+
+  /* Object rail */
+  .rail .rail-label { padding: 0 10px var(--sp-2); }
+  .obj { display: block; padding: 9px 10px; border-radius: var(--radius-lg); transition: background 0.12s var(--ease); }
+  .obj:hover { background: var(--surface-hover); }
+  .obj.on { background: var(--accent-soft); }
+  .obj .nm { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-family: var(--font-mono); font-size: var(--text-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .obj .nm .arr { color: var(--ink-subtle); }
+  .obj.on .nm { color: var(--accent); font-weight: var(--fw-medium); }
+  .obj .nm .n { font-size: var(--text-xs); color: var(--ink-subtle); }
+  .obj .meter { margin-top: 7px; display: flex; height: 3px; border-radius: 999px; overflow: hidden; background: var(--surface-active); }
+  .obj .meter .m { background: var(--accent); }
+  .obj .meter .r { background: var(--warning); }
+
+  /* Filter chips */
+  .chips { display: flex; align-items: center; gap: 8px; margin-bottom: var(--sp-3); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border-radius: var(--radius-full); border: 1px solid var(--border); font-size: var(--text-sm); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+  .chip:hover { background: var(--surface-hover); }
+  .chip.on { border-color: var(--ink); background: var(--brand); color: var(--brand-contrast); font-weight: var(--fw-medium); }
+  .chip.warn { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning); }
+
+  /* Mapping table */
+  .tbl td { padding: 11px 14px; }
+  .sf .k { font-family: var(--font-mono); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+  .sf .lbl { margin-top: 1px; font-size: var(--text-xs); color: var(--ink-subtle); }
+  td.arrow { color: var(--ink-subtle); width: 20px; padding-left: 4px; padding-right: 4px; }
+  .nb .k { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: var(--fw-medium); font-variant-numeric: tabular-nums; }
+  .nb .ty { color: var(--ink-muted); font-family: var(--font-mono); font-size: var(--text-xs); }
+  tr.review { background: var(--warning-bg); }
+  tr.review:hover { background: var(--warning-bg); }
+  tr.skipped .sf, tr.skipped td { color: var(--ink-subtle); }
+  tr.skipped .why { font-style: italic; font-size: var(--text-sm); }
+
+  .pv { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .pv .b { width: 36px; height: 3px; border-radius: 999px; background: var(--surface-active); position: relative; overflow: hidden; }
+  .pv .b i { position: absolute; inset: 0 auto 0 0; background: var(--ink-muted); border-radius: 999px; }
+  .pv .n { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-muted); font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
+
+  .cf { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .cf .b { width: 40px; height: 4px; border-radius: 999px; background: var(--surface-active); position: relative; overflow: hidden; }
+  .cf .b i { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--accent); }
+  .cf.mid .b i { opacity: 0.6; }
+  .cf.low .b i { background: var(--warning); }
+  .cf .n { font-family: var(--font-mono); font-size: var(--text-xs); font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
+  .cf.low .n { color: var(--warning); font-weight: var(--fw-medium); }
+
+  /* Segmented 3-state status */
+  .seg { display: inline-flex; height: 22px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--surface); }
+  .seg button { padding: 0 8px; font-size: var(--text-xs); color: var(--ink-subtle); border-left: 1px solid var(--border); }
+  .seg button:first-child { border-left: 0; }
+  .seg button:hover { color: var(--ink); background: var(--surface-hover); }
+  .seg button.on { background: var(--brand); color: var(--brand-contrast); font-weight: var(--fw-medium); }
+  .seg button.on.warn { background: var(--warning-bg); color: var(--warning); }
+  .seg button.on.skip { background: var(--surface-active); color: var(--ink-secondary); }
+
+  /* Footer strip */
+  .foot { margin-top: var(--sp-4); display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); padding: 12px 14px; border-top: 1px solid var(--border); font-size: var(--text-sm); }
+  .foot b { font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Home');</script>
+
+<main class="page">
+  <!-- Header -->
+  <section class="head reveal reveal-1">
+    <div>
+      <span class="eyebrow">Migration · Field mapping</span>
+      <div class="title">
+        <span class="obj-chip lg">O</span>
+        <h1>Opportunity <span class="arr">→</span> deal</h1>
+        <span class="pill neutral plain">100 of 12,480 records</span>
+      </div>
+    </div>
+    <div class="acts">
+      <button class="btn outline"><svg class="i" data-icon="zap" style="width:13px;height:13px"></svg> Re-map with AI</button>
+      <button class="btn primary"><svg class="i" data-icon="check" style="width:13px;height:13px"></svg> Looks good</button>
+    </div>
+  </section>
+
+  <div class="body">
+    <!-- Object rail -->
+    <nav class="rail reveal reveal-2">
+      <div class="eyebrow rail-label">Objects</div>
+      <a class="obj" href="#">
+        <span class="nm">Account <span class="arr">→</span> account <span class="n">18 · 2 · 1</span></span>
+        <span class="meter"><span class="m" style="width:86%"></span><span class="r" style="width:9%"></span></span>
+      </a>
+      <a class="obj" href="#">
+        <span class="nm">Contact <span class="arr">→</span> contact <span class="n">14 · 0 · 2</span></span>
+        <span class="meter"><span class="m" style="width:88%"></span></span>
+      </a>
+      <a class="obj on" href="#">
+        <span class="nm">Opportunity <span class="arr">→</span> deal <span class="n">8 · 1 · 1</span></span>
+        <span class="meter"><span class="m" style="width:80%"></span><span class="r" style="width:10%"></span></span>
+      </a>
+      <a class="obj" href="#">
+        <span class="nm">Task <span class="arr">→</span> activity <span class="n">11 · 1 · 0</span></span>
+        <span class="meter"><span class="m" style="width:92%"></span><span class="r" style="width:8%"></span></span>
+      </a>
+      <a class="obj" href="#">
+        <span class="nm">Event <span class="arr">→</span> activity <span class="n">9 · 0 · 1</span></span>
+        <span class="meter"><span class="m" style="width:90%"></span></span>
+      </a>
+    </nav>
+
+    <!-- Mapping table -->
+    <section class="reveal reveal-3">
+      <div class="chips">
+        <button class="chip on">All 10</button>
+        <button class="chip warn">Needs review 1</button>
+        <button class="chip">Skipped 1</button>
+        <button class="chip">Mapped 8</button>
+      </div>
+
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Salesforce field</th>
+            <th>Type</th>
+            <th></th>
+            <th>Northbeam field</th>
+            <th class="right">Populated</th>
+            <th class="right">Confidence</th>
+            <th class="right">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="sf"><div class="k">Name</div><div class="lbl">Opportunity Name</div></td>
+            <td><span class="pill neutral plain">string</span></td>
+            <td class="arrow">→</td>
+            <td class="nb"><span class="k">name</span> <span class="ty">(text)</span></td>
+            <td class="right"><span class="pv"><span class="b"><i style="width:100%"></i></span><span class="n">100%</span></span></td>
+            <td class="right"><span class="cf"><span class="b"><i style="width:100%"></i></span><span class="n">100%</span></span></td>
+            <td class="right"><span class="seg"><button class="on">Map</button><button>Review</button><button>Skip</button></span></td>
+          </tr>
+          <tr>
+            <td class="sf"><div class="k">StageName</div><div class="lbl">Stage</div></td>
+            <td><span class="pill neutral plain">picklist</span></td>
+            <td class="arrow">→</td>
+            <td class="nb"><span class="k">stage</span> <span class="ty">(picklist)</span></td>
+            <td class="right"><span class="pv"><span class="b"><i style="width:100%"></i></span><span class="n">100%</span></span></td>
+            <td class="right"><span class="cf"><span class="b"><i style="width:98%"></i></span><span class="n">98%</span></span></td>
+            <td class="right"><span class="seg"><button class="on">Map</button><button>Review</button><button>Skip</button></span></td>
+          </tr>
+          <tr>
+            <td class="sf"><div class="k">Amount</div><div class="lbl">Amount</div></td>
+            <td><span class="pill neutral plain">currency</span></td>
+            <td class="arrow">→</td>
+            <td class="nb"><span class="k">amount</span> <span class="ty">(currency)</span></td>
+            <td class="right"><span class="pv"><span class="b"><i style="width:96%"></i></span><span class="n">96%</span></span></td>
+            <td class="right"><span class="cf"><span class="b"><i style="width:100%"></i></span><span class="n">100%</span></span></td>
+            <td class="right"><span class="seg"><button class="on">Map</button><button>Review</button><button>Skip</button></span></td>
+          </tr>
+          <tr>
+            <td class="sf"><div class="k">CloseDate</div><div class="lbl">Close Date</div></td>
+            <td><span class="pill neutral plain">date</span></td>
+            <td class="arrow">→</td>
+            <td class="nb"><span class="k">close_date</span> <span class="ty">(date)</span></td>
+            <td class="right"><span class="pv"><span class="b"><i style="width:100%"></i></span><span class="n">100%</span></span></td>
+            <td class="right"><span class="cf"><span class="b"><i style="width:100%"></i></span><span class="n">100%</span></span></td>
+            <td class="right"><span class="seg"><button class="on">Map</button><button>Review</button><button>Skip</button></span></td>
+          </tr>
+          <tr>
+            <td class="sf"><div class="k">AccountId</div><div class="lbl">Account ID</div></td>
+            <td><span class="pill neutral plain">reference</span></td>
+            <td class="arrow">→</td>
+            <td class="nb"><span class="k">account</span> <span class="ty">(reference)</span></td>
+            <td class="right"><span class="pv"><span class="b"><i style="width:98%"></i></span><span class="n">98%</span></span></td>
+            <td class="right"><span class="cf"><span class="b"><i style="width:95%"></i></span><span class="n">95%</span></span></td>
+            <td class="right"><span class="seg"><button class="on">Map</button><button>Review</button><button>Skip</button></span></td>
+          </tr>
+          <tr class="review">
+            <td class="sf"><div class="k">NextStep</div><div class="lbl">Next Step</div></td>
+            <td><span class="pill neutral plain">string</span></td>
+            <td class="arrow">→</td>
+            <td class="nb"><span class="k">next_step</span> <span class="ty">(text)</span></td>
+            <td class="right"><span class="pv"><span class="b"><i style="width:41%"></i></span><span class="n">41%</span></span></td>
+            <td class="right"><span class="cf low"><span class="b"><i style="width:62%"></i></span><span class="n">62%</span></span></td>
+            <td class="right"><span class="seg"><button>Map</button><button class="on warn">Review</button><button>Skip</button></span></td>
+          </tr>
+          <tr>
+            <td class="sf"><div class="k">Description</div><div class="lbl">Description</div></td>
+            <td><span class="pill neutral plain">textarea</span></td>
+            <td class="arrow">→</td>
+            <td class="nb"><span class="k">description</span> <span class="ty">(textarea)</span></td>
+            <td class="right"><span class="pv"><span class="b"><i style="width:63%"></i></span><span class="n">63%</span></span></td>
+            <td class="right"><span class="cf mid"><span class="b"><i style="width:88%"></i></span><span class="n">88%</span></span></td>
+            <td class="right"><span class="seg"><button class="on">Map</button><button>Review</button><button>Skip</button></span></td>
+          </tr>
+          <tr class="skipped">
+            <td class="sf"><div class="k">IsClosed</div><div class="lbl">Closed</div></td>
+            <td><span class="pill neutral plain">boolean</span></td>
+            <td class="arrow">→</td>
+            <td class="why">skipped — derived from stage</td>
+            <td class="right mono" style="font-size:var(--text-xs)">—</td>
+            <td class="right mono" style="font-size:var(--text-xs)">—</td>
+            <td class="right"><span class="seg"><button>Map</button><button>Review</button><button class="on skip">Skip</button></span></td>
+          </tr>
+          <tr>
+            <td class="sf"><div class="k">Probability</div><div class="lbl">Probability (%)</div></td>
+            <td><span class="pill neutral plain">percent</span></td>
+            <td class="arrow">→</td>
+            <td class="nb"><span class="k">probability</span> <span class="ty">(percent)</span></td>
+            <td class="right"><span class="pv"><span class="b"><i style="width:89%"></i></span><span class="n">89%</span></span></td>
+            <td class="right"><span class="cf"><span class="b"><i style="width:92%"></i></span><span class="n">92%</span></span></td>
+            <td class="right"><span class="seg"><button class="on">Map</button><button>Review</button><button>Skip</button></span></td>
+          </tr>
+          <tr>
+            <td class="sf"><div class="k">Type</div><div class="lbl">Opportunity Type</div></td>
+            <td><span class="pill neutral plain">picklist</span></td>
+            <td class="arrow">→</td>
+            <td class="nb"><span class="k">type</span> <span class="ty">(picklist)</span></td>
+            <td class="right"><span class="pv"><span class="b"><i style="width:77%"></i></span><span class="n">77%</span></span></td>
+            <td class="right"><span class="cf mid"><span class="b"><i style="width:85%"></i></span><span class="n">85%</span></span></td>
+            <td class="right"><span class="seg"><button class="on">Map</button><button>Review</button><button>Skip</button></span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="foot reveal reveal-4">
+        <span><b>9 of 10</b> fields auto-mapped · avg confidence <b>91%</b></span>
+        <span class="muted">Adjusting the mapping never pauses the import.</span>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>nbBadge('M2', 'Confidence lens');</script>
+</body>
+</html>

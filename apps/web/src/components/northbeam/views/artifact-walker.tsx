@@ -53,7 +53,7 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { trpc } from '@/lib/api';
-import { useCurrentRole } from '@/lib/can';
+import { useCanObject, useCanObjectCheck } from '@/lib/can';
 import { cn } from '@/lib/cn';
 import { requestComposerOpen } from '@/lib/composer-bus';
 import { timeAgo } from '@/lib/time';
@@ -65,7 +65,6 @@ import {
   type ArtifactRowAction,
   ArtifactRowActionSchema,
 } from '@northbeam/core/artifact';
-import { can, recordPermissionFor } from '@northbeam/core/roles';
 import type { Filter, ViewSort } from '@northbeam/db/views';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
@@ -196,6 +195,7 @@ function RenderNode({ node, action }: { node: ArtifactNode; action?: ReactNode }
       <SectionCard title={props.title} className="h-full">
         <div className="flex flex-col gap-3">
           {(node.children ?? []).map((c, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: artifact nodes have no ids; order is the identity
             <RenderNode key={i} node={c} />
           ))}
         </div>
@@ -207,6 +207,7 @@ function RenderNode({ node, action }: { node: ArtifactNode; action?: ReactNode }
     return (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {(node.children ?? []).map((c, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: artifact nodes have no ids; order is the identity
           <RenderNode key={i} node={c} />
         ))}
       </div>
@@ -1000,7 +1001,7 @@ type CreateRecordAction = Extract<ArtifactAction, { kind: 'createRecord' }>;
 
 function ActionBarNode({ props }: { props: Record<string, unknown> }) {
   const router = useRouter();
-  const role = useCurrentRole();
+  const canObject = useCanObjectCheck();
   const [createAction, setCreateAction] = useState<CreateRecordAction | null>(null);
 
   const actions = useMemo(() => {
@@ -1012,11 +1013,10 @@ function ActionBarNode({ props }: { props: Record<string, unknown> }) {
       .slice(0, 4);
   }, [props.items]);
 
-  // Write actions hide for roles that can't write the target object.
+  // Create actions hide for roles without the object's `create` grant — the
+  // per-object CRUD grid, matching the backend gate (works for custom roles).
   const visible = actions.filter(
-    (a) =>
-      a.kind !== 'createRecord' ||
-      (role !== null && can(role, recordPermissionFor(a.objectKey, 'write'))),
+    (a) => a.kind !== 'createRecord' || canObject(a.objectKey, 'create'),
   );
 
   // The create form needs the target object's metadata — fetched on demand.
@@ -1064,7 +1064,7 @@ function ActionBarNode({ props }: { props: Record<string, unknown> }) {
 /** Per-row "setField" quick action (RecordList) — confirm, then the ordinary
  *  record.update. Rendered only when the spec parses and the role can write. */
 function useRowAction(objectKey: string | undefined, raw: unknown) {
-  const role = useCurrentRole();
+  const canWrite = useCanObject(objectKey ?? '', 'update');
   const utils = trpc.useUtils();
   const [pending, setPending] = useState<{ id: string; name: string } | null>(null);
   const update = trpc.record.update.useMutation({
@@ -1078,11 +1078,7 @@ function useRowAction(objectKey: string | undefined, raw: unknown) {
     return parsed.success ? parsed.data : null;
   }, [raw]);
 
-  const allowed =
-    action !== null &&
-    Boolean(objectKey) &&
-    role !== null &&
-    can(role, recordPermissionFor(objectKey ?? '', 'write'));
+  const allowed = action !== null && Boolean(objectKey) && canWrite;
 
   const confirm = () => {
     if (!pending || !action || !objectKey) return;
@@ -1258,6 +1254,10 @@ function RelatedListNode({ props }: { props: Record<string, unknown> }) {
  *  record page renders, driven by the record context. */
 function StagePathNode({ props }: { props: Record<string, unknown> }) {
   const ctx = useContext(RecordCtx);
+  // Hook called unconditionally (empty key when off a record page); the gate
+  // matches the built-in record page so viewers see a read-only path, not
+  // clickable chevrons that 403 on click.
+  const canWrite = useCanObject(ctx?.objectKey ?? '', 'update');
   if (!ctx) return <UnsupportedNodeNote message="StagePath renders on a record page only." />;
   const explicit =
     typeof props.fieldKey === 'string'
@@ -1273,6 +1273,7 @@ function StagePathNode({ props }: { props: Record<string, unknown> }) {
       recordId={ctx.recordId}
       field={field}
       value={ctx.record.data[field.key]}
+      readOnly={!canWrite}
     />
   );
 }

@@ -7,26 +7,42 @@
 // the per-(org,role) grant cache so the change takes effect immediately.
 
 import { ORG_PERMISSION_KEYS, type Permission, READ_ONLY_CRUD, may } from '@northbeam/core';
+import type { FilterEntry } from '@northbeam/db';
 import {
+  type FieldRow,
   clearObjectPermission,
   countMembersWithRole,
   createRole,
   deleteRole,
+  ensureFieldIndex,
   getObjectById,
   getRoleById,
   getRoleByKey,
   listObjectPermissions,
   listObjects,
   listRoles,
+  schema,
   updateRole,
   upsertObjectPermission,
   writeAuditEvent,
 } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
+import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Context } from '../context.js';
 import { invalidatePermissions } from '../permissions.js';
+import { FilterEntrySchema } from '../schemas.js';
 import { permissionProcedure, protectedProcedure, router } from '../trpc.js';
+
+/** Field keys a criteria filter references (leaves + one level of `any` groups). */
+function filterFieldKeys(filter: FilterEntry[]): string[] {
+  const keys = new Set<string>();
+  for (const entry of filter) {
+    if ('any' in entry) for (const f of entry.any) keys.add(f.fieldKey);
+    else keys.add(entry.fieldKey);
+  }
+  return [...keys];
+}
 
 const ORG_PERMISSION_SET = new Set<string>(ORG_PERMISSION_KEYS);
 const CrudSchema = z.object({
@@ -117,6 +133,8 @@ export const roleRouter = router({
                   delete: ov.canDelete,
                 }
               : def,
+            /** Row-level (criteria) scope for this object, if any. */
+            filter: ov?.filter ?? null,
           };
         }),
       };
@@ -172,6 +190,7 @@ export const roleRouter = router({
               update: o.canUpdate,
               delete: o.canDelete,
             },
+            filter: o.filter ?? null,
           });
         }
       }
@@ -256,6 +275,9 @@ export const roleRouter = router({
         roleId: z.string().uuid(),
         objectId: z.string().uuid(),
         grant: CrudSchema.nullable(),
+        /** Optional row-level (criteria) scope. Restricts which records of the
+         *  object the role can touch. Referenced fields are auto-indexed. */
+        filter: z.array(FilterEntrySchema).nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -265,13 +287,47 @@ export const roleRouter = router({
       if (role.key === 'owner') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'the Owner role is immutable' });
       }
-      const object = await getObjectById(ctx.db, orgId, input.objectId);
-      if (!object) throw new TRPCError({ code: 'NOT_FOUND', message: 'object not found' });
+      const owf = await getObjectById(ctx.db, orgId, input.objectId);
+      if (!owf) throw new TRPCError({ code: 'NOT_FOUND', message: 'object not found' });
+
+      const filter = input.filter && input.filter.length > 0 ? input.filter : null;
+      if (filter) {
+        // Validate every referenced field exists — an unknown key would silently
+        // compile to no restriction, which for a PERMISSION filter would grant
+        // access rather than deny it. Fail loudly instead.
+        const byKey = new Map(owf.fields.map((f) => [f.key, f]));
+        const referenced: FieldRow[] = [];
+        for (const key of filterFieldKeys(filter)) {
+          const field = byKey.get(key);
+          if (!field) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `field '${key}' does not exist on '${owf.object.key}'`,
+            });
+          }
+          referenced.push(field);
+        }
+        // Auto-index each referenced field so the added ACL predicate uses an
+        // index — permission filtering never turns a list into a seq scan.
+        for (const field of referenced) {
+          if (!field.indexed) {
+            await ensureFieldIndex(ctx.db, orgId, owf.object, field);
+            await ctx.db
+              .update(schema.fieldDef)
+              .set({ indexed: true })
+              .where(
+                and(eq(schema.fieldDef.organizationId, orgId), eq(schema.fieldDef.id, field.id)),
+              );
+          }
+        }
+      }
+
       if (input.grant) {
         await upsertObjectPermission(ctx.db, orgId, {
           roleId: input.roleId,
           objectId: input.objectId,
           grant: input.grant,
+          filter,
         });
       } else {
         await clearObjectPermission(ctx.db, orgId, input.roleId, input.objectId);

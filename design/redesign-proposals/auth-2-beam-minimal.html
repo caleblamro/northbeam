@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Auth · Beam minimal — Northbeam redesign A2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  /* Near-invisible dot-grid texture over the page bg */
+  body {
+    background-color: var(--bg-page);
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .stage { flex: 1; display: grid; place-items: center; padding: var(--sp-10) var(--sp-6); }
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-6); width: 100%; max-width: 880px; }
+  @media (max-width: 760px) { .duo { grid-template-columns: 1fr; } }
+
+  .state-lbl { text-align: center; margin-bottom: var(--sp-3); }
+
+  .authcard {
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    padding: var(--sp-10) var(--sp-8) var(--sp-8);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-xl); box-shadow: var(--shadow-pop);
+  }
+  .authcard h1 { margin: var(--sp-5) 0 0; font-size: var(--text-xl); font-weight: var(--fw-semibold); letter-spacing: -0.015em; }
+  .authcard .body { margin: var(--sp-2) 0 0; font-size: var(--text-base); color: var(--ink-muted); max-width: 34ch; }
+  .authcard .body b { color: var(--ink); font-weight: var(--fw-medium); }
+
+  /* Gradient monogram tile */
+  .tile {
+    display: grid; place-items: center; width: 40px; height: 40px;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, var(--accent), var(--accent-active));
+  }
+  .tile svg { width: 20px; height: 20px; stroke: #ffffff; /* on-accent: always white (brand-contrast, light) */ fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Mail-sent circle */
+  .ring { display: grid; place-items: center; width: 48px; height: 48px; border-radius: var(--radius-full); background: var(--accent-soft); color: var(--accent); }
+  .ring svg { width: 20px; height: 20px; }
+
+  .form { width: 100%; margin-top: var(--sp-6); text-align: left; }
+  .lbl { display: block; margin-bottom: 6px; font-size: var(--text-sm); font-weight: var(--fw-medium); color: var(--ink-secondary); }
+  .field {
+    width: 100%; height: 44px; padding: 0 12px;
+    border: 1px solid var(--border-field); border-radius: var(--radius-md);
+    background: var(--field-bg); color: var(--ink); font: inherit; font-size: var(--text-base);
+    transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+  }
+  .field::placeholder { color: var(--placeholder); }
+  .field:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring-focus); }
+  .btn.block { width: 100%; justify-content: center; height: 44px; margin-top: var(--sp-3); font-size: var(--text-base); }
+  .micro { margin: var(--sp-4) 0 0; font-size: var(--text-sm); color: var(--ink-subtle); }
+
+  .countdown { margin: var(--sp-5) 0 0; font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .sent-acts { display: flex; gap: 8px; margin-top: var(--sp-3); }
+  .btn[aria-disabled="true"] { opacity: 0.55; cursor: default; pointer-events: none; }
+
+  /* Floating theme toggle (sits above the variant badge) */
+  .theme-fab {
+    position: fixed; right: 16px; bottom: 64px; z-index: 60;
+    display: grid; place-items: center; width: 34px; height: 34px;
+    border: 1px solid var(--border); border-radius: var(--radius-full);
+    background: var(--surface-raised); color: var(--ink-muted); box-shadow: var(--shadow-pop);
+  }
+  .theme-fab:hover { color: var(--ink); }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+
+<main class="stage">
+  <div class="duo">
+    <!-- State 1: request -->
+    <div class="reveal reveal-1">
+      <div class="state-lbl eyebrow">Step 1 · Request</div>
+      <section class="authcard">
+        <span class="tile"><svg viewBox="0 0 16 16"><path d="M3 13 V3 L13 13 V3"/></svg></span>
+        <h1>Sign in to Northbeam</h1>
+        <p class="body">Use your work email — we'll send a one-time link.</p>
+        <div class="form">
+          <label class="lbl" for="email">Work email</label>
+          <input class="field" id="email" type="email" placeholder="you@company.com" autocomplete="email" />
+          <button class="btn primary block">Send magic link</button>
+        </div>
+        <p class="micro">Magic link · no passwords</p>
+      </section>
+    </div>
+
+    <!-- State 2: sent -->
+    <div class="reveal reveal-2">
+      <div class="state-lbl eyebrow">Step 2 · Sent</div>
+      <section class="authcard">
+        <span class="ring"><svg class="i" data-icon="mail"></svg></span>
+        <h1>Check your inbox</h1>
+        <p class="body">We sent a sign-in link to <b>caleb@triforce.com</b>. It expires in 10 minutes.</p>
+        <p class="countdown">Resend available in 0:42</p>
+        <div class="sent-acts">
+          <button class="btn ghost">Use a different email</button>
+          <button class="btn outline" aria-disabled="true"><svg class="i" data-icon="refresh" style="width:13px;height:13px"></svg> Resend link</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<button class="theme-fab" title="Toggle theme" onclick="nbToggleTheme()">
+  <svg class="i icon-sun" data-icon="sun"></svg><svg class="i icon-moon" data-icon="moon"></svg>
+</button>
+
+<script>nbBadge('A2', 'Beam minimal');</script>
+</body>
+</html>

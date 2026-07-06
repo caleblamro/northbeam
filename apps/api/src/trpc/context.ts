@@ -5,6 +5,7 @@ import type { AuthContext, Role } from '@northbeam/core';
 import { type Database, type DbExecutor, createDb, schema } from '@northbeam/db';
 import { and, eq } from 'drizzle-orm';
 import { type Session, getSession } from '../auth/index.js';
+import type { RecordAccess } from '../data/record-access.js';
 import { env } from '../lib/env.js';
 import { resolveGrants } from './permissions.js';
 
@@ -17,6 +18,16 @@ export type Context = {
   auth: AuthContext | null;
   /** Raw fetch request — useful for forwarding cookies to Better Auth wrappers. */
   req: Request;
+  /** Post-commit hooks (e.g. flow-run enqueues). Procedures push closures
+   *  here; protectedProcedure runs them AFTER its transaction commits and
+   *  only when the procedure succeeded. protectedProcedure swaps in a fresh
+   *  array per call — batched procedures share one Context, and a hook must
+   *  never run against another batch member's uncommitted transaction. */
+  postCommit: Array<() => Promise<void>>;
+  /** Authorized record data access — the sanctioned path to read/write record
+   *  data with the per-object CRUD gate + record ACL applied. Non-null only on
+   *  protectedProcedure (needs ctx.auth + the RLS-scoped tx). */
+  records: RecordAccess | null;
 };
 
 let cachedDb: Database | undefined;
@@ -37,7 +48,7 @@ export async function createContext({ req }: { req: Request }): Promise<Context>
   const session = await getSession(req.headers);
 
   if (!session) {
-    return { db: db(), session: null, auth: null, req };
+    return { db: db(), session: null, auth: null, req, postCommit: [], records: null };
   }
 
   // Fresh sessions (post-magic-link) come with activeOrganizationId=null even
@@ -68,14 +79,14 @@ export async function createContext({ req }: { req: Request }): Promise<Context>
       .where(eq(schema.member.userId, session.user.id))
       .limit(1);
     if (!m) {
-      return { db: db(), session, auth: null, req };
+      return { db: db(), session, auth: null, req, postCommit: [], records: null };
     }
     activeOrganizationId = m.organizationId;
     role = m.role as Role;
   }
 
   if (!activeOrganizationId || !role) {
-    return { db: db(), session, auth: null, req };
+    return { db: db(), session, auth: null, req, postCommit: [], records: null };
   }
 
   // Resolve the role key into its org-action set + per-object CRUD grants
@@ -93,5 +104,8 @@ export async function createContext({ req }: { req: Request }): Promise<Context>
       permissions,
     },
     req,
+    postCommit: [],
+    // protectedProcedure swaps in the tx-bound RecordAccess alongside auth.
+    records: null,
   };
 }

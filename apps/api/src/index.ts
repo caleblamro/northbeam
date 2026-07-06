@@ -5,6 +5,7 @@ import { assertRlsEnforced, createDb } from '@northbeam/db';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { handleAuthRequest } from './auth/index.js';
+import { mountFlowWebhookRoutes } from './automation/webhook-route.js';
 import { env } from './lib/env.js';
 import { onError } from './middleware/error.js';
 import { requestLogger } from './middleware/logging.js';
@@ -63,6 +64,10 @@ app.on(['GET', 'POST'], '/api/auth/*', (c) => handleAuthRequest(c.req.raw));
 
 // Salesforce OAuth web-server flow (/api/salesforce/oauth/*).
 mountSalesforceRoutes(app);
+
+// Inbound flow webhooks (/api/hooks/flows/:orgId/:flowId) — HMAC-signed,
+// no session; the handler establishes its own org context.
+mountFlowWebhookRoutes(app);
 
 // Health probes
 app.get('/health', (c) => c.json({ ok: true, service: 'northbeam-api' }));

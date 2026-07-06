@@ -201,6 +201,38 @@ class RefreshingSalesforceClient extends SalesforceClient {
   override getDashboardDescribe(id: string) {
     return this.withRefresh((c) => c.getDashboardDescribe(id));
   }
+
+  override listFlowDefinitions(limit?: number) {
+    return this.withRefresh((c) => c.listFlowDefinitions(limit));
+  }
+
+  override getFlowVersion(id: string) {
+    return this.withRefresh((c) => c.getFlowVersion(id));
+  }
+
+  override listWorkflowRules(limit?: number) {
+    return this.withRefresh((c) => c.listWorkflowRules(limit));
+  }
+
+  override getWorkflowRuleMetadata(id: string) {
+    return this.withRefresh((c) => c.getWorkflowRuleMetadata(id));
+  }
+
+  override getWorkflowFieldUpdate(id: string) {
+    return this.withRefresh((c) => c.getWorkflowFieldUpdate(id));
+  }
+
+  override getWorkflowAlert(id: string) {
+    return this.withRefresh((c) => c.getWorkflowAlert(id));
+  }
+
+  override getWorkflowTask(id: string) {
+    return this.withRefresh((c) => c.getWorkflowTask(id));
+  }
+
+  override listApexTriggers(limit?: number) {
+    return this.withRefresh((c) => c.listApexTriggers(limit));
+  }
 }
 
 export async function clientForOrg(db: DbExecutor, orgId: string): Promise<SalesforceClient> {

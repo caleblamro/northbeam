@@ -10,7 +10,9 @@
     "./roles": "./src/roles.ts",
     "./errors": "./src/errors.ts",
     "./artifact": "./src/artifact.ts",
-    "./ai-tools": "./src/ai-tools.ts"
+    "./ai-tools": "./src/ai-tools.ts",
+    "./flow": "./src/flow.ts",
+    "./flow-template": "./src/flow-template.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

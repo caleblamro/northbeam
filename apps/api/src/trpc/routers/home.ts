@@ -2,14 +2,7 @@
 // metadata-driven count/sum queries so the home page renders real numbers
 // instead of mocked totals.
 
-import {
-  type FieldRow,
-  countRecords,
-  displayName,
-  getObjectByKey,
-  listRecords,
-  sumField,
-} from '@northbeam/db';
+import { type FieldRow, displayName } from '@northbeam/db';
 import { z } from 'zod';
 import { protectedProcedure, router } from '../trpc.js';
 
@@ -42,35 +35,32 @@ function optionLabel(fields: FieldRow[], fieldKey: string, value: unknown): stri
 }
 
 export const homeRouter = router({
-  /** Counts + recent activity for the home dashboard. */
+  /** Counts + recent activity for the home dashboard. Each object is resolved
+   *  through ctx.records, so an object the caller can't read simply doesn't
+   *  contribute (no count/pipeline/feed leak) and private objects respect the
+   *  record ACL. */
   summary: protectedProcedure.query(async ({ ctx }) => {
-    const orgId = ctx.auth.organizationId;
-
     const [accountObj, contactObj, dealObj, activityObj] = await Promise.all([
-      getObjectByKey(ctx.db, orgId, 'account'),
-      getObjectByKey(ctx.db, orgId, 'contact'),
-      getObjectByKey(ctx.db, orgId, 'deal'),
-      getObjectByKey(ctx.db, orgId, 'activity'),
+      ctx.records.readable('account'),
+      ctx.records.readable('contact'),
+      ctx.records.readable('deal'),
+      ctx.records.readable('activity'),
     ]);
 
     const [accountCount, contactCount, dealCount] = await Promise.all([
-      accountObj ? countRecords(ctx.db, { orgId, object: accountObj.object }) : 0,
-      contactObj ? countRecords(ctx.db, { orgId, object: contactObj.object }) : 0,
-      dealObj ? countRecords(ctx.db, { orgId, object: dealObj.object }) : 0,
+      accountObj ? ctx.records.count(accountObj) : 0,
+      contactObj ? ctx.records.count(contactObj) : 0,
+      dealObj ? ctx.records.count(dealObj) : 0,
     ]);
 
-    // Pipeline value across open stages (new/qualified/negotiation) — uses
-    // sumField with a stage-field filter so the engine computes server-side.
+    // Pipeline value across open stages (new/qualified/negotiation).
     let pipelineValue = 0;
     if (dealObj) {
-      const amountField = dealObj.fields.find((f) => f.key === 'amount');
-      const stageField = dealObj.fields.find((f) => f.key === 'stage');
-      if (amountField && stageField) {
-        pipelineValue = await sumField(ctx.db, {
-          orgId,
-          object: dealObj.object,
-          field: amountField,
-          whereField: stageField,
+      const hasAmount = dealObj.fields.some((f) => f.key === 'amount');
+      const hasStage = dealObj.fields.some((f) => f.key === 'stage');
+      if (hasAmount && hasStage) {
+        pipelineValue = await ctx.records.sum(dealObj, 'amount', {
+          whereFieldKey: 'stage',
           whereIn: OPEN_STAGES,
         });
       }
@@ -85,12 +75,7 @@ export const homeRouter = router({
       subtype: string | null;
     }> = [];
     if (activityObj) {
-      const rows = await listRecords(ctx.db, {
-        orgId,
-        object: activityObj.object,
-        fields: activityObj.fields,
-        limit: 6,
-      });
+      const rows = await ctx.records.listRows(activityObj, { limit: 6 });
       recentActivities = rows.map((r) => ({
         id: r.id,
         name: displayName(activityObj.fields, r.data) || 'Activity',
@@ -119,7 +104,6 @@ export const homeRouter = router({
     .input(z.object({ limit: z.number().min(1).max(50).default(8) }).optional())
     .query(async ({ ctx, input }) => {
       const limit = input?.limit ?? 8;
-      const orgId = ctx.auth.organizationId;
       const now = new Date();
       const endOfToday = new Date(now);
       endOfToday.setHours(23, 59, 59, 999);
@@ -127,17 +111,14 @@ export const homeRouter = router({
       const closeHorizon = new Date(now.getTime() + 14 * DAY_MS);
 
       const [activityObj, dealObj] = await Promise.all([
-        getObjectByKey(ctx.db, orgId, 'activity'),
-        getObjectByKey(ctx.db, orgId, 'deal'),
+        ctx.records.readable('activity'),
+        ctx.records.readable('deal'),
       ]);
 
       const items: AttentionItem[] = [];
 
       if (activityObj) {
-        const rows = await listRecords(ctx.db, {
-          orgId,
-          object: activityObj.object,
-          fields: activityObj.fields,
+        const rows = await ctx.records.listRows(activityObj, {
           // Open items with the soonest due dates first — the overdue/due-soon
           // buckets live at the top of this ordering, so a small window is
           // enough. (High-priority items with NO due date sort last and can
@@ -182,10 +163,7 @@ export const homeRouter = router({
       }
 
       if (dealObj) {
-        const rows = await listRecords(ctx.db, {
-          orgId,
-          object: dealObj.object,
-          fields: dealObj.fields,
+        const rows = await ctx.records.listRows(dealObj, {
           // Earliest close dates first — every deal inside the 14-day horizon
           // (including already-overdue closes) sorts before the ones outside
           // it, so this window is exact, not a sample.

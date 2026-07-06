@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Views · Workbench — Northbeam redesign V3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  body { background: var(--bg); }
+  .page.wide { display: flex; flex-direction: column; padding: 0; }
+
+  .controls { display: flex; align-items: center; gap: var(--sp-3); padding: 10px var(--sp-5); border-bottom: 1px solid var(--border); }
+  .controls h1 { margin: 0; font-size: var(--text-md); font-weight: var(--fw-semibold); }
+  .controls .count { font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .controls .btn { margin-left: auto; }
+
+  .split { flex: 1; display: grid; grid-template-columns: minmax(380px, 430px) minmax(0, 1fr); min-height: 0; }
+
+  /* Type system */
+  .ticon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-md); flex: none; }
+  .ticon svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .ticon.list { background: var(--surface-sunken); border: 1px solid var(--border); color: var(--ink-muted); }
+  .ticon.report { background: var(--info-bg); color: var(--info); }
+  .ticon.dashboard { background: var(--success-bg); color: var(--success); }
+  .ticon.layout { background: var(--warning-bg); color: var(--warning); }
+  .star { width: 10px; height: 10px; color: var(--accent); flex: none; }
+  .star, .star * { fill: currentColor; stroke: currentColor; stroke-width: 1; }
+
+  /* Left: browser */
+  .lp { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); }
+  .lsearch { display: flex; align-items: center; gap: 7px; height: var(--h-sm); margin: var(--sp-4) var(--sp-4) 0; padding: 0 10px; border: 1px solid var(--border-field); border-radius: var(--radius-md); background: var(--field-bg); color: var(--placeholder); font-size: var(--text-sm); }
+  .lchips { display: flex; gap: 6px; padding: 10px var(--sp-4) 12px; border-bottom: 1px solid var(--border); }
+  .fchip { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--surface); font-size: var(--text-xs); color: var(--ink-secondary); }
+  .fchip:hover { background: var(--surface-hover); }
+  .fchip.on { background: var(--brand); border-color: var(--brand); color: var(--brand-contrast); }
+  .fchip .n { margin-left: 5px; opacity: 0.55; font-variant-numeric: tabular-nums; }
+  .ls { flex: 1; overflow: auto; padding-bottom: var(--sp-3); }
+  .ge { padding: var(--sp-4) var(--sp-4) 6px; }
+  .vrow { display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px var(--sp-4); font-size: var(--text-sm); text-align: left; transition: background 0.12s var(--ease); }
+  .vrow:hover { background: var(--surface-hover); }
+  .vrow.on { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+  .vrow .nm { font-weight: var(--fw-medium); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vrow .ob { font-size: var(--text-xs); color: var(--ink-muted); flex: none; }
+  .vrow .sdot { margin-left: auto; width: 6px; height: 6px; border-radius: 999px; flex: none; }
+  .sdot.w { background: var(--info); }
+  .sdot.p { background: var(--ink-disabled); }
+  .sdot.r { background: var(--warning); }
+  .lf { padding: 9px var(--sp-4); border-top: 1px solid var(--border); font-size: var(--text-xs); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+
+  /* Right: live preview pane */
+  .rp { overflow: auto; background: var(--bg-page); }
+  .rpin { padding: var(--sp-5) var(--sp-6) var(--sp-10); max-width: 860px; }
+  .ptool { display: flex; align-items: center; gap: 10px; }
+  .ptool h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+  .ptool .obj-chip { width: 22px; height: 22px; font-size: 11px; border-radius: var(--radius-md); }
+  .ptool .acts { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .ptool .btn.ghost svg { width: 12px; height: 12px; }
+
+  .qsent { margin-top: var(--sp-4); display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-sunken); font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+  .qsent b { color: var(--ink-secondary); font-weight: var(--fw-medium); }
+  .qsent .sep { color: var(--ink-disabled); }
+  .qsent .live { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-sans); color: var(--success); font-weight: var(--fw-medium); }
+  .qsent .live::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+
+  .canvas { margin-top: var(--sp-4); padding: var(--sp-5) var(--sp-5) 0; }
+  .brow { display: grid; grid-template-columns: 148px minmax(0, 1fr) 92px; align-items: center; gap: var(--sp-4); }
+  .brow + .brow { margin-top: 12px; }
+  .brow .l { font-size: var(--text-sm); color: var(--ink-secondary); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brow .track { height: 24px; border-radius: var(--radius-sm); background: var(--accent-soft); overflow: hidden; }
+  .brow .fill { display: block; height: 100%; border-radius: var(--radius-sm); background: var(--accent); opacity: 0.8; }
+  .brow .v { font-size: var(--text-sm); font-weight: var(--fw-medium); font-variant-numeric: tabular-nums; text-align: right; }
+  .canvas .tbl { margin-top: var(--sp-5); font-size: var(--text-sm); }
+  .canvas .tbl th:first-child, .canvas .tbl td:first-child { padding-left: 0; }
+  .canvas .tbl th:last-child, .canvas .tbl td:last-child { padding-right: 0; }
+  .canvas .tbl tr.total td { border-top: 1px solid var(--border); border-bottom: 0; font-weight: var(--fw-semibold); color: var(--ink); }
+  .pfoot { display: flex; align-items: center; gap: 8px; margin-top: var(--sp-4); font-size: var(--text-xs); color: var(--ink-muted); }
+  .pfoot .av { display: grid; place-items: center; width: 18px; height: 18px; border-radius: var(--radius-full); background: var(--brand); color: var(--brand-contrast); font-size: 7.5px; font-weight: var(--fw-semibold); }
+  .pfoot a { color: var(--accent); font-weight: var(--fw-medium); }
+  .pfoot a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+  @media (max-width: 980px) { .split { grid-template-columns: 1fr; } .rp { display: none; } }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+  NB_ICONS.star = '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>';
+  NB_ICONS.rows = '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M21 9H3"/><path d="M21 15H3"/>';
+  NB_ICONS.chart = '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>';
+  NB_ICONS.dash = '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>';
+  NB_ICONS.layout = '<rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/>';
+  nbTopbar('Home');
+</script>
+
+<main class="page wide">
+  <div class="controls reveal reveal-1">
+    <h1>Views</h1>
+    <span class="count">18 across 5 objects</span>
+    <button class="btn primary"><svg class="i" data-icon="plus"></svg> New view</button>
+  </div>
+
+  <div class="split reveal reveal-2">
+    <!-- Left: browse -->
+    <div class="lp">
+      <span class="lsearch"><svg class="i" data-icon="search" style="width:13px;height:13px"></svg> Search views…</span>
+      <div class="lchips">
+        <button class="fchip on">All <span class="n">18</span></button>
+        <button class="fchip">Lists <span class="n">9</span></button>
+        <button class="fchip">Reports <span class="n">4</span></button>
+        <button class="fchip">Dashboards <span class="n">3</span></button>
+        <button class="fchip">Layouts <span class="n">2</span></button>
+      </div>
+
+      <div class="ls ds-scroll">
+        <div class="ge"><span class="eyebrow">Lists</span></div>
+        <button class="vrow"><span class="ticon list"><svg data-icon="rows"></svg></span><span class="nm">All open</span><svg class="star" data-icon="star"></svg><span class="ob">Deal</span><span class="sdot w" title="Workspace"></span></button>
+        <button class="vrow"><span class="ticon list"><svg data-icon="rows"></svg></span><span class="nm">My deals</span><span class="ob">Deal</span><span class="sdot p" title="Personal"></span></button>
+        <button class="vrow"><span class="ticon list"><svg data-icon="rows"></svg></span><span class="nm">Closing this month</span><span class="ob">Deal</span><span class="sdot w" title="Workspace"></span></button>
+        <button class="vrow"><span class="ticon list"><svg data-icon="rows"></svg></span><span class="nm">Won · Q2</span><span class="ob">Deal</span><span class="sdot w" title="Workspace"></span></button>
+        <button class="vrow"><span class="ticon list"><svg data-icon="rows"></svg></span><span class="nm">All activities</span><svg class="star" data-icon="star"></svg><span class="ob">Activity</span><span class="sdot w" title="Workspace"></span></button>
+        <button class="vrow"><span class="ticon list"><svg data-icon="rows"></svg></span><span class="nm">Tasks</span><span class="ob">Activity</span><span class="sdot p" title="Personal"></span></button>
+        <button class="vrow"><span class="ticon list"><svg data-icon="rows"></svg></span><span class="nm">High priority</span><span class="ob">Activity</span><span class="sdot r" title="Role"></span></button>
+        <button class="vrow"><span class="ticon list"><svg data-icon="rows"></svg></span><span class="nm">All accounts</span><svg class="star" data-icon="star"></svg><span class="ob">Account</span><span class="sdot w" title="Workspace"></span></button>
+        <button class="vrow"><span class="ticon list"><svg data-icon="rows"></svg></span><span class="nm">All contacts</span><svg class="star" data-icon="star"></svg><span class="ob">Contact</span><span class="sdot w" title="Workspace"></span></button>
+
+        <div class="ge"><span class="eyebrow">Reports</span></div>
+        <button class="vrow on"><span class="ticon report"><svg data-icon="chart"></svg></span><span class="nm">Pipeline by stage</span><span class="ob">Deal</span><span class="sdot w" title="Workspace"></span></button>
+        <button class="vrow"><span class="ticon report"><svg data-icon="chart"></svg></span><span class="nm">Revenue trend</span><span class="ob">Deal</span><span class="sdot w" title="Workspace"></span></button>
+        <button class="vrow"><span class="ticon report"><svg data-icon="chart"></svg></span><span class="nm">Rep activity</span><span class="ob">Activity</span><span class="sdot w" title="Workspace"></span></button>
+        <button class="vrow"><span class="ticon report"><svg data-icon="chart"></svg></span><span class="nm">Win rate by owner</span><span class="ob">Deal</span><span class="sdot r" title="Role"></span></button>
+
+        <div class="ge"><span class="eyebrow">Dashboards</span></div>
+        <button class="vrow"><span class="ticon dashboard"><svg data-icon="dash"></svg></span><span class="nm">Home</span><svg class="star" data-icon="star"></svg><span class="ob">Workspace</span><span class="sdot p" title="Personal"></span></button>
+        <button class="vrow"><span class="ticon dashboard"><svg data-icon="dash"></svg></span><span class="nm">Pipeline overview</span><span class="ob">Deal</span><span class="sdot w" title="Workspace"></span></button>
+        <button class="vrow"><span class="ticon dashboard"><svg data-icon="dash"></svg></span><span class="nm">Account health</span><span class="ob">Account</span><span class="sdot p" title="Personal"></span></button>
+
+        <div class="ge"><span class="eyebrow">Layouts</span></div>
+        <button class="vrow"><span class="ticon layout"><svg data-icon="layout"></svg></span><span class="nm">Deal detail</span><svg class="star" data-icon="star"></svg><span class="ob">Deal</span><span class="sdot w" title="Workspace"></span></button>
+        <button class="vrow"><span class="ticon layout"><svg data-icon="layout"></svg></span><span class="nm">Account 360</span><span class="ob">Account</span><span class="sdot w" title="Workspace"></span></button>
+      </div>
+
+      <div class="lf">18 views</div>
+    </div>
+
+    <!-- Right: live preview -->
+    <aside class="rp ds-scroll">
+      <div class="rpin">
+        <div class="ptool">
+          <span class="ticon report"><svg data-icon="chart"></svg></span>
+          <h2>Pipeline by stage</h2>
+          <span class="obj-chip">D</span>
+          <span class="pill info plain">Workspace</span>
+          <div class="acts">
+            <button class="btn ghost"><svg data-icon="star" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"></svg> Set default</button>
+            <button class="btn outline"><svg class="i" data-icon="pencil" style="width:12px;height:12px"></svg> Edit</button>
+            <button class="btn primary">Open <svg class="i" data-icon="arrow-right" style="width:12px;height:12px"></svg></button>
+          </div>
+        </div>
+
+        <div class="qsent">
+          <span><b>Sum of Amount</b> <span class="sep">·</span> by <b>Stage</b> <span class="sep">·</span> where <b>Stage is open</b></span>
+          <span class="live">Live</span>
+        </div>
+
+        <div class="card canvas">
+          <div class="brow"><span class="l">Proposal · quote</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="v">$1,000,000</span></div>
+          <div class="brow"><span class="l">Needs analysis</span><span class="track"><span class="fill" style="width:93%"></span></span><span class="v">$930,000</span></div>
+          <div class="brow"><span class="l">Prospecting</span><span class="track"><span class="fill" style="width:87%"></span></span><span class="v">$870,000</span></div>
+          <div class="brow"><span class="l">Qualification</span><span class="track"><span class="fill" style="width:82%"></span></span><span class="v">$825,000</span></div>
+          <div class="brow"><span class="l">Negotiation</span><span class="track"><span class="fill" style="width:37%"></span></span><span class="v">$370,000</span></div>
+
+          <table class="tbl">
+            <thead>
+              <tr><th>Stage</th><th class="right">Deals</th><th class="right">Sum of Amount</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="primary-cell">Proposal · quote</td><td class="right num">10</td><td class="right num">$1,000,000</td></tr>
+              <tr><td class="primary-cell">Needs analysis</td><td class="right num">12</td><td class="right num">$930,000</td></tr>
+              <tr><td class="primary-cell">Prospecting</td><td class="right num">14</td><td class="right num">$870,000</td></tr>
+              <tr><td class="primary-cell">Qualification</td><td class="right num">8</td><td class="right num">$825,000</td></tr>
+              <tr><td class="primary-cell">Negotiation</td><td class="right num">4</td><td class="right num">$370,000</td></tr>
+              <tr class="total"><td>Total</td><td class="right num">48</td><td class="right num">$3,995,000</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pfoot">
+          <span>Shared with workspace</span><span>·</span>
+          <span class="av">CL</span><span>Created by Caleb Lamro</span><span>·</span>
+          <span>Updated 2d ago</span><span>·</span>
+          <span>Used on <a href="#">2 dashboards</a></span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script>nbBadge('V3', 'Workbench');</script>
+</body>
+</html>

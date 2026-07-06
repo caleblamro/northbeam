@@ -41,10 +41,12 @@ export const LAUNCHER_TILES: NavSection[] = [
   {
     label: 'Insights',
     items: [
+      { label: 'AI', href: '/ai', icon: 'sparkle', accent: true },
       { label: 'Pipeline', href: '/pipeline', icon: 'funnel' },
-      { label: 'Reports', href: '/reports', icon: 'chart-line-up' },
-      { label: 'Dashboards', href: '/dashboards', icon: 'squares-four' },
+      // Reports + Dashboards consolidated into Views — they're all saved
+      // views; /reports and /dashboards redirect there.
       { label: 'Views', href: '/views', icon: 'stack' },
+      { label: 'Report builder', href: '/reports/builder', icon: 'chart-line-up' },
     ],
   },
   {
@@ -84,6 +86,10 @@ export const PAGE_META: Record<string, PageMeta> = {
     subtitle: 'Calls, emails, notes, and stage changes across your records.',
   },
   '/pipeline': { title: 'Pipeline', subtitle: 'Your deal funnel, stage by stage.' },
+  '/ai': {
+    title: 'AI',
+    subtitle: 'Chat with your workspace — research your data and compose live dashboards.',
+  },
   '/reports': {
     title: 'Reports',
     subtitle: 'Ask in plain language. Northbeam builds the report and surfaces what changed.',
@@ -117,6 +123,18 @@ export const PAGE_META: Record<string, PageMeta> = {
   '/setup/picklists': {
     title: 'Setup',
     subtitle: 'Shared picklist value sets used across objects.',
+  },
+  '/setup/automations': {
+    title: 'Setup',
+    subtitle: 'Flows that trigger on record changes, schedules, and webhooks.',
+  },
+  '/setup/agents': {
+    title: 'Setup',
+    subtitle: 'AI agent presets — prompts, models, tools, and who can use them.',
+  },
+  '/automations': {
+    title: 'Automations',
+    subtitle: 'Build and monitor your flows.',
   },
   '/setup/integrations': {
     title: 'Setup',

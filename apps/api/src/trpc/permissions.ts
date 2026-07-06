@@ -9,10 +9,12 @@
 
 import {
   type CrudGrant,
+  type ObjectGrant,
   type Permission,
   type ResolvedPermissions,
   resolveFromStatic,
   resolvePermissions,
+  withSystemSeedPermissions,
 } from '@northbeam/core';
 import {
   type Database,
@@ -53,10 +55,16 @@ export async function resolveGrants(
     if (!roleRow) return resolveFromStatic(roleKey);
 
     const overrides = await listObjectPermissions(tx, orgId, roleRow.id);
-    const objectOverrides = new Map<string, CrudGrant>(
+    const objectOverrides = new Map<string, ObjectGrant>(
       overrides.map((o) => [
         o.objectId,
-        { create: o.canCreate, read: o.canRead, update: o.canUpdate, delete: o.canDelete },
+        {
+          create: o.canCreate,
+          read: o.canRead,
+          update: o.canUpdate,
+          delete: o.canDelete,
+          filter: o.filter ?? null,
+        },
       ]),
     );
     return resolvePermissions({
@@ -85,7 +93,10 @@ export type ClientGrants = {
   isOwner: boolean;
   org: Permission[];
   objectDefault: CrudGrant;
-  objectOverrides: Record<string, CrudGrant>;
+  /** Per-object overrides keyed by objectKey, each carrying its CRUD grant plus
+   *  the optional row-level filter (so the client can grey out out-of-scope
+   *  records; server enforcement is authoritative). */
+  objectOverrides: Record<string, ObjectGrant>;
 };
 
 export async function resolveClientGrants(
@@ -107,14 +118,19 @@ export async function resolveClientGrants(
     const overrides = await listObjectPermissionsWithKey(tx, orgId, roleRow.id);
     return {
       isOwner: roleKey === 'owner',
-      org: roleRow.orgPermissions as Permission[],
+      // Union with the static seed like the authoritative server context does,
+      // so the client's useCan() doesn't hide affordances for a system role
+      // seeded before a new org-permission key was added.
+      org: withSystemSeedPermissions(roleKey, roleRow.orgPermissions as Permission[]),
       objectDefault: {
         create: roleRow.defaultCreate,
         read: roleRow.defaultRead,
         update: roleRow.defaultUpdate,
         delete: roleRow.defaultDelete,
       },
-      objectOverrides: Object.fromEntries(overrides.map((o) => [o.objectKey, o.grant])),
+      objectOverrides: Object.fromEntries(
+        overrides.map((o) => [o.objectKey, { ...o.grant, filter: o.filter }]),
+      ),
     };
   });
 }

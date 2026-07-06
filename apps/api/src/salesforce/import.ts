@@ -28,6 +28,7 @@ import type { SalesforceClient } from '@northbeam/salesforce';
 import { and, eq } from 'drizzle-orm';
 import { enqueueCompute } from '../queue/compute.js';
 import { flagIfAuthError } from './client.js';
+import { importAutomations } from './import-flows.js';
 import { importAnalyticsViews } from './import-views.js';
 import type { MappedObject, ProposedField } from './mapper.js';
 
@@ -235,6 +236,16 @@ export async function executeRun(
       await importAnalyticsViews({ run, client, orgId, plans, stats, writeStats });
     } catch (err) {
       stats.reportsError = err instanceof Error ? err.message : String(err);
+    }
+
+    // 7 — flows / workflow rules / apex triggers → flow rows. Same best-effort
+    // contract as phase 6: failures land in stats.automationsError.
+    stats.currentObject = 'Importing automations';
+    await writeStats();
+    try {
+      await importAutomations({ run, client, orgId, plans, stats, writeStats });
+    } catch (err) {
+      stats.automationsError = err instanceof Error ? err.message : String(err);
     }
 
     stats.currentObject = undefined;

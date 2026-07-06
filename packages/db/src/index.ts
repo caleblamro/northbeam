@@ -172,6 +172,7 @@ export {
   sumField,
   createRecord,
   updateRecord,
+  updateRecordOwner,
   deleteRecord,
   resolveRefLabels,
   labelsForIds,
@@ -195,7 +196,7 @@ export {
   type AggregateHaving,
   type AggregateOpts,
 } from './dynamic/aggregate.js';
-export { NUMERIC_TYPES } from './dynamic/filters-sql.js';
+export { NUMERIC_TYPES, buildFilterPredicates } from './dynamic/filters-sql.js';
 // One-hop reference traversal ("dot paths") for aggregate group-bys/filters.
 export { planRefJoins, splitRefPath, type ResolvedRefPath } from './dynamic/ref-joins.js';
 // QuerySpec compiler — the "almost raw SQL" declarative query engine.
@@ -284,12 +285,27 @@ export {
 // AI composer sessions — personal threads with the dashboard composer.
 export {
   listAiSessions,
+  listSharedAiSessions,
+  getAiSessionForUser,
   upsertAiSession,
+  setAiSessionShare,
   deleteAiSession,
   type AiSessionRow,
   type AiSessionMessage,
   type UpsertAiSessionInput,
 } from './queries/ai-sessions.js';
+// AI agent presets — org-level agents (prompt + model/tool/role scoping).
+export {
+  listAiAgents,
+  getAiAgent,
+  createAiAgent,
+  updateAiAgent,
+  deleteAiAgent,
+  seedSystemAgents,
+  type AiAgentRow,
+  type CreateAiAgentInput,
+  type UpdateAiAgentInput,
+} from './queries/ai-agents.js';
 // AI tool policy (admin, per role) + per-user auto-approve preferences.
 export {
   listAiToolPolicies,
@@ -297,3 +313,67 @@ export {
   listAiToolPrefs,
   setAiToolPref,
 } from './queries/ai-tools.js';
+// Flow automation — jsonb column shapes (structural mirrors of the
+// @northbeam/core flow contracts; db can't import core).
+export type {
+  FlowEdgeJson,
+  FlowGraphJson,
+  FlowNodeJson,
+  FlowReferenceMeta,
+  FlowRunContext,
+  FlowRunStatus,
+  FlowRunStepStatus,
+  FlowRunTriggerType,
+  FlowSource,
+  FlowStatus,
+  FlowTriggerJson,
+  FlowTriggerType,
+} from './schema.js';
+// Flow metadata CRUD + activate-time version snapshots.
+export {
+  createFlow,
+  getFlow,
+  getFlowByKey,
+  listFlows,
+  listActiveFlowsForObject,
+  listActiveScheduledFlows,
+  updateFlow,
+  deleteFlow,
+  createFlowVersion,
+  getFlowVersion,
+  listFlowVersions,
+  setActiveVersion,
+  type FlowRow,
+  type FlowVersionRow,
+} from './queries/flows.js';
+// Flow run lifecycle — outbox inserts, the claim gate, park/resume, steps,
+// history, and the sweeper's cross-org scans.
+export {
+  createRuns,
+  claimRun,
+  parkRun,
+  completeRun,
+  failRun,
+  cancelRun,
+  heartbeatRun,
+  insertStep,
+  listRuns,
+  getRunWithSteps,
+  staleQueuedRuns,
+  overdueWaitingRuns,
+  staleRunningRuns,
+  type FlowRunRow,
+  type FlowRunStepRow,
+  type NewFlowRunInput,
+  type SweeperRunRef,
+} from './queries/flow-runs.js';
+// In-app notifications (topbar bell).
+export {
+  insertNotifications,
+  listNotificationsForUser,
+  unreadNotificationCount,
+  markNotificationsRead,
+  markAllNotificationsRead,
+  type NewNotificationInput,
+  type NotificationRow,
+} from './queries/notifications.js';

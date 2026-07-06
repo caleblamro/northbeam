@@ -5,6 +5,13 @@ import type { CSSProperties } from 'react';
 import { EyebrowLabel } from './eyebrow-label';
 
 export function StatsRow({ stats }: { stats: Record<string, unknown> }) {
+  // Translated flows + workflow rules + "rebuild manually" references — the
+  // total automation rows the import created (— until the phase reports).
+  const automationParts = [
+    stats.flowsTranslated,
+    stats.workflowRulesTranslated,
+    stats.flowsReferenced,
+  ].filter((n): n is number => typeof n === 'number');
   const items: Array<[string, unknown]> = [
     ['Objects', stats.objects],
     ['Fields', stats.fields],
@@ -13,6 +20,11 @@ export function StatsRow({ stats }: { stats: Record<string, unknown> }) {
     ['References linked', stats.refsResolved],
     ['Reports', stats.reportsImported],
     ['Dashboards', stats.dashboardsImported],
+    ['Flows', stats.flowsTranslated],
+    [
+      'Automations',
+      automationParts.length ? automationParts.reduce((a, b) => a + b, 0) : undefined,
+    ],
   ];
   return (
     <div className="flex flex-wrap gap-x-10 gap-y-4">

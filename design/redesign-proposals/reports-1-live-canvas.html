@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Reports · Live canvas — Northbeam redesign R1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 1040px; }
+
+  /* Header row */
+  .head { display: flex; align-items: center; gap: var(--sp-3); padding-top: var(--sp-2); }
+  .head h1 { margin: 0; font-size: var(--text-xl); font-weight: var(--fw-semibold); letter-spacing: -0.02em; }
+  .head .count { font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .head .btn { margin-left: auto; }
+
+  /* Ask bar */
+  .ask {
+    margin-top: var(--sp-5);
+    display: flex; align-items: center; gap: 10px;
+    height: 40px; padding: 0 14px;
+    border: 1px solid var(--border-field); border-radius: var(--radius-lg);
+    background: var(--field-bg); box-shadow: var(--shadow-btn);
+    color: var(--placeholder); font-size: var(--text-base);
+    cursor: text; transition: border-color 0.15s var(--ease);
+  }
+  .ask:hover { border-color: var(--border-strong); }
+  .ask .i { color: var(--accent); }
+  .ask kbd {
+    margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle);
+    border: 1px solid var(--border); border-radius: var(--radius-xs); padding: 1px 5px; background: var(--bg);
+  }
+  .ask-chips { margin-top: var(--sp-3); display: flex; gap: 8px; flex-wrap: wrap; }
+  .ask-chip {
+    display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px;
+    border: 1px solid var(--border); border-radius: var(--radius-full);
+    background: var(--surface); font-size: var(--text-sm); color: var(--ink-secondary);
+    transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
+  }
+  .ask-chip:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+
+  /* Saved reports grid */
+  .sect-head { margin-top: var(--sp-10); display: flex; align-items: baseline; justify-content: space-between; }
+  .grid { margin-top: var(--sp-3); display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
+  .rep {
+    display: block; padding: var(--sp-5);
+    transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+  }
+  .rep:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
+  .rep .viz { height: 108px; display: flex; flex-direction: column; justify-content: center; }
+  .rep .viz .spark { color: var(--accent); width: 100%; }
+  .rep h3 { margin: var(--sp-4) 0 0; font-size: var(--text-md); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+  .rep .sum { margin-top: 3px; font-size: var(--text-sm); color: var(--ink-muted); }
+  .rep .foot { margin-top: var(--sp-4); display: flex; align-items: center; gap: 10px; padding-top: var(--sp-3); border-top: 1px solid var(--divider); }
+  .rep .foot .upd { font-size: var(--text-xs); color: var(--ink-subtle); }
+  .rep .foot .pin { margin-left: auto; color: var(--ink-subtle); display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-sm); }
+  .rep .foot .pin:hover { background: var(--surface-hover); color: var(--ink); }
+  .rep .foot .pin.on { color: var(--accent); }
+
+  /* Mini bar list */
+  .bars { display: flex; flex-direction: column; gap: 7px; }
+  .bar-row { display: grid; grid-template-columns: 96px 1fr 64px; align-items: center; gap: 10px; font-size: var(--text-xs); }
+  .bar-row .l { color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-row .track { height: 12px; border-radius: var(--radius-xs); background: var(--accent-soft); overflow: hidden; }
+  .bar-row .fill { display: block; height: 100%; border-radius: var(--radius-xs); background: var(--accent); opacity: 0.75; }
+  .bar-row .v { text-align: right; color: var(--ink-secondary); font-variant-numeric: tabular-nums; font-weight: var(--fw-medium); }
+
+  /* AI insights strip */
+  .insights { margin-top: var(--sp-10); }
+  .insights .strip-head { display: flex; align-items: center; justify-content: space-between; }
+  .insight {
+    margin-top: var(--sp-3); display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-lg);
+    background: var(--surface); font-size: var(--text-base);
+    transition: border-color 0.15s var(--ease);
+  }
+  .insight:hover { border-color: var(--border-strong); }
+  .insight + .insight { margin-top: var(--sp-2); }
+  .insight .dot { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--radius-full); flex: none; }
+  .insight.warn .dot { color: var(--warning); background: var(--warning-bg); }
+  .insight.good .dot { color: var(--success); background: var(--success-bg); }
+  .insight .dot svg { width: 13px; height: 13px; }
+  .insight .txt { color: var(--ink-secondary); }
+  .insight .txt b { color: var(--ink); font-weight: var(--fw-medium); font-variant-numeric: tabular-nums; }
+  .insight .go { margin-left: auto; color: var(--ink-subtle); }
+  .insight:hover .go { color: var(--accent); }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Reports');</script>
+
+<main class="page">
+  <!-- Header -->
+  <div class="head reveal reveal-1">
+    <h1>Reports</h1>
+    <span class="count">4 saved</span>
+    <button class="btn primary"><svg class="i" data-icon="plus"></svg> New report</button>
+  </div>
+
+  <!-- Ask bar -->
+  <section class="reveal reveal-2">
+    <div class="ask">
+      <svg class="i" data-icon="zap"></svg>
+      Ask anything about your pipeline…
+      <kbd>⌘K</kbd>
+    </div>
+    <div class="ask-chips">
+      <button class="ask-chip">Pipeline by stage this quarter</button>
+      <button class="ask-chip">Deals closing in August 2026</button>
+      <button class="ask-chip">Which accounts have no open deals?</button>
+    </div>
+  </section>
+
+  <!-- Saved reports -->
+  <div class="sect-head reveal reveal-3">
+    <span class="eyebrow">Saved reports</span>
+  </div>
+  <section class="grid reveal reveal-3">
+
+    <a class="card rep" href="#">
+      <div class="viz">
+        <div class="bars">
+          <div class="bar-row"><span class="l">Proposal · quote</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="v">$1.0M</span></div>
+          <div class="bar-row"><span class="l">Needs analysis</span><span class="track"><span class="fill" style="width:93%"></span></span><span class="v">$930K</span></div>
+          <div class="bar-row"><span class="l">Prospecting</span><span class="track"><span class="fill" style="width:87%"></span></span><span class="v">$870K</span></div>
+          <div class="bar-row"><span class="l">Qualification</span><span class="track"><span class="fill" style="width:82%"></span></span><span class="v">$825K</span></div>
+          <div class="bar-row"><span class="l">Negotiation</span><span class="track"><span class="fill" style="width:37%"></span></span><span class="v">$370K</span></div>
+        </div>
+      </div>
+      <h3>Pipeline by stage</h3>
+      <div class="sum">Deals · Sum of Amount by Stage</div>
+      <div class="foot">
+        <span class="obj-chip">D</span>
+        <span class="upd">Updated 2d ago</span>
+        <span class="pin on"><svg class="i" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></svg></span>
+      </div>
+    </a>
+
+    <a class="card rep" href="#">
+      <div class="viz">
+        <svg class="spark" data-points="210,246,238,292,315,301,348,396,382,441,470,455,512,548" data-w="420" data-h="96" data-fill></svg>
+      </div>
+      <h3>Revenue trend</h3>
+      <div class="sum">Deals · Sum of Amount closed by Month</div>
+      <div class="foot">
+        <span class="obj-chip">D</span>
+        <span class="upd">Updated 5h ago</span>
+        <span class="pin"><svg class="i" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></svg></span>
+      </div>
+    </a>
+
+    <a class="card rep" href="#">
+      <div class="viz">
+        <div class="bars">
+          <div class="bar-row"><span class="l">Caleb Lamro</span><span class="track"><span class="fill" style="width:84%"></span></span><span class="v">42%</span></div>
+          <div class="bar-row"><span class="l">Ana Ferreira</span><span class="track"><span class="fill" style="width:70%"></span></span><span class="v">35%</span></div>
+          <div class="bar-row"><span class="l">Jon Mistry</span><span class="track"><span class="fill" style="width:56%"></span></span><span class="v">28%</span></div>
+          <div class="bar-row"><span class="l">Dana Whitfield</span><span class="track"><span class="fill" style="width:44%"></span></span><span class="v">22%</span></div>
+        </div>
+      </div>
+      <h3>Win rate by owner</h3>
+      <div class="sum">Deals · Won ÷ Closed by Owner</div>
+      <div class="foot">
+        <span class="obj-chip">D</span>
+        <span class="upd">Updated 4d ago</span>
+        <span class="pin"><svg class="i" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></svg></span>
+      </div>
+    </a>
+
+    <a class="card rep" href="#">
+      <div class="viz">
+        <svg class="spark" data-points="4,7,5,9,8,11,9,13,12,10,14,15,13,16" data-w="420" data-h="96"></svg>
+      </div>
+      <h3>Deals created weekly</h3>
+      <div class="sum">Deals · Count by Created week</div>
+      <div class="foot">
+        <span class="obj-chip">D</span>
+        <span class="upd">Updated 1w ago</span>
+        <span class="pin"><svg class="i" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></svg></span>
+      </div>
+    </a>
+  </section>
+
+  <!-- AI insights -->
+  <section class="insights reveal reveal-4">
+    <div class="strip-head">
+      <span class="eyebrow">AI insights</span>
+      <button class="btn ghost"><svg class="i" data-icon="refresh" style="width:12px;height:12px"></svg> Regenerate</button>
+    </div>
+    <a class="insight warn" href="#">
+      <span class="dot"><svg class="i" data-icon="alert"></svg></span>
+      <span class="txt"><b>3 deals</b> have had no activity in 14+ days — <b>$260K</b> at risk</span>
+      <svg class="i go" data-icon="arrow-right" style="width:13px;height:13px"></svg>
+    </a>
+    <a class="insight good" href="#">
+      <span class="dot"><svg class="i" data-icon="check"></svg></span>
+      <span class="txt">Proposal · quote is your largest stage — <b>$1M</b> across <b>10 deals</b></span>
+      <svg class="i go" data-icon="arrow-right" style="width:13px;height:13px"></svg>
+    </a>
+  </section>
+</main>
+
+<script>nbBadge('R1', 'Live canvas');</script>
+</body>
+</html>

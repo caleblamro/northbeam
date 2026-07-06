@@ -19,7 +19,9 @@ import {
   ListChecks,
   Plug,
   ShieldHalf,
+  Sparkles,
   Users,
+  Workflow,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -76,6 +78,23 @@ const SETUP_NAV: SetupNavGroup[] = [
         label: 'Picklists',
         icon: ListChecks,
         permission: 'object.manage',
+      },
+    ],
+  },
+  {
+    label: 'Automation',
+    items: [
+      {
+        href: '/setup/automations',
+        label: 'Flows',
+        icon: Workflow,
+        permission: 'automation.manage',
+      },
+      {
+        href: '/setup/agents',
+        label: 'AI agents',
+        icon: Sparkles,
+        permission: 'ai.agents.manage',
       },
     ],
   },

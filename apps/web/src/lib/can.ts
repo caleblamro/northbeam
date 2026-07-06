@@ -46,3 +46,15 @@ export function useCanCheck(): (action: Permission) => boolean {
   const p = usePermissions();
   return (action: Permission) => (p ? p.isOwner || p.org.includes(action) : false);
 }
+
+/** A stable per-object CRUD checker for lists of objectKeys (e.g. filtering AI
+ *  action buttons that each target a different object) where useCanObject can't
+ *  be called per item. */
+export function useCanObjectCheck(): (objectKey: string, action: ObjectAction) => boolean {
+  const p = usePermissions();
+  return (objectKey: string, action: ObjectAction) => {
+    if (!p) return false;
+    if (p.isOwner) return true;
+    return (p.objectOverrides[objectKey] ?? p.objectDefault)[action];
+  };
+}

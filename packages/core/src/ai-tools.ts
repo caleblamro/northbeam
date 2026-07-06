@@ -13,7 +13,7 @@
 // gated helpers the tRPC record procedures use — policy here decides
 // AVAILABILITY and FRICTION, never bypasses enforcement.
 
-export type AiToolKind = 'read' | 'write';
+export type AiToolKind = 'read' | 'write' | 'destructive';
 
 export type AiToolDef = {
   id: string;
@@ -58,6 +58,32 @@ export const AI_TOOLS: readonly AiToolDef[] = [
       'Field definitions for an object — types, picklist options, required flags, reference targets. No record data.',
     kind: 'read',
   },
+  // Write tools ship DISABLED for non-admin roles and NEVER auto-approve by
+  // default — every call renders an Allow/Deny in the thread. Execution runs
+  // the exact validation + permission path the human mutation endpoints use.
+  {
+    id: 'create_record',
+    title: 'Create a record',
+    description:
+      'Create one record with the given field values — full validation, required-field and rule checks apply.',
+    kind: 'write',
+  },
+  {
+    id: 'update_record',
+    title: 'Update a record',
+    description:
+      'Patch fields on one existing record by id — validation runs on the merged result.',
+    kind: 'write',
+  },
+  // Destructive: disabled for EVERY role by default (owners always have it);
+  // owners/role-managers grant it per role in the matrix. Approval is
+  // required on every call for everyone except owners.
+  {
+    id: 'delete_record',
+    title: 'Delete a record',
+    description: 'Permanently delete one record by id. Irreversible.',
+    kind: 'destructive',
+  },
 ] as const;
 
 export const AI_TOOL_IDS = AI_TOOLS.map((t) => t.id);
@@ -77,13 +103,18 @@ export function toolAllowedForRole(
   if (isOwner) return true;
   const row = policy.find((p) => p.roleKey === roleKey && p.toolId === tool.id);
   if (row) return row.allowed;
-  return tool.kind === 'read' ? true : roleKey === 'admin';
+  if (tool.kind === 'read') return true;
+  if (tool.kind === 'write') return roleKey === 'admin';
+  return false; // destructive: nobody by default — owners bypass above
 }
 
 /** Default auto-approval when the user hasn't chosen: read tools run without
- *  asking, write tools always ask. */
-export function toolAutoApproveDefault(tool: AiToolDef): boolean {
-  return tool.kind === 'read';
+ *  asking; write tools always ask; destructive tools ask for EVERYONE except
+ *  the owner (and even the owner can flip theirs off in prefs). */
+export function toolAutoApproveDefault(tool: AiToolDef, isOwner: boolean): boolean {
+  if (tool.kind === 'read') return true;
+  if (tool.kind === 'destructive') return isOwner;
+  return false;
 }
 
 export type EffectiveTool = AiToolDef & { autoApprove: boolean };
@@ -97,6 +128,27 @@ export function effectiveTools(
 ): EffectiveTool[] {
   return AI_TOOLS.filter((t) => toolAllowedForRole(policy, t, roleKey, isOwner)).map((t) => ({
     ...t,
-    autoApprove: prefs.find((p) => p.toolId === t.id)?.autoApprove ?? toolAutoApproveDefault(t),
+    autoApprove:
+      prefs.find((p) => p.toolId === t.id)?.autoApprove ?? toolAutoApproveDefault(t, isOwner),
   }));
+}
+
+/* ── Model catalog ──────────────────────────────────────────────────────────
+   The models an org's agents may run on. The org default (env.ANTHROPIC_MODEL)
+   is always usable; an agent's `models` list narrows the picker to a subset of
+   these. Lives here (not its own module) so the API validation and the web
+   picker share one import — and one that Turbopack demonstrably resolves. */
+
+export const AVAILABLE_AI_MODELS = [
+  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+  { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+  { id: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
+] as const;
+
+export type AiModel = (typeof AVAILABLE_AI_MODELS)[number];
+export type AiModelId = AiModel['id'];
+
+/** True when `id` names a model in the catalog. */
+export function isKnownModel(id: string): id is AiModelId {
+  return AVAILABLE_AI_MODELS.some((m) => m.id === id);
 }

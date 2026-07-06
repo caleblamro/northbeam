@@ -63,3 +63,61 @@ describe('approval broker', () => {
     expect(resolveToolApproval('00000000-0000-0000-0000-000000000000', true)).toBe(false);
   });
 });
+
+describe('write tools', () => {
+  const writeTool = AI_TOOLS.find((t) => t.kind === 'write');
+  if (!writeTool) throw new Error('catalog needs a write tool for these cases');
+
+  it('default to admin-only availability', () => {
+    expect(toolAllowedForRole([], writeTool, 'admin', false)).toBe(true);
+    expect(toolAllowedForRole([], writeTool, 'member', false)).toBe(false);
+    expect(toolAllowedForRole([], writeTool, 'viewer', false)).toBe(false);
+    expect(toolAllowedForRole([], writeTool, 'custom-sales', true)).toBe(true); // owner bypass
+  });
+
+  it('an admin grant row opens a write tool for another role', () => {
+    const policy = [{ roleKey: 'member', toolId: writeTool.id, allowed: true }];
+    expect(toolAllowedForRole(policy, writeTool, 'member', false)).toBe(true);
+  });
+
+  it('never auto-approve by default — every call must ask', () => {
+    const tools = effectiveTools([], [], 'admin', false);
+    for (const t of tools.filter((x) => x.kind === 'write')) {
+      expect(t.autoApprove, t.id).toBe(false);
+    }
+  });
+});
+
+describe('destructive tools (delete_record)', () => {
+  const destructive = AI_TOOLS.find((t) => t.kind === 'destructive');
+  if (!destructive) throw new Error('catalog needs a destructive tool for these cases');
+
+  it('disabled for every role by default — even admin; owner bypasses', () => {
+    expect(toolAllowedForRole([], destructive, 'admin', false)).toBe(false);
+    expect(toolAllowedForRole([], destructive, 'member', false)).toBe(false);
+    expect(toolAllowedForRole([], destructive, 'owner', true)).toBe(true);
+  });
+
+  it('an owner-granted policy row opens it for a role', () => {
+    const policy = [{ roleKey: 'admin', toolId: destructive.id, allowed: true }];
+    expect(toolAllowedForRole(policy, destructive, 'admin', false)).toBe(true);
+  });
+
+  it('requires approval for everyone except owners; owners auto-approve by default', () => {
+    const granted = [{ roleKey: 'admin', toolId: destructive.id, allowed: true }];
+    const admin = effectiveTools(granted, [], 'admin', false).find((t) => t.id === destructive.id);
+    expect(admin?.autoApprove).toBe(false);
+    const owner = effectiveTools([], [], 'owner', true).find((t) => t.id === destructive.id);
+    expect(owner?.autoApprove).toBe(true);
+  });
+
+  it('even an owner can opt into asking every time', () => {
+    const owner = effectiveTools(
+      [],
+      [{ toolId: destructive.id, autoApprove: false }],
+      'owner',
+      true,
+    ).find((t) => t.id === destructive.id);
+    expect(owner?.autoApprove).toBe(false);
+  });
+});

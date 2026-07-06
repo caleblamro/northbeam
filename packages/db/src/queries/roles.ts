@@ -8,6 +8,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { DbExecutor } from '../client.js';
 import type { Role } from '../roles.js';
 import * as schema from '../schema.js';
+import type { FilterEntry } from '../views.js';
 
 // member.role is column-typed to the 4 system keys but may hold a custom role
 // key (it's a text column). Cast comparison values so the query builder accepts
@@ -182,7 +183,9 @@ export async function listObjectPermissionsWithKey(
   db: DbExecutor,
   orgId: string,
   roleId: string,
-): Promise<Array<{ objectId: string; objectKey: string; grant: Crud }>> {
+): Promise<
+  Array<{ objectId: string; objectKey: string; grant: Crud; filter: FilterEntry[] | null }>
+> {
   const rows = await db
     .select({
       objectId: schema.objectPermission.objectId,
@@ -191,6 +194,7 @@ export async function listObjectPermissionsWithKey(
       canRead: schema.objectPermission.canRead,
       canUpdate: schema.objectPermission.canUpdate,
       canDelete: schema.objectPermission.canDelete,
+      filter: schema.objectPermission.filter,
     })
     .from(schema.objectPermission)
     .innerJoin(schema.objectDef, eq(schema.objectDef.id, schema.objectPermission.objectId))
@@ -204,16 +208,19 @@ export async function listObjectPermissionsWithKey(
     objectId: r.objectId,
     objectKey: r.objectKey,
     grant: { create: r.canCreate, read: r.canRead, update: r.canUpdate, delete: r.canDelete },
+    filter: r.filter ?? null,
   }));
 }
 
 /** Upsert one object override for a role. The objectId must belong to the org
- *  (callers validate via getObjectById). */
+ *  (callers validate via getObjectById). `filter` is the optional row-level
+ *  (criteria) scope — null/omitted clears it. */
 export async function upsertObjectPermission(
   db: DbExecutor,
   orgId: string,
-  input: { roleId: string; objectId: string; grant: Crud },
+  input: { roleId: string; objectId: string; grant: Crud; filter?: FilterEntry[] | null },
 ): Promise<void> {
+  const filter = input.filter && input.filter.length > 0 ? input.filter : null;
   await db
     .insert(schema.objectPermission)
     .values({
@@ -224,6 +231,7 @@ export async function upsertObjectPermission(
       canRead: input.grant.read,
       canUpdate: input.grant.update,
       canDelete: input.grant.delete,
+      filter,
     })
     .onConflictDoUpdate({
       target: [schema.objectPermission.roleId, schema.objectPermission.objectId],
@@ -232,6 +240,7 @@ export async function upsertObjectPermission(
         canRead: input.grant.read,
         canUpdate: input.grant.update,
         canDelete: input.grant.delete,
+        filter,
         updatedAt: new Date(),
       },
     });

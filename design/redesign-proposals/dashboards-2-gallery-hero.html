@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dashboards · Gallery hero — Northbeam redesign B2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 1080px; }
+
+  .head { display: flex; align-items: center; gap: var(--sp-3); padding-top: var(--sp-2); }
+  .head h1 { margin: 0; font-size: var(--text-xl); font-weight: var(--fw-semibold); letter-spacing: -0.02em; }
+  .head .count { font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .head .acts { margin-left: auto; display: flex; gap: 8px; }
+
+  /* ---- Hero ---- */
+  .hero { margin-top: var(--sp-6); overflow: hidden; }
+  .hero-head { display: flex; align-items: center; gap: 10px; padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--border); }
+  .hero-head h2 { margin: 0; font-size: var(--text-md); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+  .hero-head .btn { margin-left: auto; }
+
+  .hero-preview {
+    display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px;
+    padding: var(--sp-4) var(--sp-5) var(--sp-5);
+    background: var(--surface-sunken);
+  }
+  .w { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; }
+  .w .wl { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--ink-subtle); font-weight: var(--fw-medium); }
+  .w-metric { grid-column: span 3; }
+  .w-metric .v { margin-top: 2px; font-size: var(--text-lg); font-weight: var(--fw-semibold); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .w-chart { grid-column: span 7; }
+  .w-list { grid-column: span 5; }
+
+  .hbars { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .hb { display: grid; grid-template-columns: 88px 1fr 52px; align-items: center; gap: 8px; }
+  .hb .l { font-size: 10px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hb .track { height: 9px; border-radius: 3px; background: var(--accent-soft); }
+  .hb .f { display: block; height: 100%; border-radius: 3px; background: var(--accent); opacity: 0.75; }
+  .hb .v { font-size: 10px; text-align: right; color: var(--ink-secondary); font-variant-numeric: tabular-nums; font-weight: var(--fw-medium); }
+
+  .hlist { margin-top: 7px; }
+  .hrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--divider); font-size: 11px; }
+  .hrow:last-child { border-bottom: 0; }
+  .hrow .n { color: var(--ink-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hrow .a { color: var(--ink); font-weight: var(--fw-medium); font-variant-numeric: tabular-nums; flex: none; }
+
+  /* ---- Lower split ---- */
+  .lower { margin-top: var(--sp-8); display: grid; grid-template-columns: 2fr 1fr; gap: var(--sp-5); align-items: start; }
+  .sect-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: var(--sp-3); }
+
+  .dlist { display: flex; flex-direction: column; }
+  .drow {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--divider);
+    transition: background 0.12s var(--ease);
+  }
+  .drow:hover { background: var(--surface-hover); }
+  .drow .nm { font-size: var(--text-base); font-weight: var(--fw-medium); color: var(--ink); }
+  .drow .sum { font-size: var(--text-sm); color: var(--ink-muted); }
+  .drow .right-meta { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .drow .upd { font-size: var(--text-xs); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .drow .go { color: var(--ink-subtle); }
+  .drow:hover .go { color: var(--accent); }
+
+  .sugg { padding: var(--sp-4) var(--sp-5); }
+  .sugg-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 2px; width: 100%; text-align: left;
+    border-bottom: 1px solid var(--divider);
+    font-size: var(--text-sm); color: var(--ink-secondary);
+    transition: color 0.12s var(--ease);
+  }
+  .sugg-row:hover { color: var(--ink); }
+  .sugg-row:last-of-type { border-bottom: 0; }
+  .sugg-row .i { color: var(--accent); width: 13px; height: 13px; }
+  .sugg-row .go { margin-left: auto; color: var(--ink-subtle); width: 12px; height: 12px; }
+  .sugg-row:hover .go { color: var(--accent); }
+  .sugg .foot { margin-top: var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--divider); font-size: var(--text-xs); color: var(--ink-subtle); }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Dashboards');</script>
+
+<main class="page">
+  <!-- Header -->
+  <div class="head reveal reveal-1">
+    <h1>Dashboards</h1>
+    <span class="count">3</span>
+    <div class="acts">
+      <button class="btn outline">Browse templates</button>
+      <button class="btn primary"><svg class="i" data-icon="zap" style="width:13px;height:13px"></svg> New with AI</button>
+    </div>
+  </div>
+
+  <!-- Hero: default dashboard -->
+  <section class="card hero reveal reveal-2">
+    <div class="hero-head">
+      <span class="obj-chip">P</span>
+      <h2>Pipeline overview</h2>
+      <span class="pill info plain">Default</span>
+      <button class="btn outline">Open <svg class="i" data-icon="arrow-up-right" style="width:12px;height:12px"></svg></button>
+    </div>
+    <div class="hero-preview">
+      <div class="w w-metric"><div class="wl">Open pipeline</div><div class="v">$4.0M</div></div>
+      <div class="w w-metric"><div class="wl">Open deals</div><div class="v">48</div></div>
+      <div class="w w-metric"><div class="wl">Avg deal size</div><div class="v">$83,750</div></div>
+      <div class="w w-metric"><div class="wl">Closed won · FY26</div><div class="v">$2.0M</div></div>
+
+      <div class="w w-chart">
+        <div class="wl">Pipeline by stage</div>
+        <div class="hbars">
+          <div class="hb"><span class="l">Proposal · quote</span><span class="track"><span class="f" style="width:100%"></span></span><span class="v">$1.0M</span></div>
+          <div class="hb"><span class="l">Needs analysis</span><span class="track"><span class="f" style="width:93%"></span></span><span class="v">$930K</span></div>
+          <div class="hb"><span class="l">Prospecting</span><span class="track"><span class="f" style="width:87%"></span></span><span class="v">$870K</span></div>
+          <div class="hb"><span class="l">Qualification</span><span class="track"><span class="f" style="width:82%"></span></span><span class="v">$825K</span></div>
+          <div class="hb"><span class="l">Negotiation</span><span class="track"><span class="f" style="width:37%"></span></span><span class="v">$370K</span></div>
+        </div>
+      </div>
+
+      <div class="w w-list">
+        <div class="wl">Largest open deals</div>
+        <div class="hlist">
+          <div class="hrow"><span class="n">Globex Industries — Expansion 2025</span><span class="a">$152,500</span></div>
+          <div class="hrow"><span class="n">Stark Industries — Expansion 2025</span><span class="a">$148,000</span></div>
+          <div class="hrow"><span class="n">Hooli — Expansion 2025</span><span class="a">$137,500</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Lower: list + suggested -->
+  <div class="lower reveal reveal-3">
+    <section>
+      <div class="sect-head"><span class="eyebrow">All dashboards</span></div>
+      <div class="dlist">
+        <a class="drow" href="#">
+          <span class="obj-chip">P</span>
+          <span><span class="nm">Pipeline overview</span><br /><span class="sum">6 widgets · Deals</span></span>
+          <span class="right-meta"><span class="pill neutral plain">Workspace</span><span class="upd">Updated 2d ago</span><svg class="i go" data-icon="arrow-right" style="width:13px;height:13px"></svg></span>
+        </a>
+        <a class="drow" href="#">
+          <span class="obj-chip">A</span>
+          <span><span class="nm">Account health</span><br /><span class="sum">5 widgets · Accounts</span></span>
+          <span class="right-meta"><span class="pill neutral plain">Workspace</span><span class="upd">Updated 4d ago</span><svg class="i go" data-icon="arrow-right" style="width:13px;height:13px"></svg></span>
+        </a>
+        <a class="drow" href="#">
+          <span class="obj-chip">R</span>
+          <span><span class="nm">Rep activity</span><br /><span class="sum">4 widgets · Activities</span></span>
+          <span class="right-meta"><span class="pill neutral plain">Private</span><span class="upd">Updated 1w ago</span><svg class="i go" data-icon="arrow-right" style="width:13px;height:13px"></svg></span>
+        </a>
+      </div>
+    </section>
+
+    <section class="card sugg">
+      <span class="eyebrow">Suggested</span>
+      <button class="sugg-row"><svg class="i" data-icon="zap"></svg> Build a win-rate leaderboard by owner <svg class="i go" data-icon="arrow-right"></svg></button>
+      <button class="sugg-row"><svg class="i" data-icon="zap"></svg> Track deals closing in August 2026 <svg class="i go" data-icon="arrow-right"></svg></button>
+      <button class="sugg-row"><svg class="i" data-icon="zap"></svg> Compare pipeline vs. last quarter <svg class="i go" data-icon="arrow-right"></svg></button>
+      <div class="foot">Powered by the composer</div>
+    </section>
+  </div>
+</main>
+
+<script>nbBadge('B2', 'Gallery hero');</script>
+</body>
+</html>

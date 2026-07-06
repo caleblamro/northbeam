@@ -11,6 +11,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# macOS ships a 256 file-descriptor soft limit; Turbopack's compile bursts
+# blow past it once the repo is big enough, and failed stat()s get cached as
+# phantom "Module not found" errors for files that plainly exist. Raise it
+# for everything this script spawns (no-op where already higher).
+ulimit -n 65536 2>/dev/null || ulimit -n 10240 2>/dev/null || true
+
 # 1. bootstrap .env.local on first run only
 if [[ ! -f .env.local ]]; then
   echo "→ no .env.local — generating with secure defaults"

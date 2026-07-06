@@ -17,6 +17,7 @@
     "sf:dev-connect": "tsx --env-file-if-exists=../../.env.local --env-file-if-exists=.env.local scripts/sf-dev-connect.ts",
     "sf:dry-run-map": "tsx scripts/sf-dry-run-map.ts",
     "sf:dry-run-report": "tsx scripts/sf-dry-run-report.ts",
+    "sf:dry-run-flow": "tsx scripts/sf-dry-run-flow.ts",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

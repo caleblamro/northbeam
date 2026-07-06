@@ -13,15 +13,27 @@
 // completion audit opens its own org context on the root db.
 
 import { loadEnv } from '@northbeam/config';
-import { AI_TOOLS, ArtifactLikeSchema, canObject, effectiveTools } from '@northbeam/core';
+import {
+  AI_TOOLS,
+  ArtifactLikeSchema,
+  type AuthContext,
+  canObject,
+  effectiveTools,
+} from '@northbeam/core';
 import {
   type AiSessionMessage,
+  type DbExecutor,
+  type ShareTarget,
   deleteAiSession,
+  getAiAgent,
+  getAiSessionForUser,
   isAdminish,
   listAiSessions,
   listAiToolPolicies,
   listAiToolPrefs,
   listObjectsWithFields,
+  listSharedAiSessions,
+  setAiSessionShare,
   setAiToolPolicy,
   setAiToolPref,
   upsertAiSession,
@@ -33,6 +45,13 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { applyArtifactPatch } from '../../ai/apply-patch.js';
 import { type ObjectContext, streamArtifact } from '../../ai/artifact-generator.js';
+import {
+  type ChatStreamEvent,
+  agentVisibleToRole,
+  intersectTools,
+  pickChatModel,
+  runChatLoop,
+} from '../../ai/chat-loop.js';
 import { buildDataSummary } from '../../ai/data-summary.js';
 import { type ObjectFieldsByKey, repairArtifact } from '../../ai/repair-artifact.js';
 import { runResearch } from '../../ai/research.js';
@@ -47,11 +66,40 @@ import { redis } from '../../queue/connection.js';
 import { rootDb } from '../context.js';
 import { permissionProcedure, protectedProcedure, router } from '../trpc.js';
 
-const SessionMessageSchema = z.object({
-  role: z.enum(['user', 'assistant']),
-  content: z.string().max(4000),
-  repairs: z.array(z.string().max(400)).optional(),
-}) satisfies z.ZodType<AiSessionMessage>;
+/** Persisted chat turn — discriminated on `kind`. Legacy rows predate the
+ *  field, so the text variant keeps `kind` optional (no kind = text). */
+const SessionMessageSchema = z.union([
+  z.object({
+    kind: z.literal('text').optional(),
+    role: z.enum(['user', 'assistant']),
+    content: z.string().max(4000),
+    repairs: z.array(z.string().max(400)).optional(),
+  }),
+  z.object({
+    kind: z.literal('tool'),
+    toolId: z.string().max(100),
+    title: z.string().max(200),
+    status: z.enum(['done', 'denied', 'error']),
+    inputSummary: z.string().max(2000).optional(),
+    resultSummary: z.string().max(2000).optional(),
+  }),
+  z.object({
+    kind: z.literal('artifact'),
+    note: z.string().max(4000).optional(),
+  }),
+]) satisfies z.ZodType<AiSessionMessage>;
+
+/** Same share vocabulary as saved views (see routers/view.ts). */
+const ShareTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('org') }),
+  z.object({ kind: z.literal('role'), role: z.enum(['owner', 'admin', 'member', 'viewer']) }),
+  z.object({ kind: z.literal('user'), userId: z.string().min(1) }),
+]) satisfies z.ZodType<ShareTarget>;
+
+/** Clip persisted tool summaries to the SessionMessageSchema bounds. */
+function clip(s: string, max: number): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
 
 /** Minimum gap between streamed partial snapshots. Each snapshot re-sends the
  *  whole partial payload, so unthrottled streaming is O(n²) bytes. */
@@ -63,6 +111,114 @@ const PARTIAL_INTERVAL_MS = 150;
  * the web error formatter. */
 const USER_LIMIT = { max: 10, windowSec: 10 * 60 };
 const ORG_LIMIT = { max: 200, windowSec: 24 * 60 * 60 };
+
+/** Shared gate for the streaming generations (ai.preview / ai.chat): AI must
+ *  be configured, and the caller must clear the per-user + per-org fixed
+ *  windows — ONE spend budget across both endpoints. Returns the env. */
+async function gateAiGeneration(userId: string, organizationId: string) {
+  const env = loadEnv();
+  if (!env.ANTHROPIC_API_KEY) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: 'AI generation is not configured. Set ANTHROPIC_API_KEY on the API to enable it.',
+    });
+  }
+  // Cost guard before any DB work. Fail-open on Redis trouble.
+  const [userGate, orgGate] = await Promise.all([
+    fixedWindow(redis(), `ai:preview:u:${userId}`, USER_LIMIT.max, USER_LIMIT.windowSec),
+    fixedWindow(redis(), `ai:preview:o:${organizationId}`, ORG_LIMIT.max, ORG_LIMIT.windowSec),
+  ]);
+  const blocked = !userGate.ok ? userGate : !orgGate.ok ? orgGate : null;
+  if (blocked) {
+    const mins = Math.max(1, Math.ceil(blocked.resetSec / 60));
+    throw new TRPCError({
+      code: 'TOO_MANY_REQUESTS',
+      message: `AI generation limit reached — try again in ~${mins} min.`,
+    });
+  }
+  return env;
+}
+
+/** Everything a generation needs from the caller's org, loaded EAGERLY (the
+ *  streaming resolvers' ctx.db dies when they return their iterable):
+ *
+ *  - every object the caller's role can READ, with fields — cross-object
+ *    prompt context AND the ground truth the repair pass checks against. A
+ *    role without the deal grant must not see deal fields in the prompt, get
+ *    deal numbers in the summary, or have repair bless deal-targeting
+ *    components the render-time procedures would then 403;
+ *  - the live data summary for the target object (through the caller's OWN
+ *    visibility, same acl record.aggregate builds), soft-failing — a flaky
+ *    summary shouldn't block generation;
+ *  - the effective research tools: what the admin allows for this role, with
+ *    the user's auto-approve friction.
+ *
+ *  Unknown and unreadable objectKeys look identical (NOT_FOUND) on purpose.
+ *  Detail mode without a target object degrades to dashboard mode. */
+async function loadComposeContext(
+  db: DbExecutor,
+  auth: AuthContext,
+  input: { objectKey?: string; mode: 'dashboard' | 'detail' },
+) {
+  const all = (await listObjectsWithFields(db, auth.organizationId)).filter((o) =>
+    canObject(auth.permissions, o.object.id, 'read'),
+  );
+  const objectWithFields = input.objectKey
+    ? (all.find((o) => o.object.key === input.objectKey) ?? null)
+    : null;
+  if (input.objectKey && !objectWithFields) {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: `object '${input.objectKey}' not found`,
+    });
+  }
+  const otherObjects: ObjectContext[] = all.filter(
+    (o) => o.object.key !== objectWithFields?.object.key,
+  );
+  const objectFields: ObjectFieldsByKey = new Map(all.map((o) => [o.object.key, o.fields]));
+
+  // Workspace scope has no single object to summarize — skipped.
+  let summary: Awaited<ReturnType<typeof buildDataSummary>> | null = null;
+  if (objectWithFields) {
+    try {
+      const adminish = isAdminish(auth.role);
+      const sharedRecordIds =
+        objectWithFields.object.defaultVisibility === 'private' && !adminish
+          ? await visibleSharedRecordIds(
+              db,
+              { orgId: auth.organizationId, userId: auth.userId, role: auth.role },
+              objectWithFields.object.id,
+            )
+          : [];
+      summary = await buildDataSummary(db, {
+        orgId: auth.organizationId,
+        object: objectWithFields.object,
+        fields: objectWithFields.fields,
+        acl: { userId: auth.userId, sharedRecordIds, isAdminish: adminish },
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[ai] data summary failed', err);
+      summary = { recordCount: 0, picklistCounts: [], numericSummary: null, dateSeries: null };
+    }
+  }
+
+  const mode =
+    input.mode === 'detail' && objectWithFields ? ('detail' as const) : ('dashboard' as const);
+
+  const [policyRows, prefRows] = await Promise.all([
+    listAiToolPolicies(db, auth.organizationId),
+    listAiToolPrefs(db, { orgId: auth.organizationId, userId: auth.userId }),
+  ]);
+  const allowedTools = effectiveTools(
+    policyRows.map((p) => ({ roleKey: p.roleKey, toolId: p.toolId, allowed: p.allowed })),
+    prefRows.map((p) => ({ toolId: p.toolId, autoApprove: p.autoApprove })),
+    auth.role,
+    auth.permissions.isOwner,
+  );
+
+  return { all, objectWithFields, otherObjects, objectFields, summary, mode, allowedTools };
+}
 
 export const aiRouter = router({
   /** Streamed generation. Yields `{ type: 'partial' }` snapshots (note text
@@ -85,118 +241,12 @@ export const aiRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const env = loadEnv();
-      if (!env.ANTHROPIC_API_KEY) {
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message:
-            'AI generation is not configured. Set ANTHROPIC_API_KEY on the API to enable it.',
-        });
-      }
-
-      // Cost guard before any DB work. Fail-open on Redis trouble.
-      const [userGate, orgGate] = await Promise.all([
-        fixedWindow(
-          redis(),
-          `ai:preview:u:${ctx.auth.userId}`,
-          USER_LIMIT.max,
-          USER_LIMIT.windowSec,
-        ),
-        fixedWindow(
-          redis(),
-          `ai:preview:o:${ctx.auth.organizationId}`,
-          ORG_LIMIT.max,
-          ORG_LIMIT.windowSec,
-        ),
-      ]);
-      const blocked = !userGate.ok ? userGate : !orgGate.ok ? orgGate : null;
-      if (blocked) {
-        const mins = Math.max(1, Math.ceil(blocked.resetSec / 60));
-        throw new TRPCError({
-          code: 'TOO_MANY_REQUESTS',
-          message: `AI generation limit reached — try again in ~${mins} min.`,
-        });
-      }
-
-      // Every org object's fields in two queries: cross-object context for
-      // the prompt AND the ground truth the repair pass checks specs against.
-      // Filtered to objects the caller's role can READ — a role without the
-      // deal grant must not see deal fields in the prompt, get deal numbers
-      // in the summary, or have repair bless deal-targeting components the
-      // render-time procedures would then 403.
-      const all = (await listObjectsWithFields(ctx.db, ctx.auth.organizationId)).filter((o) =>
-        canObject(ctx.auth.permissions, o.object.id, 'read'),
-      );
-      const objectWithFields = input.objectKey
-        ? (all.find((o) => o.object.key === input.objectKey) ?? null)
-        : null;
-      if (input.objectKey && !objectWithFields) {
-        // Unknown and unreadable look identical on purpose.
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: `object '${input.objectKey}' not found`,
-        });
-      }
-      const otherObjects: ObjectContext[] = all.filter(
-        (o) => o.object.key !== objectWithFields?.object.key,
-      );
-      const objectFields: ObjectFieldsByKey = new Map(all.map((o) => [o.object.key, o.fields]));
-
-      // Pre-flight: pull the live numbers so Claude composes against truth —
-      // through the caller's OWN visibility (same acl record.aggregate builds),
-      // so the note never cites numbers the rendered dashboard won't show.
-      // Wrapped in try/catch — a flaky summary shouldn't block generation,
-      // and the prompt explicitly tells Claude to mark sample values when
-      // the summary doesn't cover a metric. Workspace scope has no single
-      // object to summarize — the prompt's live-summary section is skipped.
-      let summary: Awaited<ReturnType<typeof buildDataSummary>> | null = null;
-      if (objectWithFields) {
-        try {
-          const adminish = isAdminish(ctx.auth.role);
-          const sharedRecordIds =
-            objectWithFields.object.defaultVisibility === 'private' && !adminish
-              ? await visibleSharedRecordIds(
-                  ctx.db,
-                  {
-                    orgId: ctx.auth.organizationId,
-                    userId: ctx.auth.userId,
-                    role: ctx.auth.role,
-                  },
-                  objectWithFields.object.id,
-                )
-              : [];
-          summary = await buildDataSummary(ctx.db, {
-            orgId: ctx.auth.organizationId,
-            object: objectWithFields.object,
-            fields: objectWithFields.fields,
-            acl: { userId: ctx.auth.userId, sharedRecordIds, isAdminish: adminish },
-          });
-        } catch (err) {
-          // eslint-disable-next-line no-console
-          console.warn('[ai.preview] data summary failed', err);
-          summary = { recordCount: 0, picklistCounts: [], numericSummary: null, dateSeries: null };
-        }
-      }
-
-      // Detail mode needs a target object — degrade to dashboard mode when
-      // the caller forgot one rather than failing the generation.
-      const mode = input.mode === 'detail' && objectWithFields ? 'detail' : 'dashboard';
-
-      // Research tools: what the admin allows for this role, with the user's
-      // auto-approve friction. Loaded eagerly (ctx.db dies with the tx).
-      const [policyRows, prefRows] = await Promise.all([
-        listAiToolPolicies(ctx.db, ctx.auth.organizationId),
-        listAiToolPrefs(ctx.db, { orgId: ctx.auth.organizationId, userId: ctx.auth.userId }),
-      ]);
-      const allowedTools = effectiveTools(
-        policyRows.map((p) => ({ roleKey: p.roleKey, toolId: p.toolId, allowed: p.allowed })),
-        prefRows.map((p) => ({ toolId: p.toolId, autoApprove: p.autoApprove })),
-        ctx.auth.role,
-        ctx.auth.permissions.isOwner,
-      );
+      const env = await gateAiGeneration(ctx.auth.userId, ctx.auth.organizationId);
+      const { all, objectWithFields, otherObjects, objectFields, summary, mode, allowedTools } =
+        await loadComposeContext(ctx.db, ctx.auth, input);
 
       // Captured for the generator below — ctx.db is dead once it runs.
-      const { organizationId, userId, role } = ctx.auth;
+      const { organizationId, userId, role, permissions } = ctx.auth;
       const objectId = objectWithFields?.object.id ?? null;
       const { objectKey, prompt, currentArtifact } = input;
       const composeInputs = {
@@ -216,6 +266,7 @@ export const aiRouter = router({
             orgId: organizationId,
             userId,
             role,
+            permissions,
             readable: readableObjects,
             runInOrg: (fn) => withOrgContext(rootDb(), organizationId, fn),
             emit: (ev) => channel.push(ev),
@@ -266,10 +317,7 @@ export const aiRouter = router({
         const repaired = artifact
           ? repairArtifact(artifact, objectFields, { mode, baseObjectKey: objectKey })
           : null;
-        const repairNotes = [
-          ...(repaired?.notes ?? []),
-          ...(patchNote ? [patchNote] : []),
-        ];
+        const repairNotes = [...(repaired?.notes ?? []), ...(patchNote ? [patchNote] : [])];
 
         try {
           await withOrgContext(rootDb(), organizationId, (tx) =>
@@ -304,6 +352,211 @@ export const aiRouter = router({
           repairs: repairNotes,
           summary,
           model: env.ANTHROPIC_MODEL,
+        };
+      })();
+    }),
+
+  /** Chat-first agentic turn against one agent preset. Streams the research
+   *  tools' lifecycle events (tool-approval / tool-start / tool-end) exactly
+   *  like ai.preview, plus 'text-delta' chunks of the reply and an
+   *  '{ type: "artifact" }' snapshot whenever the model composes or patches
+   *  the dashboard mid-turn, then one final 'chat-done' with the full text,
+   *  the last repaired artifact (null = the turn composed nothing) and the
+   *  persisted session id. Unlike ai.preview the thread is saved SERVER-side
+   *  after the turn — the client never autosaves ai.chat threads. */
+  chat: permissionProcedure('view.write')
+    .input(
+      z.object({
+        /** Resume an existing thread; omit to start a new one. */
+        sessionId: z.string().uuid().optional(),
+        agentId: z.string().uuid(),
+        /** Honored only when the agent's resolved model list allows it —
+         *  otherwise the agent's first resolved model runs. */
+        model: z.string().min(1).max(100).optional(),
+        prompt: z.string().min(1).max(4000),
+        currentArtifact: ArtifactLikeSchema.optional(),
+        /** Omit for WORKSPACE scope — same semantics as ai.preview. */
+        objectKey: z.string().min(1).optional(),
+        mode: z.enum(['dashboard', 'detail']).default('dashboard'),
+        /** The prior thread, replayed to the model (tool/artifact turns as
+         *  short markers) — the server does not re-read it from the row. */
+        messages: z.array(SessionMessageSchema).max(40).default([]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const env = await gateAiGeneration(ctx.auth.userId, ctx.auth.organizationId);
+
+      // Role-gated agent load — invisible and missing look identical.
+      const agent = await getAiAgent(ctx.db, ctx.auth.organizationId, input.agentId);
+      if (
+        !agent ||
+        !agentVisibleToRole(agent.roleKeys, ctx.auth.role, ctx.auth.permissions.isOwner)
+      ) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'agent not found' });
+      }
+      const model = pickChatModel(agent.models, env.ANTHROPIC_MODEL, input.model);
+
+      const { all, objectWithFields, otherObjects, objectFields, summary, mode, allowedTools } =
+        await loadComposeContext(ctx.db, ctx.auth, input);
+      // The agent's allowlist only ever NARROWS what the role policy grants.
+      const agentTools = intersectTools(allowedTools, agent.toolIds);
+
+      // Existing row, for title/objectKey continuity on resume. A shared
+      // (not owned) thread forks on save — upsertAiSession only updates rows
+      // the caller owns.
+      const existing = input.sessionId
+        ? await getAiSessionForUser(ctx.db, {
+            orgId: ctx.auth.organizationId,
+            userId: ctx.auth.userId,
+            role: ctx.auth.role,
+            id: input.sessionId,
+          })
+        : null;
+
+      // Captured for the generator below — ctx.db is dead once it runs.
+      const { organizationId, userId, role, permissions } = ctx.auth;
+      const { sessionId, prompt, objectKey, currentArtifact } = input;
+      const priorMessages = input.messages;
+      const agentRow = agent;
+      const composeContext = {
+        object: objectWithFields?.object ?? null,
+        fields: objectWithFields?.fields ?? [],
+        otherObjects,
+        summary,
+        objectFields,
+        mode,
+        ...(objectKey ? { baseObjectKey: objectKey } : {}),
+        ...(currentArtifact ? { currentArtifact } : {}),
+      };
+
+      return (async function* () {
+        const channel = createEventChannel<ToolEvent | ChatStreamEvent>();
+
+        // Tool lifecycle events feed BOTH the client stream and the turns
+        // persisted on the session row (start input + end status/summary).
+        const startedCalls = new Map<string, unknown>();
+        const toolTurns: AiSessionMessage[] = [];
+        const emitTool = (ev: ToolEvent) => {
+          if (ev.type === 'tool-approval' || ev.type === 'tool-start') {
+            startedCalls.set(ev.callId, ev.input);
+          } else {
+            const started = startedCalls.get(ev.callId);
+            toolTurns.push({
+              kind: 'tool',
+              toolId: ev.toolId,
+              title: AI_TOOLS.find((t) => t.id === ev.toolId)?.title ?? ev.toolId,
+              status: ev.status,
+              ...(started !== undefined
+                ? { inputSummary: clip(JSON.stringify(started), 2000) }
+                : {}),
+              ...(ev.summary ? { resultSummary: clip(ev.summary, 2000) } : {}),
+            });
+          }
+          channel.push(ev);
+        };
+
+        const researchTools = buildResearchTools(agentTools, {
+          orgId: organizationId,
+          userId,
+          role,
+          permissions,
+          readable: all,
+          runInOrg: (fn) => withOrgContext(rootDb(), organizationId, fn),
+          emit: emitTool,
+        });
+
+        const loopDone = runChatLoop({
+          model,
+          agent: { name: agentRow.name, systemPrompt: agentRow.systemPrompt },
+          prompt,
+          priorMessages,
+          objects: all,
+          researchTools,
+          compose: composeContext,
+          emit: (ev) => channel.push(ev),
+        }).finally(() => channel.close());
+
+        for await (const ev of channel.drain()) {
+          yield ev;
+        }
+        const outcome = await loopDone;
+
+        // Server-side persistence: prior thread + this turn's user text, tool
+        // calls, artifact marker, and assistant text.
+        const turnMessages: AiSessionMessage[] = [
+          ...priorMessages,
+          { kind: 'text', role: 'user', content: prompt },
+          ...toolTurns,
+          ...(outcome.artifact
+            ? [
+                {
+                  kind: 'artifact',
+                  note: `${outcome.artifact.components.length} components`,
+                } satisfies AiSessionMessage,
+              ]
+            : []),
+          ...(outcome.text
+            ? [
+                {
+                  kind: 'text',
+                  role: 'assistant',
+                  content: clip(outcome.text, 4000),
+                  ...(outcome.repairs.length
+                    ? { repairs: outcome.repairs.map((r) => clip(r, 400)) }
+                    : {}),
+                } satisfies AiSessionMessage,
+              ]
+            : []),
+        ];
+
+        let savedId: string | null = null;
+        try {
+          savedId = await withOrgContext(rootDb(), organizationId, async (tx) => {
+            const saved = await upsertAiSession(tx, {
+              orgId: organizationId,
+              userId,
+              ...(sessionId ? { id: sessionId } : {}),
+              // '__workspace__' mirrors the composer's WORKSPACE_KEY sentinel.
+              objectKey: objectKey ?? existing?.objectKey ?? '__workspace__',
+              title:
+                existing && existing.userId === userId ? existing.title : clip(prompt.trim(), 120),
+              messages: turnMessages.slice(-200),
+              artifact: outcome.artifact ?? currentArtifact,
+              agentId: agentRow.id,
+              model,
+            });
+            await writeAuditEvent(tx, {
+              organizationId,
+              userId,
+              action: 'ai.chatted',
+              targetType: 'ai_agent',
+              targetId: agentRow.id,
+              meta: {
+                agentKey: agentRow.key,
+                model,
+                objectKey: objectKey ?? 'workspace',
+                promptLength: prompt.length,
+                toolCalls: toolTurns.length,
+                composed: Boolean(outcome.artifact),
+                repairs: outcome.repairs.length,
+              },
+            });
+            return saved.id;
+          });
+        } catch (err) {
+          // The reply already streamed — don't fail the turn over persistence.
+          // eslint-disable-next-line no-console
+          console.warn('[ai.chat] session persist failed', err);
+        }
+
+        yield {
+          type: 'chat-done' as const,
+          text: outcome.text,
+          artifact: outcome.artifact,
+          repairs: outcome.repairs,
+          model,
+          agentId: agentRow.id,
+          sessionId: savedId,
         };
       })();
     }),
@@ -422,5 +675,44 @@ export const aiRouter = router({
         id: input.id,
       });
       return { ok: true as const };
+    }),
+
+  /** Replace a thread's read-only shares. Owner-only by construction — the
+   *  update is keyed on (id, org, caller); anyone else gets NOT_FOUND. */
+  sessionShare: protectedProcedure
+    .input(z.object({ id: z.string().uuid(), sharedWith: z.array(ShareTargetSchema).max(20) }))
+    .mutation(async ({ ctx, input }) => {
+      const ok = await setAiSessionShare(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        id: input.id,
+        sharedWith: input.sharedWith,
+      });
+      if (!ok) throw new TRPCError({ code: 'NOT_FOUND', message: 'session not found' });
+      return { ok: true as const };
+    }),
+
+  /** Threads OTHER users shared with the caller (org-wide, to their role, or
+   *  directly). The caller's own threads live in sessionList. */
+  sessionListShared: protectedProcedure.query(({ ctx }) =>
+    listSharedAiSessions(ctx.db, {
+      orgId: ctx.auth.organizationId,
+      userId: ctx.auth.userId,
+      role: ctx.auth.role,
+    }),
+  ),
+
+  /** One thread the caller may read: their own, or one shared with them. */
+  sessionGet: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const row = await getAiSessionForUser(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        userId: ctx.auth.userId,
+        role: ctx.auth.role,
+        id: input.id,
+      });
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'session not found' });
+      return row;
     }),
 });

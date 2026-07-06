@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Setup · Console — Northbeam redesign S1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  body { background: var(--bg); }
+  .shell {
+    flex: 1; width: 100%; max-width: 1280px; margin: 0 auto;
+    display: grid; grid-template-columns: 230px minmax(0, 1fr); align-items: start;
+  }
+
+  /* ---- Setup nav ---- */
+  .snav { position: sticky; top: 52px; min-height: calc(100vh - 52px); padding: var(--sp-6) var(--sp-3) var(--sp-8); border-right: 1px solid var(--border); }
+  .snav h2 { margin: 0; padding: 0 10px; font-size: var(--text-md); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+  .grp { margin: var(--sp-5) 0 4px; padding: 0 10px; font-size: 10px; font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: 0.13em; color: var(--ink-subtle); }
+  .itm {
+    position: relative; display: flex; align-items: center; gap: 9px;
+    height: 31px; padding: 0 10px; border-radius: var(--radius-md);
+    font-size: var(--text-sm); font-weight: var(--fw-medium); color: var(--ink-secondary);
+    transition: background 0.12s var(--ease), color 0.12s var(--ease);
+  }
+  .itm svg { width: 14px; height: 14px; color: var(--ink-muted); }
+  .itm:hover { background: var(--surface-hover); color: var(--ink); }
+  .itm[aria-current] { background: var(--accent-soft); color: var(--ink); }
+  .itm[aria-current]::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 999px; background: var(--accent); }
+  .itm[aria-current] svg { color: var(--accent); }
+  .soon { margin-left: auto; font-size: 9.5px; font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-subtle); border: 1px solid var(--border); border-radius: var(--radius-full); padding: 1px 6px; }
+
+  /* ---- Main column ---- */
+  .main { padding: var(--sp-8) var(--sp-8) var(--sp-16); min-width: 0; }
+  .phead { display: flex; align-items: flex-start; gap: var(--sp-4); padding-bottom: var(--sp-5); border-bottom: 1px solid var(--border); }
+  .phead h1 { margin: 0; font-size: var(--text-xl); font-weight: var(--fw-semibold); letter-spacing: -0.015em; }
+  .phead p { margin: 3px 0 0; font-size: var(--text-base); color: var(--ink-muted); }
+  .phead .btn { margin-left: auto; flex: none; }
+
+  .toolbar { display: flex; align-items: center; gap: 10px; margin: var(--sp-5) 0 var(--sp-4); }
+  .tsearch {
+    display: flex; align-items: center; gap: 8px; width: 256px; height: var(--h-sm);
+    padding: 0 10px; border: 1px solid var(--border-field); border-radius: var(--radius-md);
+    background: var(--field-bg); color: var(--placeholder); font-size: var(--text-sm);
+  }
+  .fchip { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 11px; border-radius: var(--radius-full); border: 1px solid var(--border); font-size: var(--text-sm); color: var(--ink-muted); font-weight: var(--fw-medium); }
+  .fchip:hover { background: var(--surface-hover); color: var(--ink); }
+  .fchip.on { border-color: var(--accent-ring); background: var(--accent-soft); color: var(--accent); }
+  .fchip .n { font-variant-numeric: tabular-nums; opacity: 0.75; }
+  .count { margin-left: auto; font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+
+  /* ---- Objects table ---- */
+  .card.flush { overflow: hidden; }
+  .tbl td { padding: 11px 14px; }
+  .tbl td:first-child, .tbl th:first-child { padding-left: var(--sp-4); }
+  .obj { display: flex; align-items: center; gap: 11px; }
+  .obj .lbl { font-weight: var(--fw-medium); color: var(--ink); line-height: var(--lh-snug); }
+  .obj .api { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-subtle); }
+  .chev { color: var(--ink-subtle); width: 28px; }
+  tbody tr:last-child td { border-bottom: 0; }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Home');</script>
+
+<div class="shell">
+  <!-- Setup nav -->
+  <nav class="snav reveal reveal-1">
+    <h2>Setup</h2>
+    <div class="grp">Workspace</div>
+    <a class="itm" href="#"><svg class="i" data-icon="building"></svg> General</a>
+    <a class="itm" href="#"><svg class="i" data-icon="dollar"></svg> Billing <span class="soon">Soon</span></a>
+    <div class="grp">People &amp; access</div>
+    <a class="itm" href="#"><svg class="i" data-icon="user"></svg> Users</a>
+    <a class="itm" href="#"><svg class="i" data-icon="eye"></svg> Roles &amp; permissions</a>
+    <div class="grp">Customization</div>
+    <a class="itm" aria-current="page" href="#"><svg class="i" data-icon="grip"></svg> Object manager</a>
+    <a class="itm" href="#"><svg class="i" data-icon="filter"></svg> Picklists</a>
+    <div class="grp">Operations</div>
+    <a class="itm" href="#"><svg class="i" data-icon="zap"></svg> Integrations</a>
+    <a class="itm" href="#"><svg class="i" data-icon="clock"></svg> Audit log</a>
+  </nav>
+
+  <!-- Main -->
+  <main class="main">
+    <header class="phead reveal reveal-1">
+      <div>
+        <h1>Object manager</h1>
+        <p>Every object in Triforce — standard, custom, and Salesforce-imported. Click through to manage fields, record types, and layouts.</p>
+      </div>
+      <button class="btn primary"><svg class="i" data-icon="plus"></svg> New object</button>
+    </header>
+
+    <div class="toolbar reveal reveal-2">
+      <span class="tsearch"><svg class="i" data-icon="search" style="width:13px;height:13px"></svg> Search objects…</span>
+      <button class="fchip on">All <span class="n">6</span></button>
+      <button class="fchip">Standard <span class="n">4</span></button>
+      <button class="fchip">Custom <span class="n">2</span></button>
+      <span class="count">6 objects</span>
+    </div>
+
+    <div class="card flush reveal reveal-3">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Object</th><th>Type</th>
+            <th class="right">Fields</th><th class="right">Records</th>
+            <th>Source</th><th class="right">Updated</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a class="obj" href="setup-2-object-hero.html"><span class="obj-chip">A</span><span><div class="lbl">Account</div><div class="api">account</div></span></a></td>
+            <td><span class="pill neutral plain">Standard</span></td>
+            <td class="right num">61</td><td class="right num">48</td>
+            <td class="muted">salesforce</td><td class="right num muted">2d ago</td>
+            <td class="chev"><svg class="i" data-icon="chevron-right" style="width:13px;height:13px"></svg></td>
+          </tr>
+          <tr>
+            <td><a class="obj" href="setup-2-object-hero.html"><span class="obj-chip">C</span><span><div class="lbl">Contact</div><div class="api">contact</div></span></a></td>
+            <td><span class="pill neutral plain">Standard</span></td>
+            <td class="right num">57</td><td class="right num">160</td>
+            <td class="muted">salesforce</td><td class="right num muted">5h ago</td>
+            <td class="chev"><svg class="i" data-icon="chevron-right" style="width:13px;height:13px"></svg></td>
+          </tr>
+          <tr>
+            <td><a class="obj" href="setup-2-object-hero.html"><span class="obj-chip">D</span><span><div class="lbl">Deal</div><div class="api">deal</div></span></a></td>
+            <td><span class="pill neutral plain">Standard</span></td>
+            <td class="right num">34</td><td class="right num">103</td>
+            <td class="muted">salesforce</td><td class="right num muted">3h ago</td>
+            <td class="chev"><svg class="i" data-icon="chevron-right" style="width:13px;height:13px"></svg></td>
+          </tr>
+          <tr>
+            <td><a class="obj" href="setup-2-object-hero.html"><span class="obj-chip">A</span><span><div class="lbl">Activity</div><div class="api">activity</div></span></a></td>
+            <td><span class="pill neutral plain">Standard</span></td>
+            <td class="right num">58</td><td class="right num">361</td>
+            <td class="muted">native</td><td class="right num muted">1d ago</td>
+            <td class="chev"><svg class="i" data-icon="chevron-right" style="width:13px;height:13px"></svg></td>
+          </tr>
+          <tr>
+            <td><a class="obj" href="setup-2-object-hero.html"><span class="obj-chip">P</span><span><div class="lbl">Property</div><div class="api">property__c</div></span></a></td>
+            <td><span class="pill info plain">Custom</span></td>
+            <td class="right num">17</td><td class="right num">24</td>
+            <td class="muted">salesforce</td><td class="right num muted">6d ago</td>
+            <td class="chev"><svg class="i" data-icon="chevron-right" style="width:13px;height:13px"></svg></td>
+          </tr>
+          <tr>
+            <td><a class="obj" href="setup-2-object-hero.html"><span class="obj-chip">L</span><span><div class="lbl">Lease</div><div class="api">lease__c</div></span></a></td>
+            <td><span class="pill info plain">Custom</span></td>
+            <td class="right num">9</td><td class="right num">11</td>
+            <td class="muted">salesforce</td><td class="right num muted">12d ago</td>
+            <td class="chev"><svg class="i" data-icon="chevron-right" style="width:13px;height:13px"></svg></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script>nbBadge('S1', 'Console');</script>
+</body>
+</html>

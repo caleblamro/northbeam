@@ -15,22 +15,33 @@
 // live components that query as the viewer).
 
 import { randomUUID } from 'node:crypto';
-import type { EffectiveTool } from '@northbeam/core';
-import { QuerySpecSchema } from '@northbeam/core';
+import type { EffectiveTool, ResolvedPermissions } from '@northbeam/core';
+import { QuerySpecSchema, canObject } from '@northbeam/core';
 import {
   type DbExecutor,
   type ObjectWithFields,
   type QuerySpecLike,
   type Role,
   aggregateRecords,
+  canEditRecord,
   collectQueryTargetKeys,
+  createRecord,
+  deleteRecord,
   getRecord,
   hydratePicklistOptions,
   isAdminish,
   listRecords,
+  listValidationRules,
+  recomputeAndPersist,
+  recomputeParentRollups,
+  requiredIssues,
   resolveQuerySpec,
+  ruleIssues,
   runQuery,
+  sanitizeData,
+  updateRecord,
   visibleSharedRecordIds,
+  writeAuditEvent,
 } from '@northbeam/db';
 import { type Tool, tool } from 'ai';
 import { z } from 'zod';
@@ -137,6 +148,8 @@ export type ResearchToolContext = {
   orgId: string;
   userId: string;
   role: Role;
+  /** Resolved grants — the write tools' create/update gates. */
+  permissions: ResolvedPermissions;
   /** Objects the caller's role can READ — the tools' entire universe. */
   readable: ObjectWithFields[];
   /** Open an org-scoped transaction (tool calls outlive the procedure's). */
@@ -345,6 +358,184 @@ export function buildResearchTools(
           });
           if (!row) throw new Error('record not found');
           return { id: row.id, name: row.name, ...row.data };
+        }),
+      });
+    } else if (def.id === 'create_record' || def.id === 'update_record') {
+      // Write executors run the EXACT path the human mutation endpoints use:
+      // archived-object rejection, per-object CRUD gate, sanitize, required +
+      // rule validation, recompute, parent rollups, audit. The only extra is
+      // meta.via so the audit trail shows it was an approved AI tool call.
+      const isCreate = def.id === 'create_record';
+      tools[def.id] = tool({
+        description: def.description,
+        inputSchema: isCreate
+          ? z.object({
+              objectKey: z.string(),
+              data: z.record(z.string(), z.unknown()),
+            })
+          : z.object({
+              objectKey: z.string(),
+              id: z.string(),
+              data: z.record(z.string(), z.unknown()),
+            }),
+        execute: guarded(def, async (raw, tx) => {
+          const input = raw as { objectKey: string; id?: string; data: Record<string, unknown> };
+          const target = requireObject(input.objectKey);
+          if (target.object.archivedAt)
+            throw new Error(`object '${target.object.key}' is archived`);
+          if (!canObject(ctx.permissions, target.object.id, isCreate ? 'create' : 'update')) {
+            throw new Error(`your role cannot ${isCreate ? 'create' : 'update'} these records`);
+          }
+          const fields = await hydratePicklistOptions(tx, ctx.orgId, target.fields);
+          const rules = await listValidationRules(tx, ctx.orgId, target.object.id);
+          const now = new Date();
+
+          if (isCreate) {
+            const data = sanitizeData(fields, input.data);
+            const issues = [...requiredIssues(fields, data), ...ruleIssues(rules, data, now)];
+            if (issues.length) {
+              throw new Error(`validation failed: ${issues.map((i) => i.message).join('; ')}`);
+            }
+            const created = await createRecord(tx, {
+              orgId: ctx.orgId,
+              object: target.object,
+              fields,
+              data,
+              ownerId: ctx.userId,
+            });
+            await recomputeAndPersist(tx, {
+              orgId: ctx.orgId,
+              object: target.object,
+              fields,
+              recordId: created.id,
+              now,
+            });
+            await recomputeParentRollups(tx, {
+              orgId: ctx.orgId,
+              childObjectKey: target.object.key,
+              childData: created.data,
+              now,
+            });
+            await writeAuditEvent(tx, {
+              organizationId: ctx.orgId,
+              userId: ctx.userId,
+              action: 'record.created',
+              targetType: 'record',
+              targetId: created.id,
+              meta: { objectKey: target.object.key, via: 'ai-tool' },
+            });
+            return { created: true, id: created.id, name: created.name };
+          }
+
+          const id = String(input.id ?? '');
+          const existing = await getRecord(tx, {
+            orgId: ctx.orgId,
+            object: target.object,
+            fields,
+            id,
+          });
+          if (!existing) throw new Error('record not found');
+          if (target.object.defaultVisibility === 'private') {
+            const allowed = await canEditRecord(
+              tx,
+              { orgId: ctx.orgId, userId: ctx.userId, role: ctx.role },
+              target.object.id,
+              id,
+              existing.ownerId,
+            );
+            if (!allowed) throw new Error('no edit access to this record');
+          }
+          const patch = sanitizeData(fields, input.data);
+          const merged = { ...existing.data, ...patch };
+          const issues = [...requiredIssues(fields, merged), ...ruleIssues(rules, merged, now)];
+          if (issues.length) {
+            throw new Error(`validation failed: ${issues.map((i) => i.message).join('; ')}`);
+          }
+          const row = await updateRecord(tx, {
+            orgId: ctx.orgId,
+            object: target.object,
+            fields,
+            id,
+            data: merged,
+          });
+          await recomputeAndPersist(tx, {
+            orgId: ctx.orgId,
+            object: target.object,
+            fields,
+            recordId: id,
+            now,
+          });
+          await recomputeParentRollups(tx, {
+            orgId: ctx.orgId,
+            childObjectKey: target.object.key,
+            childData: merged,
+            now,
+          });
+          await writeAuditEvent(tx, {
+            organizationId: ctx.orgId,
+            userId: ctx.userId,
+            action: 'record.updated',
+            targetType: 'record',
+            targetId: id,
+            meta: { objectKey: target.object.key, changed: Object.keys(patch), via: 'ai-tool' },
+          });
+          return {
+            updated: true,
+            id,
+            name: row?.name ?? existing.name,
+            changed: Object.keys(patch),
+          };
+        }),
+      });
+    } else if (def.id === 'delete_record') {
+      // Destructive: same path as record.remove — delete gate, private-object
+      // edit ACL, parent-rollup recompute, audit. The record's name rides the
+      // approval chip so the user knows exactly what they're allowing.
+      tools.delete_record = tool({
+        description: def.description,
+        inputSchema: z.object({ objectKey: z.string(), id: z.string() }),
+        execute: guarded(def, async (raw, tx) => {
+          const input = raw as { objectKey: string; id: string };
+          const target = requireObject(input.objectKey);
+          if (target.object.archivedAt) {
+            throw new Error(`object '${target.object.key}' is archived`);
+          }
+          if (!canObject(ctx.permissions, target.object.id, 'delete')) {
+            throw new Error('your role cannot delete these records');
+          }
+          const existing = await getRecord(tx, {
+            orgId: ctx.orgId,
+            object: target.object,
+            fields: target.fields,
+            id: input.id,
+          });
+          if (!existing) throw new Error('record not found');
+          if (target.object.defaultVisibility === 'private') {
+            const allowed = await canEditRecord(
+              tx,
+              { orgId: ctx.orgId, userId: ctx.userId, role: ctx.role },
+              target.object.id,
+              input.id,
+              existing.ownerId,
+            );
+            if (!allowed) throw new Error('no delete access to this record');
+          }
+          await deleteRecord(tx, { orgId: ctx.orgId, object: target.object, id: input.id });
+          await recomputeParentRollups(tx, {
+            orgId: ctx.orgId,
+            childObjectKey: target.object.key,
+            childData: existing.data,
+            now: new Date(),
+          });
+          await writeAuditEvent(tx, {
+            organizationId: ctx.orgId,
+            userId: ctx.userId,
+            action: 'record.deleted',
+            targetType: 'record',
+            targetId: input.id,
+            meta: { objectKey: target.object.key, name: existing.name, via: 'ai-tool' },
+          });
+          return { deleted: true, id: input.id, name: existing.name };
         }),
       });
     } else if (def.id === 'inspect_metadata') {

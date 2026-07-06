@@ -2609,3 +2609,64 @@
 .app-wrap--wide:has(.page-flush-bottom) {
   padding-bottom: 0;
 }
+
+/* ── Auth split shell (A1) ──────────────────────────────────────────────────
+   The brand panel's animated accent beam — a slow gradient sweep along a
+   hairline. The panel sits on --brand (near-black light / near-white dark),
+   so the track tints from --brand-contrast rather than --border. */
+.auth-beam {
+  position: relative;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-contrast) 14%, transparent);
+  overflow: hidden;
+}
+.auth-beam::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 34%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: auth-beam-sweep 5s var(--ease) infinite;
+}
+@keyframes auth-beam-sweep {
+  from {
+    left: -34%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+/* ── Migrate handshake / arrival (M3) ───────────────────────────────────────
+   The SF → Northbeam dashed beam on the connect screen, and the slow accent
+   shimmer divider on the completion screen. */
+.migrate-beam {
+  width: 116px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent) 55%, transparent 0) 0 0 / 9px 2px repeat-x;
+  animation: migrate-beam-flow 1.4s linear infinite;
+}
+@keyframes migrate-beam-flow {
+  to {
+    background-position: 9px 0;
+  }
+}
+.migrate-beamline {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--border);
+  position: relative;
+  overflow: hidden;
+}
+.migrate-beamline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 30%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: auth-beam-sweep 4.5s var(--ease) infinite;
+}

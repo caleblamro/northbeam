@@ -12,6 +12,7 @@ import {
   seedRoles,
   seedSampleRecords,
   seedStandardObjects,
+  seedSystemAgents,
   withOrgContext,
   writeAuditEvent,
 } from '@northbeam/db';
@@ -86,6 +87,10 @@ export const orgRouter = router({
             })),
           );
           await seedStandardObjects(tx, result.id);
+          // Seed the built-in AI agents (the Dashboard Composer preset).
+          // Idempotent; the agent list endpoint also lazy-seeds for orgs
+          // created before agents existed.
+          await seedSystemAgents(tx, result.id);
           // Sample records — accounts + contacts + deals + activities with
           // real references between them so dashboards / list views aren't
           // empty out of the gate. Best-effort: a failure here doesn't

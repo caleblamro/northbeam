@@ -8,11 +8,12 @@
 import { Button } from '@/components/ui/button';
 import { isNavActive } from '@/lib/nav';
 import { usePinnedTabs } from '@/lib/pinned-tabs';
-import { Bell, HelpCircle, Search, X } from 'lucide-react';
+import { HelpCircle, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AppLauncher } from './app-launcher';
 import { Icon } from './icons';
+import { NotificationsBell } from './notifications-bell';
 import { OrgSwitcher } from './org-switcher';
 import { Kbd } from './primitives';
 import { UserMenu } from './user-menu';
@@ -77,9 +78,7 @@ export function AppTopbar({
         <Button variant="ghost" size="icon-sm" aria-label="Help">
           <HelpCircle />
         </Button>
-        <Button variant="ghost" size="icon-sm" aria-label="Notifications">
-          <Bell />
-        </Button>
+        <NotificationsBell />
         <UserMenu name={userName} email={userEmail} compact />
       </div>
     </header>

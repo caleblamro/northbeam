@@ -13,7 +13,9 @@ import { type Tool, generateText, stepCountIs } from 'ai';
 const MAX_STEPS = 6;
 const FINDINGS_CHAR_CAP = 4_000;
 
-function objectLines(objects: ObjectWithFields[]): string {
+/** One line per readable object with its field keys/types — shared with the
+ *  chat loop's harness prompt (chat-loop.ts). */
+export function objectLines(objects: ObjectWithFields[]): string {
   return objects
     .map((o) => {
       const fields = o.fields
@@ -59,6 +61,15 @@ doing?", "what's up with the Northwind deal?"):
 If nothing matches the name, say so in the findings — the dashboard should
 say "no record named X" rather than guess. When field names are unclear,
 inspect_metadata (when available) beats guessing keys.
+
+IF write tools (create_record / update_record) are available to you: they run
+REAL mutations after the user approves each call in the thread. Use one ONLY
+when the user's message explicitly instructs a change ("mark the Acme deal
+won", "log a call on Northwind") — never speculatively, never to "fix" data
+you merely find odd. One record per call; put exactly what changed (record
+name, fields, old → new when known) in your findings so the final note can
+report it faithfully. If the instruction is ambiguous about WHICH record,
+don't guess — flag the ambiguity in your findings instead.
 
 Objects available (use these exact objectKeys and field keys):
 ${objectLines(opts.objects)}

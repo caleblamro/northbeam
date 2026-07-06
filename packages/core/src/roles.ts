@@ -10,6 +10,7 @@
 
 export { ROLES, type Role, isRole } from '@northbeam/db/roles';
 import { ROLES, type Role } from '@northbeam/db/roles';
+import type { FilterEntry } from '@northbeam/db/views';
 
 // Hierarchy: a higher-ranked role implicitly satisfies lower-ranked checks.
 const RANK: Record<Role, number> = {
@@ -40,6 +41,8 @@ export const PERMISSIONS = {
   'org.members.role': 'admin',
   // Roles & permissions — create/edit custom roles and the per-object CRUD grid.
   'org.roles.manage': 'admin',
+  // AI agents — create/edit agent presets (prompt, models, tools, roles).
+  'ai.agents.manage': 'admin',
   // CRM records — SF-style granular layer for the standard objects. Custom and
   // imported objects fall back to the generic record.* keys below until the
   // planned objectPermission table (per-org, per-object, per-role rows plus SF
@@ -62,6 +65,8 @@ export const PERMISSIONS = {
   'object.manage': 'admin',
   // Migration (the one-click Salesforce import)
   'migration.run': 'admin',
+  // Automation — build, activate, and pause flows; inspect run history.
+  'automation.manage': 'admin',
   // API keys
   'apikey.personal.manage': 'viewer', // anyone can manage their own PATs
   'apikey.service.manage': 'admin', // service accounts are org-wide
@@ -198,6 +203,28 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    id: 'automation',
+    label: 'Automation',
+    permissions: [
+      {
+        key: 'automation.manage',
+        label: 'Manage automations',
+        description: 'Build, activate, and pause flows; inspect run history.',
+      },
+    ],
+  },
+  {
+    id: 'ai',
+    label: 'AI',
+    permissions: [
+      {
+        key: 'ai.agents.manage',
+        label: 'Manage AI agents',
+        description: 'Create and edit agent presets: prompt, models, tools, and role access.',
+      },
+    ],
+  },
+  {
     id: 'apikey',
     label: 'API Keys',
     permissions: [
@@ -290,6 +317,10 @@ export const ORG_PERMISSION_KEYS: readonly Permission[] = (
   Object.keys(PERMISSIONS) as Permission[]
 ).filter((k) => !isRecordPermission(k));
 
+/** A per-object override: the CRUD grant plus an optional row-level (criteria)
+ *  filter that scopes WHICH records of the object the role can touch. */
+export type ObjectGrant = CrudGrant & { filter?: FilterEntry[] | null };
+
 /** A role, resolved for authorization: its org-action set plus the object CRUD
  *  it can perform (a default grant + per-object overrides). Keyed by objectId
  *  server-side, by objectKey on the client — the map key is opaque here. */
@@ -299,7 +330,7 @@ export type ResolvedPermissions = {
   isOwner: boolean;
   org: ReadonlySet<Permission>;
   objectDefault: CrudGrant;
-  objectOverrides: ReadonlyMap<string, CrudGrant>;
+  objectOverrides: ReadonlyMap<string, ObjectGrant>;
 };
 
 /** Org-action check against a resolved role. */
@@ -308,7 +339,9 @@ export function canOrg(resolved: ResolvedPermissions, action: Permission): boole
 }
 
 /** Per-object CRUD check against a resolved role. `objectRef` is an objectId
- *  server-side or an objectKey client-side — whichever the overrides map uses. */
+ *  server-side or an objectKey client-side — whichever the overrides map uses.
+ *  This is the yes/no gate; the row-level criteria filter (which records) is
+ *  applied separately in SQL by RecordAccess — see `objectFilter`. */
 export function canObject(
   resolved: ResolvedPermissions,
   objectRef: string,
@@ -317,6 +350,18 @@ export function canObject(
   if (resolved.isOwner) return true;
   const grant = resolved.objectOverrides.get(objectRef) ?? resolved.objectDefault;
   return grant[action];
+}
+
+/** The role's row-level (criteria) filter for an object, or null when the role
+ *  has no per-object scope there (owner and default grants are unscoped). The
+ *  facade compiles this into the ACL predicate so the role only touches
+ *  matching records. */
+export function objectFilter(
+  resolved: ResolvedPermissions,
+  objectRef: string,
+): FilterEntry[] | null {
+  if (resolved.isOwner) return null;
+  return resolved.objectOverrides.get(objectRef)?.filter ?? null;
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -362,19 +407,37 @@ export const SYSTEM_ROLE_SEEDS: readonly RoleSeed[] = ROLES.map((role) => ({
   },
 }));
 
+/** Stored system-role permission sets are snapshots taken at seed time, so a
+ *  key added to PERMISSIONS later (e.g. 'automation.manage') would be missing
+ *  forever in orgs seeded before it existed. Union the stored set with the
+ *  current static seed at resolution time — the locked alternative to a
+ *  backfill. Consequence: a seed-granted key cannot be revoked from a system
+ *  role (use a custom role for that). Custom role keys pass through
+ *  unchanged. */
+export function withSystemSeedPermissions(
+  roleKey: string,
+  stored: readonly Permission[],
+): Permission[] {
+  const seed = SYSTEM_ROLE_SEEDS.find((s) => s.key === roleKey);
+  if (!seed) return [...stored];
+  return [...new Set([...stored, ...seed.orgPermissions])];
+}
+
 /** Build a ResolvedPermissions bag from a role's stored shape + object
  *  overrides. Shared by the API context (keyed by objectId) and me.bootstrap
- *  (re-keyed to objectKey for the client). Pure — no I/O. */
+ *  (re-keyed to objectKey for the client). Pure — no I/O. System-role
+ *  permission sets are unioned with the static seed (see
+ *  withSystemSeedPermissions). */
 export function resolvePermissions(input: {
   roleKey: string;
   orgPermissions: Permission[];
   defaultGrant: CrudGrant;
-  objectOverrides: ReadonlyMap<string, CrudGrant>;
+  objectOverrides: ReadonlyMap<string, ObjectGrant>;
 }): ResolvedPermissions {
   return {
     roleKey: input.roleKey,
     isOwner: input.roleKey === 'owner',
-    org: new Set(input.orgPermissions),
+    org: new Set(withSystemSeedPermissions(input.roleKey, input.orgPermissions)),
     objectDefault: input.defaultGrant,
     objectOverrides: input.objectOverrides,
   };

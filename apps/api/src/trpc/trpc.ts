@@ -17,6 +17,7 @@ import { type Database, type DbExecutor, withOrgContext } from '@northbeam/db';
 import { TRPCError, type TRPC_ERROR_CODE_KEY, initTRPC } from '@trpc/server';
 import superjson from 'superjson';
 import { ZodError } from 'zod';
+import { createRecordAccess } from '../data/record-access.js';
 import type { Context } from './context.js';
 
 const t = initTRPC.context<Context>().create({
@@ -104,9 +105,32 @@ export const protectedProcedure = publicProcedure.use(async ({ ctx, next }) => {
   // transaction handle to callers as if it could start sub-transactions.
   const rootDb = ctx.db as Database;
   const auth = ctx.auth;
-  return withOrgContext(rootDb, auth.organizationId, (tx) =>
-    next({ ctx: { ...ctx, db: tx as DbExecutor, auth } }),
-  );
+  // Fresh array per procedure call: batched procedures share one Context, and
+  // a hook registered inside one member's transaction must never fire off the
+  // back of ANOTHER member committing first.
+  const postCommit: Array<() => Promise<void>> = [];
+  const result = await withOrgContext(rootDb, auth.organizationId, (tx) => {
+    const txExec = tx as DbExecutor;
+    // The authorized record data-access facade, bound to this request's tx +
+    // actor. Every record read/write goes through it, so the per-object CRUD
+    // gate + record ACL are applied centrally, never per-caller.
+    const records = createRecordAccess(txExec, auth);
+    return next({ ctx: { ...ctx, db: txExec, auth, postCommit, records } });
+  });
+  // Hooks run only after the transaction resolved AND the procedure succeeded
+  // (result.ok) — never on throw or procedure error. Hook failures are logged,
+  // not thrown: the mutation already committed, so the response must not flip
+  // to an error (the sweeper backstops e.g. a missed flow-run enqueue).
+  if (result.ok) {
+    for (const hook of postCommit) {
+      try {
+        await hook();
+      } catch (err) {
+        logger.error({ err }, 'trpc.post_commit_hook_failed');
+      }
+    }
+  }
+  return result;
 });
 
 /** Build a procedure that requires a specific Permission. */

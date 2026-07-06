@@ -22,11 +22,23 @@ export type AclContext = {
   /** The caller. */
   userId: string;
   role: Role;
+  /** Grant-based "sees/edits every record of this object" override. When set,
+   *  it wins over the role-name `isAdminish(role)` fallback — the caller
+   *  (RecordAccess) computes it per-object from the CRUD grant so custom roles
+   *  with full control aren't under-exposed. Omit to keep legacy role behavior. */
+  recordAdmin?: boolean;
 };
 
-/** Admin-or-higher always sees every record in the org. */
+/** Admin-or-higher always sees every record in the org. Legacy fallback used
+ *  only when a caller doesn't supply a grant-based `recordAdmin` on the ctx. */
 export function isAdminish(role: Role): boolean {
   return role === 'owner' || role === 'admin';
+}
+
+/** Whether the caller has org-wide access to every record of an object —
+ *  grant-based when RecordAccess supplies it, else the role-name fallback. */
+function recordAdminOf(ctx: AclContext): boolean {
+  return ctx.recordAdmin ?? isAdminish(ctx.role);
 }
 
 /** Resolve the set of record ids visible to `userId` on a given object whose
@@ -60,7 +72,7 @@ export async function canEditRecord(
   recordId: string,
   ownerId: string | null,
 ): Promise<boolean> {
-  if (isAdminish(ctx.role)) return true;
+  if (recordAdminOf(ctx)) return true;
   if (ownerId === ctx.userId) return true;
   const [share] = await db
     .select({ level: recordShare.level })
@@ -151,7 +163,7 @@ export async function editableRecordIds(
   objectId: string,
   recordIds: string[],
 ): Promise<Set<string>> {
-  if (isAdminish(ctx.role)) return new Set(recordIds);
+  if (recordAdminOf(ctx)) return new Set(recordIds);
   if (recordIds.length === 0) return new Set();
   const rows = await db
     .select({ recordId: recordShare.recordId })

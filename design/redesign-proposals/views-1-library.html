@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Views · The library — Northbeam redesign V1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 1160px; }
+
+  /* Header + open create menu */
+  /* z-index: the reveal animation keeps siblings in their own stacking contexts,
+     so the open menu must be lifted via its ancestor. */
+  .head { position: relative; z-index: 46; display: flex; align-items: center; gap: var(--sp-3); padding-top: var(--sp-2); }
+  .head h1 { margin: 0; font-size: var(--text-xl); font-weight: var(--fw-semibold); letter-spacing: -0.02em; }
+  .head .count { font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .newwrap { margin-left: auto; position: relative; }
+  .newwrap .btn.primary { background: var(--brand-hover); }
+  .menu {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 45; width: 236px;
+    padding: 5px; background: var(--surface-raised); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-pop);
+  }
+  .mi { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 8px; border-radius: var(--radius-md); text-align: left; transition: background 0.12s var(--ease); }
+  .mi:hover, .mi.hov { background: var(--surface-hover); }
+  .mi .nm { font-size: var(--text-sm); font-weight: var(--fw-medium); line-height: 1.25; }
+  .mi .d { font-size: var(--text-xs); color: var(--ink-muted); line-height: 1.3; }
+  .mdiv { height: 1px; background: var(--divider); margin: 5px 6px; }
+
+  /* Type icon tiles — the type system */
+  .ticon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-md); flex: none; }
+  .ticon svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .ticon.list { background: var(--surface-sunken); border: 1px solid var(--border); color: var(--ink-muted); }
+  .ticon.report { background: var(--info-bg); color: var(--info); }
+  .ticon.dashboard { background: var(--success-bg); color: var(--success); }
+  .ticon.layout { background: var(--warning-bg); color: var(--warning); }
+  .ticon.ai { background: var(--accent-soft); color: var(--accent); }
+  .star { width: 11px; height: 11px; color: var(--accent); }
+  .star, .star * { fill: currentColor; stroke: currentColor; stroke-width: 1; }
+
+  /* Toolbar */
+  .toolbar { margin-top: var(--sp-6); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tsearch { display: flex; align-items: center; gap: 7px; height: 30px; width: 208px; padding: 0 10px; border: 1px solid var(--border-field); border-radius: var(--radius-md); background: var(--field-bg); color: var(--placeholder); font-size: var(--text-sm); }
+  .fchip { display: inline-flex; align-items: center; height: 28px; padding: 0 11px; border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--surface); font-size: var(--text-sm); color: var(--ink-secondary); transition: background 0.12s var(--ease), border-color 0.12s var(--ease); }
+  .fchip:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+  .fchip.on { background: var(--brand); border-color: var(--brand); color: var(--brand-contrast); }
+  .fchip .n { margin-left: 6px; opacity: 0.55; font-variant-numeric: tabular-nums; }
+  .selgrp { display: flex; gap: 8px; margin-left: 4px; padding-left: 12px; border-left: 1px solid var(--border); }
+  .selchip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--border-field); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-btn); font-size: var(--text-sm); font-weight: var(--fw-medium); }
+  .selchip:hover { background: var(--surface-hover); }
+  .selchip .lbl { color: var(--ink-muted); font-weight: var(--fw-regular); }
+
+  /* Card grid */
+  .grid { margin-top: var(--sp-5); display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); }
+  .vcard { position: relative; display: block; padding: var(--sp-4); transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease); }
+  .vcard:hover, .vcard.hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
+  .quick { position: absolute; top: 24px; right: 24px; display: flex; gap: 2px; padding: 2px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0; transition: opacity 0.15s var(--ease); }
+  .vcard:hover .quick, .vcard.hover .quick { opacity: 1; }
+  .qb { display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-sm); color: var(--ink-muted); }
+  .qb:hover { background: var(--surface-hover); color: var(--ink); }
+  .qb svg { width: 12px; height: 12px; }
+
+  .prev { height: 96px; padding: 9px 12px; border: 1px solid var(--divider); border-radius: var(--radius-lg); background: var(--surface-sunken); overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
+  .ttl { margin-top: var(--sp-3); display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .ttl h3 { margin: 0; font-size: var(--text-base); font-weight: var(--fw-semibold); letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sum { margin-top: 3px; font-size: var(--text-sm); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .foot { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--divider); display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); color: var(--ink-subtle); }
+  .foot .obj-chip { width: 20px; height: 20px; font-size: 10px; border-radius: var(--radius-md); }
+  .foot .av { margin-left: auto; display: grid; place-items: center; width: 20px; height: 20px; border-radius: var(--radius-full); background: var(--brand); color: var(--brand-contrast); font-size: 8px; font-weight: var(--fw-semibold); }
+
+  /* Mini previews per type */
+  .pv-list .r { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 3.5px 0; border-bottom: 1px solid var(--divider); font-size: 9px; color: var(--ink-muted); }
+  .pv-list .r:last-child { border-bottom: 0; }
+  .pv-list .r b { color: var(--ink-secondary); font-weight: var(--fw-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pv-list .r .num { flex: none; }
+  .pv-bars { display: flex; flex-direction: column; gap: 6px; }
+  .pv-bars .br { display: grid; grid-template-columns: 62px 1fr 34px; align-items: center; gap: 8px; font-size: 8.5px; }
+  .pv-bars .l { color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pv-bars .track { height: 7px; border-radius: 2px; background: var(--accent-soft); overflow: hidden; }
+  .pv-bars .fill { display: block; height: 100%; border-radius: 2px; background: var(--accent); opacity: 0.75; }
+  .pv-bars .v { text-align: right; color: var(--ink-secondary); font-variant-numeric: tabular-nums; font-weight: var(--fw-medium); }
+  .pv-spark { color: var(--accent); align-self: center; }
+  .pv-dash { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 5px; }
+  .pd { display: flex; flex-direction: column; justify-content: center; padding: 4px 8px; background: var(--surface); border: 1px solid var(--divider); border-radius: var(--radius-sm); min-height: 0; }
+  .pd .v { font-size: 12px; font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .pd .l { font-size: 7px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-subtle); }
+  .pd .spark { color: var(--accent); }
+  .pd-bars { display: flex; flex-direction: column; gap: 3px; justify-content: center; }
+  .pd-bars i { display: block; height: 4px; border-radius: 2px; background: var(--accent); opacity: 0.6; }
+  .pv-form .fh { display: flex; align-items: center; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--divider); font-size: 9px; font-weight: var(--fw-medium); color: var(--ink-secondary); }
+  .pv-form .fh .c { width: 13px; height: 13px; border-radius: 4px; background: linear-gradient(135deg, var(--brand), var(--ink-secondary)); flex: none; }
+  .pv-form .fp { display: grid; grid-template-columns: 46px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--divider); font-size: 8.5px; }
+  .pv-form .fp:last-child { border-bottom: 0; }
+  .pv-form .fp .k { color: var(--ink-subtle); }
+  .pv-form .fp .w { color: var(--ink-secondary); font-weight: var(--fw-medium); }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+  NB_ICONS.star = '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>';
+  NB_ICONS.rows = '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M21 9H3"/><path d="M21 15H3"/>';
+  NB_ICONS.chart = '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>';
+  NB_ICONS.dash = '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>';
+  NB_ICONS.layout = '<rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/>';
+  NB_ICONS.pin = '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/>';
+  nbTopbar('Home');
+</script>
+
+<main class="page">
+  <!-- Header + open create menu -->
+  <div class="head reveal reveal-1">
+    <h1>Views</h1>
+    <span class="count">18 across 5 objects</span>
+    <div class="newwrap">
+      <button class="btn primary"><svg class="i" data-icon="plus"></svg> New view <svg class="i" data-icon="chevron-down" style="width:11px;height:11px;margin-left:-2px"></svg></button>
+      <div class="menu">
+        <button class="mi hov"><span class="ticon list"><svg data-icon="rows"></svg></span><span><span class="nm">List</span><br /><span class="d">Filter, sort, and group records</span></span></button>
+        <button class="mi"><span class="ticon report"><svg data-icon="chart"></svg></span><span><span class="nm">Report</span><br /><span class="d">Aggregate and chart any field</span></span></button>
+        <button class="mi"><span class="ticon dashboard"><svg data-icon="dash"></svg></span><span><span class="nm">Dashboard</span><br /><span class="d">Compose widgets from views</span></span></button>
+        <button class="mi"><span class="ticon layout"><svg data-icon="layout"></svg></span><span><span class="nm">Record layout</span><br /><span class="d">Design the record page</span></span></button>
+        <div class="mdiv"></div>
+        <button class="mi"><span class="ticon ai"><svg data-icon="zap"></svg></span><span><span class="nm" style="color:var(--accent)">Compose with AI</span><br /><span class="d">Describe the view in words</span></span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toolbar: search + type chips + object/scope selectors -->
+  <div class="toolbar reveal reveal-2">
+    <span class="tsearch"><svg class="i" data-icon="search" style="width:13px;height:13px"></svg> Search views…</span>
+    <button class="fchip on">All <span class="n">18</span></button>
+    <button class="fchip">Lists <span class="n">9</span></button>
+    <button class="fchip">Reports <span class="n">4</span></button>
+    <button class="fchip">Dashboards <span class="n">3</span></button>
+    <button class="fchip">Layouts <span class="n">2</span></button>
+    <div class="selgrp">
+      <button class="selchip"><span class="lbl">Object:</span> All <svg class="i" data-icon="chevron-down" style="width:11px;height:11px"></svg></button>
+      <button class="selchip">Any scope <svg class="i" data-icon="chevron-down" style="width:11px;height:11px"></svg></button>
+    </div>
+  </div>
+
+  <!-- Library grid -->
+  <section class="grid reveal reveal-3">
+
+    <a class="card vcard" href="#">
+      <div class="quick"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="pin"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></div>
+      <div class="prev pv-list">
+        <div class="r"><b>Halcyon Aero — Fleet telemetry</b><span class="num">$530,000</span></div>
+        <div class="r"><b>Acme Robotics — Expansion</b><span class="num">$420,000</span></div>
+        <div class="r"><b>Meridian Health — Migration</b><span class="num">$285,000</span></div>
+        <div class="r"><b>Statler Financial — Compliance</b><span class="num">$210,000</span></div>
+      </div>
+      <div class="ttl"><span class="ticon list"><svg data-icon="rows"></svg></span><h3>All open</h3><svg class="star" data-icon="star" title="Default view"></svg></div>
+      <div class="sum">Deals · 4 filters · sorted by close date</div>
+      <div class="foot"><span class="obj-chip">D</span><span class="pill info plain">Workspace</span><span>2h ago</span><span class="av">CL</span></div>
+    </a>
+
+    <a class="card vcard hover" href="#">
+      <div class="quick"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="pin"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></div>
+      <div class="prev pv-bars">
+        <div class="br"><span class="l">Proposal · quote</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="v">$1.0M</span></div>
+        <div class="br"><span class="l">Needs analysis</span><span class="track"><span class="fill" style="width:93%"></span></span><span class="v">$930K</span></div>
+        <div class="br"><span class="l">Prospecting</span><span class="track"><span class="fill" style="width:87%"></span></span><span class="v">$870K</span></div>
+        <div class="br"><span class="l">Qualification</span><span class="track"><span class="fill" style="width:82%"></span></span><span class="v">$825K</span></div>
+      </div>
+      <div class="ttl"><span class="ticon report"><svg data-icon="chart"></svg></span><h3>Pipeline by stage</h3></div>
+      <div class="sum">Deals · Sum of Amount by Stage</div>
+      <div class="foot"><span class="obj-chip">D</span><span class="pill info plain">Workspace</span><span>2d ago</span><span class="av">CL</span></div>
+    </a>
+
+    <a class="card vcard" href="#">
+      <div class="quick"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="pin"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></div>
+      <div class="prev pv-dash">
+        <div class="pd"><span class="v">$4.0M</span><span class="l">Open pipeline</span></div>
+        <div class="pd"><span class="v">48</span><span class="l">Open deals</span></div>
+        <div class="pd"><svg class="spark" data-points="30,34,33,38,41,39,44,47,46,52" data-w="96" data-h="20" data-fill></svg></div>
+        <div class="pd pd-bars"><i style="width:92%"></i><i style="width:70%"></i><i style="width:48%"></i></div>
+      </div>
+      <div class="ttl"><span class="ticon dashboard"><svg data-icon="dash"></svg></span><h3>Pipeline overview</h3></div>
+      <div class="sum">6 widgets · shared with workspace</div>
+      <div class="foot"><span class="obj-chip">D</span><span class="pill info plain">Workspace</span><span>2d ago</span><span class="av">CL</span></div>
+    </a>
+
+    <a class="card vcard" href="#">
+      <div class="quick"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="pin"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></div>
+      <div class="prev pv-list">
+        <div class="r"><b>Acme Robotics — Expansion</b><span class="num">$420,000</span></div>
+        <div class="r"><b>Statler Financial — Compliance</b><span class="num">$210,000</span></div>
+        <div class="r"><b>Copper &amp; Pine — POS integration</b><span class="num">$64,000</span></div>
+        <div class="r"><b>Juniper Labs — Data pipeline</b><span class="num">$122,400</span></div>
+      </div>
+      <div class="ttl"><span class="ticon list"><svg data-icon="rows"></svg></span><h3>My deals</h3></div>
+      <div class="sum">Deals · 3 filters · sorted by Amount</div>
+      <div class="foot"><span class="obj-chip">D</span><span class="pill neutral plain">Personal</span><span>5h ago</span><span class="av">CL</span></div>
+    </a>
+
+    <a class="card vcard" href="#">
+      <div class="quick"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="pin"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></div>
+      <div class="prev"><svg class="spark pv-spark" data-points="210,246,238,292,315,301,348,396,382,441,470,455,512,548" data-w="284" data-h="66" data-fill></svg></div>
+      <div class="ttl"><span class="ticon report"><svg data-icon="chart"></svg></span><h3>Revenue trend</h3></div>
+      <div class="sum">Deals · Sum of Amount by Close date · month</div>
+      <div class="foot"><span class="obj-chip">D</span><span class="pill info plain">Workspace</span><span>5h ago</span><span class="av">AF</span></div>
+    </a>
+
+    <a class="card vcard" href="#">
+      <div class="quick"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="pin"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></div>
+      <div class="prev pv-form">
+        <div class="fh"><span class="c"></span>Acme Robotics — Expansion</div>
+        <div class="fp"><span class="k">Stage</span><span class="w">Negotiation</span></div>
+        <div class="fp"><span class="k">Amount</span><span class="w num">$420,000</span></div>
+        <div class="fp"><span class="k">Owner</span><span class="w">Caleb Lamro</span></div>
+      </div>
+      <div class="ttl"><span class="ticon layout"><svg data-icon="layout"></svg></span><h3>Deal detail</h3><svg class="star" data-icon="star" title="Default layout"></svg></div>
+      <div class="sum">Record page · 3 sections · 14 fields</div>
+      <div class="foot"><span class="obj-chip">D</span><span class="pill info plain">Workspace</span><span>1w ago</span><span class="av">CL</span></div>
+    </a>
+
+    <a class="card vcard" href="#">
+      <div class="quick"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="pin"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></div>
+      <div class="prev pv-list">
+        <div class="r"><b>Follow up — security review</b><span>Today</span></div>
+        <div class="r"><b>Send revised proposal v3</b><span>Tomorrow</span></div>
+        <div class="r"><b>Prep QBR deck for Halcyon</b><span>Jul 8</span></div>
+        <div class="r"><b>Chase MSA redlines</b><span>Jul 9</span></div>
+      </div>
+      <div class="ttl"><span class="ticon list"><svg data-icon="rows"></svg></span><h3>High priority</h3></div>
+      <div class="sum">Activities · 2 filters · sorted by Due date</div>
+      <div class="foot"><span class="obj-chip">A</span><span class="pill warning plain">Role</span><span>3d ago</span><span class="av">JM</span></div>
+    </a>
+
+    <a class="card vcard" href="#">
+      <div class="quick"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="pin"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></div>
+      <div class="prev pv-dash">
+        <div class="pd"><span class="v">48</span><span class="l">Accounts</span></div>
+        <div class="pd"><span class="v">12</span><span class="l">At risk</span></div>
+        <div class="pd"><svg class="spark" data-points="30,34,33,37,40,38,42,45,44,48" data-w="96" data-h="20" data-fill></svg></div>
+        <div class="pd pd-bars"><i style="width:88%"></i><i style="width:56%"></i><i style="width:34%"></i></div>
+      </div>
+      <div class="ttl"><span class="ticon dashboard"><svg data-icon="dash"></svg></span><h3>Account health</h3></div>
+      <div class="sum">4 widgets · personal</div>
+      <div class="foot"><span class="obj-chip">A</span><span class="pill neutral plain">Personal</span><span>4d ago</span><span class="av">AF</span></div>
+    </a>
+
+    <a class="card vcard" href="#">
+      <div class="quick"><span class="qb"><svg class="i" data-icon="arrow-up-right"></svg></span><span class="qb"><svg class="i" data-icon="pencil"></svg></span><span class="qb"><svg class="i" data-icon="pin"></svg></span><span class="qb"><svg class="i" data-icon="trash"></svg></span></div>
+      <div class="prev pv-list">
+        <div class="r"><b>Acme Robotics</b><span class="num">$420K open</span></div>
+        <div class="r"><b>Halcyon Aero</b><span class="num">$530K open</span></div>
+        <div class="r"><b>Meridian Health</b><span class="num">$285K open</span></div>
+        <div class="r"><b>Northwind Logistics</b><span class="num">$150K open</span></div>
+      </div>
+      <div class="ttl"><span class="ticon list"><svg data-icon="rows"></svg></span><h3>All accounts</h3><svg class="star" data-icon="star" title="Default view"></svg></div>
+      <div class="sum">Accounts · sorted by Name</div>
+      <div class="foot"><span class="obj-chip">A</span><span class="pill info plain">Workspace</span><span>2w ago</span><span class="av">CL</span></div>
+    </a>
+  </section>
+</main>
+
+<script>nbBadge('V1', 'The library');</script>
+</body>
+</html>

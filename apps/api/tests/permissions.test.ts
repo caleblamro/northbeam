@@ -97,3 +97,32 @@ describe('canOrg / canObject resolution', () => {
     expect(canOrg(resolved, 'view.write')).toBe(false);
   });
 });
+
+describe('grant-based record visibility (RecordAccess.recordAdmin)', () => {
+  // RecordAccess derives "sees/edits every record of an object" from the delete
+  // grant (delete ⇒ full control), not the role name — so admin-equivalent
+  // custom roles aren't under-exposed on private objects.
+  const recordAdminFor = (r: ReturnType<typeof resolveFromStatic>, objectId: string) =>
+    canObject(r, objectId, 'delete');
+
+  it('system roles keep their historic record visibility', () => {
+    expect(recordAdminFor(resolveFromStatic('owner'), 'obj')).toBe(true);
+    expect(recordAdminFor(resolveFromStatic('admin'), 'obj')).toBe(true);
+    expect(recordAdminFor(resolveFromStatic('member'), 'obj')).toBe(false);
+    expect(recordAdminFor(resolveFromStatic('viewer'), 'obj')).toBe(false);
+  });
+
+  it('a custom role with delete on an object sees all its records there', () => {
+    const manager = resolvePermissions({
+      roleKey: 'deal-manager',
+      orgPermissions: [],
+      defaultGrant: { create: false, read: true, update: false, delete: false },
+      objectOverrides: new Map([
+        ['deal-id', { create: true, read: true, update: true, delete: true }],
+      ]),
+    });
+    // record-admin only on the object it can fully control, not others.
+    expect(recordAdminFor(manager, 'deal-id')).toBe(true);
+    expect(recordAdminFor(manager, 'contact-id')).toBe(false);
+  });
+});

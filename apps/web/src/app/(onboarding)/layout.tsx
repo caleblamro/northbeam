@@ -1,14 +1,7 @@
-import { Wordmark } from '@/components/northbeam/primitives';
+import { AuthSplitShell } from '@/components/northbeam/auth-shell';
 
+// Same A1 split-panel shell as (auth) — workspace creation is part of the
+// same arrival journey, so it keeps the same frame.
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6">
-      <div className="w-full max-w-[440px]">
-        <div className="mb-6">
-          <Wordmark size={18} />
-        </div>
-        <div className="rounded-lg border border-border bg-card p-8">{children}</div>
-      </div>
-    </div>
-  );
+  return <AuthSplitShell width={440}>{children}</AuthSplitShell>;
 }

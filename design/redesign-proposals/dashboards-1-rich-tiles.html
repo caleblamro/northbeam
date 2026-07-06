@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dashboards · Rich tiles — Northbeam redesign B1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 1080px; }
+
+  .head { display: flex; align-items: center; gap: var(--sp-3); padding-top: var(--sp-2); }
+  .head h1 { margin: 0; font-size: var(--text-xl); font-weight: var(--fw-semibold); letter-spacing: -0.02em; }
+  .head .count { font-size: var(--text-sm); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .head .acts { margin-left: auto; display: flex; gap: 8px; }
+  .head .btn.primary svg { color: currentColor; }
+
+  /* Templates row */
+  .sect-head { margin-top: var(--sp-8); display: flex; align-items: baseline; justify-content: space-between; }
+  .tmpls { margin-top: var(--sp-3); display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-3); }
+  .tmpl {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    border: 1px dashed var(--border-strong); border-radius: var(--radius-lg);
+    background: transparent;
+    transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
+  }
+  .tmpl:hover { background: var(--surface); border-color: var(--accent-ring); }
+  .tmpl .ic { display: grid; place-items: center; width: 30px; height: 30px; border-radius: var(--radius-md); background: var(--surface-sunken); border: 1px solid var(--border); color: var(--ink-muted); flex: none; }
+  .tmpl .ic svg { width: 14px; height: 14px; }
+  .tmpl .meta { min-width: 0; }
+  .tmpl .nm { font-size: var(--text-sm); font-weight: var(--fw-medium); }
+  .tmpl .ds { font-size: var(--text-xs); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tmpl .use { margin-left: auto; font-size: var(--text-xs); font-weight: var(--fw-medium); color: var(--ink-subtle); opacity: 0; transition: opacity 0.15s var(--ease); }
+  .tmpl:hover .use { opacity: 1; color: var(--accent); }
+
+  /* Dashboard tiles */
+  .tiles { margin-top: var(--sp-3); display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); }
+  .tile { display: block; padding: var(--sp-4); transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease); }
+  .tile:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
+  .preview {
+    height: 96px; padding: 10px 12px;
+    display: grid; grid-template-columns: 1fr 1.2fr; gap: 4px 14px; align-items: center;
+    border: 1px solid var(--divider); border-radius: var(--radius-lg);
+    background: var(--surface-sunken);
+  }
+  .pmetric .v { font-size: var(--text-md); font-weight: var(--fw-semibold); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .pmetric .l { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-subtle); }
+  .pviz { grid-row: 1 / span 2; grid-column: 2; align-self: center; color: var(--accent); }
+  .pbars { display: flex; flex-direction: column; gap: 5px; }
+  .pbar { display: grid; grid-template-columns: 46px 1fr; align-items: center; gap: 7px; }
+  .pbar .l { font-size: 8.5px; color: var(--ink-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pbar .f { height: 7px; border-radius: 2px; background: var(--accent); opacity: 0.65; }
+  .tile h3 { margin: var(--sp-3) 0 0; font-size: var(--text-base); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+  .tile .meta { margin-top: 4px; display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); color: var(--ink-muted); }
+  .tile .meta .av { margin-left: auto; display: grid; place-items: center; width: 20px; height: 20px; border-radius: var(--radius-full); background: var(--brand); color: var(--brand-contrast); font-size: 8px; font-weight: var(--fw-semibold); }
+
+  .tile.new {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    min-height: 178px;
+    border: 1px dashed var(--border-strong); background: transparent; box-shadow: none;
+    color: var(--ink-muted); font-size: var(--text-sm); font-weight: var(--fw-medium);
+  }
+  .tile.new:hover { background: var(--surface); border-color: var(--accent-ring); color: var(--ink); }
+  .tile.new .plus { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-full); border: 1px solid var(--border); background: var(--surface); }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Dashboards');</script>
+
+<main class="page">
+  <!-- Header -->
+  <div class="head reveal reveal-1">
+    <h1>Dashboards</h1>
+    <span class="count">3</span>
+    <div class="acts">
+      <button class="btn outline">Browse templates</button>
+      <button class="btn primary"><svg class="i" data-icon="zap" style="width:13px;height:13px"></svg> New with AI</button>
+    </div>
+  </div>
+
+  <!-- Templates -->
+  <div class="sect-head reveal reveal-2"><span class="eyebrow">Templates</span></div>
+  <section class="tmpls reveal reveal-2">
+    <button class="tmpl">
+      <span class="ic"><svg class="i" data-icon="trending-up"></svg></span>
+      <span class="meta"><span class="nm">Pipeline overview</span><br /><span class="ds">Stages, totals, aging</span></span>
+      <span class="use">Use →</span>
+    </button>
+    <button class="tmpl">
+      <span class="ic"><svg class="i" data-icon="user"></svg></span>
+      <span class="meta"><span class="nm">Sales leaderboard</span><br /><span class="ds">Won revenue by rep</span></span>
+      <span class="use">Use →</span>
+    </button>
+    <button class="tmpl">
+      <span class="ic"><svg class="i" data-icon="clock"></svg></span>
+      <span class="meta"><span class="nm">Activity digest</span><br /><span class="ds">Calls, emails, meetings</span></span>
+      <span class="use">Use →</span>
+    </button>
+    <button class="tmpl">
+      <span class="ic"><svg class="i" data-icon="eye"></svg></span>
+      <span class="meta"><span class="nm">Exec summary</span><br /><span class="ds">KPIs for leadership</span></span>
+      <span class="use">Use →</span>
+    </button>
+  </section>
+
+  <!-- Your dashboards -->
+  <div class="sect-head reveal reveal-3"><span class="eyebrow">Your dashboards</span></div>
+  <section class="tiles reveal reveal-3">
+
+    <a class="card tile" href="#">
+      <div class="preview">
+        <div class="pmetric"><div class="v">$4.0M</div><div class="l">Open pipeline</div></div>
+        <div class="pviz pbars">
+          <div class="pbar"><span class="l">Proposal</span><span class="f" style="width:100%"></span></div>
+          <div class="pbar"><span class="l">Analysis</span><span class="f" style="width:93%"></span></div>
+          <div class="pbar"><span class="l">Prospect</span><span class="f" style="width:87%"></span></div>
+        </div>
+        <div class="pmetric"><div class="v">48</div><div class="l">Open deals</div></div>
+      </div>
+      <h3>Pipeline overview</h3>
+      <div class="meta">6 widgets · Workspace · Updated 2d ago <span class="av">CL</span></div>
+    </a>
+
+    <a class="card tile" href="#">
+      <div class="preview">
+        <div class="pmetric"><div class="v">48</div><div class="l">Accounts</div></div>
+        <div class="pviz"><svg class="spark" data-points="30,34,33,37,40,38,42,45,44,48" data-w="150" data-h="52" data-fill></svg></div>
+        <div class="pmetric"><div class="v">12</div><div class="l">At risk</div></div>
+      </div>
+      <h3>Account health</h3>
+      <div class="meta">5 widgets · Workspace · Updated 4d ago <span class="av">CL</span></div>
+    </a>
+
+    <a class="card tile" href="#">
+      <div class="preview">
+        <div class="pmetric"><div class="v">361</div><div class="l">Activities · 30d</div></div>
+        <div class="pviz"><svg class="spark" data-points="9,12,10,14,13,16,15,18,17,21" data-w="150" data-h="52" data-fill></svg></div>
+        <div class="pmetric"><div class="v">74%</div><div class="l">Follow-up rate</div></div>
+      </div>
+      <h3>Rep activity</h3>
+      <div class="meta">4 widgets · Private · Updated 1w ago <span class="av">CL</span></div>
+    </a>
+
+    <a class="tile new" href="#">
+      <span class="plus"><svg class="i" data-icon="plus"></svg></span>
+      New dashboard
+    </a>
+  </section>
+</main>
+
+<script>nbBadge('B1', 'Rich tiles');</script>
+</body>
+</html>

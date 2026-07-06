@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Setup · Object hero — Northbeam redesign S2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  body { background: var(--bg); }
+  .shell {
+    flex: 1; width: 100%; max-width: 1280px; margin: 0 auto;
+    display: grid; grid-template-columns: 230px minmax(0, 1fr); align-items: start;
+  }
+
+  /* ---- Setup nav (shared pattern with S1) ---- */
+  .snav { position: sticky; top: 52px; min-height: calc(100vh - 52px); padding: var(--sp-6) var(--sp-3) var(--sp-8); border-right: 1px solid var(--border); }
+  .snav h2 { margin: 0; padding: 0 10px; font-size: var(--text-md); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+  .grp { margin: var(--sp-5) 0 4px; padding: 0 10px; font-size: 10px; font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: 0.13em; color: var(--ink-subtle); }
+  .itm { position: relative; display: flex; align-items: center; gap: 9px; height: 31px; padding: 0 10px; border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: var(--fw-medium); color: var(--ink-secondary); transition: background 0.12s var(--ease), color 0.12s var(--ease); }
+  .itm svg { width: 14px; height: 14px; color: var(--ink-muted); }
+  .itm:hover { background: var(--surface-hover); color: var(--ink); }
+  .itm[aria-current] { background: var(--accent-soft); color: var(--ink); }
+  .itm[aria-current]::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 999px; background: var(--accent); }
+  .itm[aria-current] svg { color: var(--accent); }
+  .soon { margin-left: auto; font-size: 9.5px; font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-subtle); border: 1px solid var(--border); border-radius: var(--radius-full); padding: 1px 6px; }
+
+  /* ---- Main ---- */
+  .main { padding: var(--sp-6) var(--sp-8) var(--sp-16); min-width: 0; }
+  .crumbs { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--ink-muted); }
+  .crumbs svg { width: 11px; height: 11px; color: var(--ink-subtle); }
+  .crumbs .here { color: var(--ink); font-weight: var(--fw-medium); }
+
+  /* Hero */
+  .hero { display: flex; align-items: flex-start; gap: var(--sp-4); margin-top: var(--sp-5); }
+  .hero .obj-chip.lg { background: linear-gradient(135deg, var(--accent), var(--accent-active)); margin-top: 3px; }
+  .hero h1 { margin: 0; font-size: var(--text-2xl); font-weight: var(--fw-semibold); letter-spacing: -0.02em; line-height: var(--lh-tight); }
+  .hero .k { margin-top: 3px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle); }
+  .hero .desc { margin: var(--sp-2) 0 0; font-size: var(--text-base); color: var(--ink-muted); max-width: 60ch; }
+  .hero .acts { margin-left: auto; display: flex; gap: 8px; flex: none; }
+  .hstats { display: flex; align-items: center; gap: 8px; margin-top: var(--sp-3); font-size: var(--text-sm); color: var(--ink-muted); }
+  .hstats b { color: var(--ink); font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: var(--sp-1); margin-top: var(--sp-6); border-bottom: 1px solid var(--border); }
+  .tab { position: relative; display: flex; align-items: center; gap: 7px; padding: 9px 11px; font-size: var(--text-sm); font-weight: var(--fw-medium); color: var(--ink-muted); }
+  .tab:hover { color: var(--ink); }
+  .tab[aria-current] { color: var(--ink); }
+  .tab[aria-current]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 999px; background: var(--accent); }
+  .tab .n { font-size: var(--text-xs); color: var(--ink-subtle); background: var(--surface-active); border-radius: var(--radius-full); padding: 0 6px; line-height: 16px; font-variant-numeric: tabular-nums; }
+  .tab[aria-current] .n { color: var(--accent); background: var(--accent-soft); }
+
+  /* Fields toolbar */
+  .toolbar { display: flex; align-items: center; gap: 10px; margin: var(--sp-5) 0 var(--sp-4); }
+  .tsearch { display: flex; align-items: center; gap: 8px; width: 232px; height: var(--h-sm); padding: 0 10px; border: 1px solid var(--border-field); border-radius: var(--radius-md); background: var(--field-bg); color: var(--placeholder); font-size: var(--text-sm); }
+  .fchip { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: var(--radius-full); border: 1px solid var(--border); font-size: var(--text-sm); color: var(--ink-muted); font-weight: var(--fw-medium); }
+  .fchip:hover { background: var(--surface-hover); color: var(--ink); }
+  .fchip.on { border-color: var(--accent-ring); background: var(--accent-soft); color: var(--accent); }
+  .toolbar .btn { margin-left: auto; }
+
+  /* Fields table */
+  .card.flush { overflow: hidden; }
+  .tbl td { padding: 10px 14px; }
+  .tbl td:first-child, .tbl th:first-child { padding-left: var(--sp-4); }
+  tbody tr:last-child td { border-bottom: 0; }
+  .fld .lbl { font-weight: var(--fw-medium); color: var(--ink); line-height: var(--lh-snug); }
+  .fld .sub { font-size: var(--text-xs); color: var(--ink-muted); }
+  .api { font-family: var(--font-mono); font-size: 11px; color: var(--ink-secondary); background: var(--surface-sunken); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px; white-space: nowrap; }
+  .tpill { display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: var(--radius-sm); font-size: 10px; font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: 0.07em; }
+  .tpill.t-neutral { color: var(--neutralchip); background: var(--neutralchip-bg); }
+  :root[data-theme="dark"] .tpill.t-neutral { color: var(--ink-secondary); background: var(--surface-active); }
+  .tpill.t-info { color: var(--info); background: var(--info-bg); }
+  .tpill.t-success { color: var(--success); background: var(--success-bg); }
+  .tpill.t-warning { color: var(--warning); background: var(--warning-bg); }
+  .ctr { text-align: center; }
+  .ctr svg { width: 13px; height: 13px; color: var(--success); }
+  .dash { color: var(--ink-disabled); }
+  .rowedit { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--radius-sm); color: var(--ink-subtle); opacity: 0; transition: opacity 0.12s var(--ease); }
+  tr:hover .rowedit { opacity: 1; }
+  .rowedit:hover { background: var(--surface-active); color: var(--ink); }
+  .rowedit svg { width: 13px; height: 13px; }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Home');</script>
+
+<div class="shell">
+  <nav class="snav reveal reveal-1">
+    <h2>Setup</h2>
+    <div class="grp">Workspace</div>
+    <a class="itm" href="#"><svg class="i" data-icon="building"></svg> General</a>
+    <a class="itm" href="#"><svg class="i" data-icon="dollar"></svg> Billing <span class="soon">Soon</span></a>
+    <div class="grp">People &amp; access</div>
+    <a class="itm" href="#"><svg class="i" data-icon="user"></svg> Users</a>
+    <a class="itm" href="#"><svg class="i" data-icon="eye"></svg> Roles &amp; permissions</a>
+    <div class="grp">Customization</div>
+    <a class="itm" aria-current="page" href="setup-1-console.html"><svg class="i" data-icon="grip"></svg> Object manager</a>
+    <a class="itm" href="#"><svg class="i" data-icon="filter"></svg> Picklists</a>
+    <div class="grp">Operations</div>
+    <a class="itm" href="#"><svg class="i" data-icon="zap"></svg> Integrations</a>
+    <a class="itm" href="#"><svg class="i" data-icon="clock"></svg> Audit log</a>
+  </nav>
+
+  <main class="main">
+    <nav class="crumbs reveal reveal-1">
+      <a href="setup-1-console.html">Object manager</a><svg class="i" data-icon="chevron-right"></svg>
+      <span class="here">Deal</span>
+    </nav>
+
+    <!-- Hero -->
+    <header class="hero reveal reveal-1">
+      <span class="obj-chip lg">D</span>
+      <div>
+        <h1>Deal</h1>
+        <div class="k">deal · table: deal</div>
+        <p class="desc">Sales opportunities imported from Salesforce Opportunity.</p>
+        <div class="hstats">
+          <span><b>34</b> fields</span><span class="subtle">·</span>
+          <span><b>103</b> records</span><span class="subtle">·</span>
+          <span><b>3</b> record types</span><span class="subtle">·</span>
+          <span>Source: <b style="font-weight:var(--fw-medium)">salesforce</b></span>
+        </div>
+      </div>
+      <div class="acts">
+        <button class="btn outline"><svg class="i" data-icon="pencil"></svg> Edit layout</button>
+        <button class="btn ghost">Archive</button>
+      </div>
+    </header>
+
+    <!-- Tabs -->
+    <nav class="tabs reveal reveal-2">
+      <a class="tab" href="#">Overview</a>
+      <a class="tab" aria-current="page" href="#">Fields <span class="n">34</span></a>
+      <a class="tab" href="#">Record types <span class="n">3</span></a>
+      <a class="tab" href="#">Validation <span class="n">2</span></a>
+      <a class="tab" href="#">Formatting <span class="n">1</span></a>
+    </nav>
+
+    <!-- Fields toolbar -->
+    <div class="toolbar reveal reveal-3">
+      <span class="tsearch"><svg class="i" data-icon="search" style="width:13px;height:13px"></svg> Search fields…</span>
+      <button class="fchip on">All</button>
+      <button class="fchip">Text</button>
+      <button class="fchip">Number</button>
+      <button class="fchip">Date</button>
+      <button class="fchip">Choice</button>
+      <button class="fchip">Relation</button>
+      <button class="fchip">Computed</button>
+      <button class="btn primary"><svg class="i" data-icon="plus"></svg> New field</button>
+    </div>
+
+    <!-- Fields table -->
+    <div class="card flush reveal reveal-4">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Field</th><th>API name</th><th>Type</th>
+            <th class="ctr">Required</th><th class="ctr">Indexed</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="fld"><div class="lbl">Name</div><div class="sub">Primary label shown in lists and search.</div></td>
+            <td><span class="api">name</span></td>
+            <td><span class="tpill t-neutral">Text</span></td>
+            <td class="ctr"><svg class="i" data-icon="check"></svg></td>
+            <td class="ctr"><svg class="i" data-icon="check"></svg></td>
+            <td><button class="rowedit" title="Edit field"><svg class="i" data-icon="pencil"></svg></button></td>
+          </tr>
+          <tr>
+            <td class="fld"><div class="lbl">Stage</div><div class="sub">6 options · drives the pipeline board.</div></td>
+            <td><span class="api">stage</span></td>
+            <td><span class="tpill t-warning">Picklist</span></td>
+            <td class="ctr"><svg class="i" data-icon="check"></svg></td>
+            <td class="ctr"><svg class="i" data-icon="check"></svg></td>
+            <td><button class="rowedit" title="Edit field"><svg class="i" data-icon="pencil"></svg></button></td>
+          </tr>
+          <tr>
+            <td class="fld"><div class="lbl">Amount</div><div class="sub">USD · two decimal places.</div></td>
+            <td><span class="api">amount</span></td>
+            <td><span class="tpill t-neutral">Currency</span></td>
+            <td class="ctr"><span class="dash">—</span></td>
+            <td class="ctr"><span class="dash">—</span></td>
+            <td><button class="rowedit" title="Edit field"><svg class="i" data-icon="pencil"></svg></button></td>
+          </tr>
+          <tr>
+            <td class="fld"><div class="lbl">Close date</div><div class="sub">Expected close · used in forecasts.</div></td>
+            <td><span class="api">close_date</span></td>
+            <td><span class="tpill t-neutral">Date</span></td>
+            <td class="ctr"><svg class="i" data-icon="check"></svg></td>
+            <td class="ctr"><svg class="i" data-icon="check"></svg></td>
+            <td><button class="rowedit" title="Edit field"><svg class="i" data-icon="pencil"></svg></button></td>
+          </tr>
+          <tr>
+            <td class="fld"><div class="lbl">Account</div><div class="sub">→ account · the company this deal belongs to.</div></td>
+            <td><span class="api">account_id</span></td>
+            <td><span class="tpill t-info">Reference</span></td>
+            <td class="ctr"><span class="dash">—</span></td>
+            <td class="ctr"><svg class="i" data-icon="check"></svg></td>
+            <td><button class="rowedit" title="Edit field"><svg class="i" data-icon="pencil"></svg></button></td>
+          </tr>
+          <tr>
+            <td class="fld"><div class="lbl">Probability</div><div class="sub">0–100 · defaults from stage.</div></td>
+            <td><span class="api">probability</span></td>
+            <td><span class="tpill t-neutral">Percent</span></td>
+            <td class="ctr"><span class="dash">—</span></td>
+            <td class="ctr"><span class="dash">—</span></td>
+            <td><button class="rowedit" title="Edit field"><svg class="i" data-icon="pencil"></svg></button></td>
+          </tr>
+          <tr>
+            <td class="fld"><div class="lbl">Next step</div><div class="sub">Free text · surfaced on the deal card.</div></td>
+            <td><span class="api">next_step</span></td>
+            <td><span class="tpill t-neutral">Text</span></td>
+            <td class="ctr"><span class="dash">—</span></td>
+            <td class="ctr"><span class="dash">—</span></td>
+            <td><button class="rowedit" title="Edit field"><svg class="i" data-icon="pencil"></svg></button></td>
+          </tr>
+          <tr>
+            <td class="fld"><div class="lbl">Weighted amount</div><div class="sub muted">amount × probability</div></td>
+            <td><span class="api">weighted_amount</span></td>
+            <td><span class="tpill t-success">Formula</span></td>
+            <td class="ctr"><span class="dash">—</span></td>
+            <td class="ctr"><span class="dash">—</span></td>
+            <td><button class="rowedit" title="Edit field"><svg class="i" data-icon="pencil"></svg></button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script>nbBadge('S2', 'Object hero');</script>
+</body>
+</html>

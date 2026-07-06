@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Migrate · Mission control — Northbeam redesign M1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .page { max-width: 1040px; }
+
+  /* Header */
+  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); }
+  .head h1 { margin: var(--sp-2) 0 0; font-size: var(--text-2xl); font-weight: var(--fw-semibold); letter-spacing: -0.02em; line-height: var(--lh-tight); }
+  .head .sub { margin-top: 6px; font-size: var(--text-sm); color: var(--ink-muted); }
+  .head .sub .mono { font-size: var(--text-xs); }
+  .head .acts { display: flex; align-items: center; gap: 8px; padding-top: var(--sp-5); }
+
+  /* Stepper */
+  .stepper { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-8); }
+  .step { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); font-weight: var(--fw-medium); color: var(--ink); white-space: nowrap; }
+  .step .dot { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 999px; flex: none; }
+  .step.done .dot { background: var(--ink); color: var(--bg); }
+  .step.done .dot svg { width: 10px; height: 10px; stroke-width: 2.6; }
+  .step.active { color: var(--accent); }
+  .step.active .dot { position: relative; }
+  .step.active .dot::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--accent); }
+  .step.active .dot::after { content: ""; position: absolute; inset: 0; border-radius: 999px; border: 1.5px solid var(--accent); animation: pulse 2.2s var(--ease) infinite; }
+  @keyframes pulse {
+    0% { transform: scale(0.6); opacity: 0.9; }
+    70%, 100% { transform: scale(1.35); opacity: 0; }
+  }
+  .step.todo { color: var(--ink-subtle); font-weight: var(--fw-regular); }
+  .step.todo .dot::before { content: ""; width: 8px; height: 8px; border-radius: 999px; border: 1.5px solid var(--border-strong); }
+  .stepper .conn { flex: 1; height: 1px; background: var(--border); }
+  .stepper .conn.filled { background: var(--border-strong); }
+
+  /* Stats band */
+  .stats { margin-top: var(--sp-6); display: grid; grid-template-columns: repeat(5, 1fr); }
+  .stats > div { padding: var(--sp-4) var(--sp-5); }
+  .stats > div + div { border-left: 1px solid var(--border); }
+  .stats .v { font-size: var(--text-xl); font-weight: var(--fw-medium); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .stats .l { margin-top: 1px; font-size: var(--text-sm); color: var(--ink-muted); }
+
+  /* Progress lanes */
+  .lanes { margin-top: var(--sp-6); }
+  .lane { display: grid; grid-template-columns: 26px 220px 1fr 88px 96px; align-items: center; gap: var(--sp-4); padding: 14px var(--sp-5); }
+  .lane + .lane { border-top: 1px solid var(--divider); }
+  .lane .map { font-family: var(--font-mono); font-size: var(--text-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .lane .map .arr { color: var(--ink-subtle); }
+  .lane.queued .map, .lane.queued .cnt { color: var(--ink-subtle); }
+  .bar { position: relative; height: 6px; border-radius: 999px; background: var(--surface-active); overflow: hidden; }
+  .bar .fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--accent); }
+  .lane.done .fill { background: var(--success); }
+  .lane.active .fill::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+    animation: shimmer 1.8s var(--ease) infinite;
+  }
+  @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .lane .cnt { text-align: right; font-family: var(--font-mono); font-size: var(--text-sm); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+  .lane .st { display: flex; justify-content: flex-end; }
+
+  /* Bottom two-col */
+  .cols { margin-top: var(--sp-6); display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--sp-4); align-items: start; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px var(--sp-5); border-bottom: 1px solid var(--border); }
+  .log { padding: var(--sp-3) var(--sp-5) var(--sp-4); font-family: var(--font-mono); font-size: var(--text-xs); line-height: 2.1; font-variant-numeric: tabular-nums; }
+  .log .ln { display: flex; gap: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log .t { color: var(--ink-subtle); flex: none; }
+  .log .ln .hl { color: var(--accent); }
+  .log .d1 { opacity: 0.75; }
+  .log .d2 { opacity: 0.55; }
+  .log .d3 { opacity: 0.38; }
+  .live { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--success); font-weight: var(--fw-medium); }
+  .live::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+
+  .wait a.row { display: flex; align-items: center; gap: 10px; padding: 12px var(--sp-5); font-size: var(--text-base); transition: background 0.12s var(--ease); }
+  .wait a.row + a.row { border-top: 1px solid var(--divider); }
+  .wait a.row:hover { background: var(--surface-hover); }
+  .wait a.row .go { margin-left: auto; color: var(--ink-subtle); }
+  .wait a.row:hover .go { color: var(--accent); }
+  .wait .note { padding: 12px var(--sp-5); border-top: 1px solid var(--divider); font-size: var(--text-sm); color: var(--ink-muted); line-height: var(--lh-snug); }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>nbTopbar('Home');</script>
+
+<main class="page">
+  <!-- Header -->
+  <section class="head reveal reveal-1">
+    <div>
+      <span class="eyebrow">Migration · Run #1</span>
+      <h1>Migrating your Salesforce</h1>
+      <div class="sub">connected as <span class="mono">caleb@triforce.com</span> · production org</div>
+    </div>
+    <div class="acts">
+      <button class="btn ghost">Pause</button>
+      <button class="btn outline">Manage connection</button>
+    </div>
+  </section>
+
+  <!-- Stepper -->
+  <section class="stepper reveal reveal-2">
+    <span class="step done"><span class="dot"><svg class="i" data-icon="check"></svg></span> Connect</span>
+    <span class="conn filled"></span>
+    <span class="step done"><span class="dot"><svg class="i" data-icon="check"></svg></span> Discover</span>
+    <span class="conn filled"></span>
+    <span class="step done"><span class="dot"><svg class="i" data-icon="check"></svg></span> Map</span>
+    <span class="conn filled"></span>
+    <span class="step active"><span class="dot"></span> Import</span>
+    <span class="conn"></span>
+    <span class="step todo"><span class="dot"></span> Verify</span>
+  </section>
+
+  <!-- Stats band -->
+  <section class="card stats reveal reveal-2">
+    <div><div class="v">5</div><div class="l">Objects</div></div>
+    <div><div class="v">214</div><div class="l">Fields</div></div>
+    <div><div class="v">480</div><div class="l">Records read</div></div>
+    <div><div class="v">361</div><div class="l">Imported</div></div>
+    <div><div class="v">129</div><div class="l">References</div></div>
+  </section>
+
+  <!-- Per-object progress lanes -->
+  <section class="card lanes reveal reveal-3">
+    <div class="lane done">
+      <span class="obj-chip">A</span>
+      <span class="map">Account <span class="arr">→</span> account</span>
+      <span class="bar"><span class="fill" style="width:100%"></span></span>
+      <span class="cnt">100 / 100</span>
+      <span class="st"><span class="pill success">Imported</span></span>
+    </div>
+    <div class="lane done">
+      <span class="obj-chip">C</span>
+      <span class="map">Contact <span class="arr">→</span> contact</span>
+      <span class="bar"><span class="fill" style="width:100%"></span></span>
+      <span class="cnt">100 / 100</span>
+      <span class="st"><span class="pill success">Imported</span></span>
+    </div>
+    <div class="lane active">
+      <span class="obj-chip">O</span>
+      <span class="map">Opportunity <span class="arr">→</span> deal</span>
+      <span class="bar"><span class="fill" style="width:74%"></span></span>
+      <span class="cnt">74 / 100</span>
+      <span class="st"><span class="pill info">Importing</span></span>
+    </div>
+    <div class="lane queued">
+      <span class="obj-chip">T</span>
+      <span class="map">Task <span class="arr">→</span> activity</span>
+      <span class="bar"></span>
+      <span class="cnt">— / 92</span>
+      <span class="st"><span class="pill neutral plain">Queued</span></span>
+    </div>
+    <div class="lane queued">
+      <span class="obj-chip">E</span>
+      <span class="map">Event <span class="arr">→</span> activity</span>
+      <span class="bar"></span>
+      <span class="cnt">— / 88</span>
+      <span class="st"><span class="pill neutral plain">Queued</span></span>
+    </div>
+  </section>
+
+  <!-- Activity + While you wait -->
+  <section class="cols reveal reveal-4">
+    <div class="card">
+      <div class="panel-head"><span class="eyebrow">Activity</span><span class="live">Live</span></div>
+      <div class="log">
+        <div class="ln"><span class="t">12:04:14</span><span>linked <span class="hl">42 references</span> → account</span></div>
+        <div class="ln"><span class="t">12:04:13</span><span>imported 50 / 100 Opportunity records</span></div>
+        <div class="ln"><span class="t">12:04:11</span><span>mapped Opportunity.StageName → deal.stage <span class="hl">(98% confidence)</span></span></div>
+        <div class="ln d1"><span class="t">12:04:08</span><span>imported 100 / 100 Contact records — done</span></div>
+        <div class="ln d1"><span class="t">12:04:05</span><span>linked 87 references contact → account</span></div>
+        <div class="ln d2"><span class="t">12:04:02</span><span>imported 60 / 100 Contact records</span></div>
+        <div class="ln d2"><span class="t">12:03:58</span><span>created table t_contact (41 fields)</span></div>
+        <div class="ln d3"><span class="t">12:03:55</span><span>imported 100 / 100 Account records — done</span></div>
+      </div>
+    </div>
+    <div class="card wait">
+      <div class="panel-head"><span class="eyebrow">While you wait</span></div>
+      <a class="row" href="#"><span class="obj-chip">A</span> Browse 100 Accounts <svg class="i go" data-icon="arrow-right" style="width:13px;height:13px"></svg></a>
+      <a class="row" href="#"><span class="obj-chip">C</span> Browse 100 Contacts <svg class="i go" data-icon="arrow-right" style="width:13px;height:13px"></svg></a>
+      <a class="row" href="#"><span class="obj-chip">O</span> Review Opportunity field mapping <svg class="i go" data-icon="arrow-right" style="width:13px;height:13px"></svg></a>
+      <div class="note">Mapping edits never pause the import — changes apply to records as they land.</div>
+    </div>
+  </section>
+</main>
+
+<script>nbBadge('M1', 'Mission control');</script>
+</body>
+</html>

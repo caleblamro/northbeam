@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Roles · Studio — Northbeam redesign P1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="shared.css" />
+<style>
+  body { background: var(--bg); }
+  .shell { flex: 1; width: 100%; max-width: 1280px; margin: 0 auto; display: grid; grid-template-columns: 230px minmax(0, 1fr); align-items: start; }
+  .snav { position: sticky; top: 52px; min-height: calc(100vh - 52px); padding: var(--sp-6) var(--sp-3) var(--sp-8); border-right: 1px solid var(--border); }
+  .snav h2 { margin: 0; padding: 0 10px; font-size: var(--text-md); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+  .grp { margin: var(--sp-5) 0 4px; padding: 0 10px; font-size: 10px; font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: 0.13em; color: var(--ink-subtle); }
+  .itm { position: relative; display: flex; align-items: center; gap: 9px; height: 31px; padding: 0 10px; border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: var(--fw-medium); color: var(--ink-secondary); transition: background 0.12s var(--ease), color 0.12s var(--ease); }
+  .itm svg { width: 14px; height: 14px; color: var(--ink-muted); }
+  .itm:hover { background: var(--surface-hover); color: var(--ink); }
+  .itm[aria-current] { background: var(--accent-soft); color: var(--ink); }
+  .itm[aria-current]::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 999px; background: var(--accent); }
+  .itm[aria-current] svg { color: var(--accent); }
+  .soon { margin-left: auto; font-size: 9.5px; font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-subtle); border: 1px solid var(--border); border-radius: var(--radius-full); padding: 1px 6px; }
+
+  .main { padding: var(--sp-6) var(--sp-6) var(--sp-16); min-width: 0; }
+  .studio { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--sp-6); align-items: start; }
+
+  /* ---- Role rail ---- */
+  .rrail { position: sticky; top: 76px; }
+  .rrail .eyebrow { display: block; padding: 0 10px 8px; }
+  .role { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: var(--fw-medium); color: var(--ink-secondary); text-align: left; transition: background 0.12s var(--ease); }
+  .role:hover { background: var(--surface-hover); color: var(--ink); }
+  .role.on { background: var(--accent-soft); color: var(--ink); }
+  .role.on::before { content: ""; position: absolute; left: 0; top: 7px; bottom: 7px; width: 2px; border-radius: 999px; background: var(--accent); }
+  .rdot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+  .role .lk { width: 11px; height: 11px; color: var(--ink-subtle); }
+  .avs { display: flex; margin-left: auto; }
+  .av { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 999px; background: var(--surface-active); border: 1.5px solid var(--bg); color: var(--ink-secondary); font-size: 7px; font-weight: var(--fw-semibold); }
+  .av + .av { margin-left: -5px; }
+  .role .cnt { font-size: var(--text-xs); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
+  .rail-foot { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+  .rail-foot .btn { justify-content: flex-start; }
+
+  /* ---- Editor ---- */
+  .editor { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+  .ehead { position: sticky; top: 60px; z-index: 20; display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
+  .ehead h1 { margin: 0; font-size: var(--text-lg); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
+  .ehead .key { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-subtle); }
+  .ehead .dirty { margin-left: auto; font-size: var(--text-sm); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+  .chg { width: 6px; height: 6px; border-radius: 999px; background: var(--accent); flex: none; }
+
+  .chead { display: flex; align-items: baseline; gap: 8px; padding: 13px 16px 11px; border-bottom: 1px solid var(--border); }
+  .chead h2 { margin: 0; font-size: var(--text-base); font-weight: var(--fw-semibold); }
+  .chead .hint { font-size: var(--text-xs); color: var(--ink-muted); }
+  .chead .btn { margin-left: auto; }
+
+  .mrow { display: flex; align-items: center; gap: 11px; padding: 10px 16px; border-bottom: 1px solid var(--divider); }
+  .mav { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; background: var(--brand); color: var(--brand-contrast); font-size: 10px; font-weight: var(--fw-semibold); flex: none; }
+  .mrow .nm { font-size: var(--text-sm); font-weight: var(--fw-medium); }
+  .mrow .em { font-size: var(--text-xs); color: var(--ink-muted); }
+  .sel { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; margin-left: auto; border: 1px solid var(--border-field); border-radius: var(--radius-md); background: var(--field-bg); box-shadow: var(--shadow-btn); font-size: var(--text-xs); font-weight: var(--fw-medium); color: var(--ink-secondary); }
+  .sel:hover { background: var(--surface-hover); }
+  .cfoot { padding: 9px 16px; font-size: var(--text-xs); color: var(--ink-subtle); }
+
+  /* Permission rows + switches */
+  .pgrp { padding: 14px 16px 5px; }
+  .prow { display: flex; align-items: center; gap: 12px; padding: 9px 16px; border-bottom: 1px solid var(--divider); transition: background 0.1s var(--ease); }
+  .prow:hover { background: var(--surface-hover); }
+  .prow:last-child { border-bottom: 0; }
+  .prow .t { font-size: var(--text-sm); font-weight: var(--fw-medium); display: flex; align-items: center; gap: 7px; }
+  .prow .d { font-size: var(--text-xs); color: var(--ink-muted); margin-top: 1px; }
+  .sw { position: relative; width: 32px; height: 18px; margin-left: auto; border-radius: 999px; background: var(--surface-active); border: 1px solid var(--border-strong); flex: none; transition: background 0.15s var(--ease), border-color 0.15s var(--ease); cursor: pointer; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-sm); transition: left 0.15s var(--ease); }
+  .sw.on { background: var(--accent); border-color: var(--accent); }
+  .sw.on::after { left: 16px; }
+
+  /* Checkboxes */
+  .cb { display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1px solid var(--border-field); border-radius: 4px; background: var(--field-bg); cursor: pointer; }
+  .cb svg { width: 10px; height: 10px; display: none; }
+  .cb.on { background: var(--accent); border-color: var(--accent); color: var(--ink-onfill); }
+  .cb.on svg { display: block; }
+  .cb.inh { background: var(--surface-sunken); border-color: var(--border); }
+  .cb.inh.on { background: var(--surface-active); border-color: var(--border-strong); color: var(--ink-muted); }
+
+  /* Object access table */
+  .otoolbar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .tsearch { display: flex; align-items: center; gap: 8px; width: 220px; height: 28px; padding: 0 10px; border: 1px solid var(--border-field); border-radius: var(--radius-md); background: var(--field-bg); color: var(--placeholder); font-size: var(--text-sm); }
+  .fchip { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 11px; border-radius: var(--radius-full); border: 1px solid var(--border); font-size: var(--text-sm); color: var(--ink-muted); font-weight: var(--fw-medium); }
+  .fchip:hover { background: var(--surface-hover); color: var(--ink); }
+  .tbl th.c, .tbl td.c { text-align: center; width: 52px; }
+  .tbl td { padding: 10px 14px; }
+  tr.defrow { background: var(--surface-sunken); }
+  tr.defrow:hover { background: var(--surface-sunken); }
+  .oname { display: flex; align-items: center; gap: 10px; font-weight: var(--fw-medium); font-size: var(--text-sm); }
+  .oname .obj-chip { width: 22px; height: 22px; font-size: 10.5px; }
+  .reset { display: inline-flex; align-items: center; gap: 4px; margin-left: 7px; color: var(--accent); font-size: var(--text-xs); font-weight: var(--fw-medium); }
+  .reset:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .reset svg { width: 10px; height: 10px; }
+  tbody tr:last-child td { border-bottom: 0; }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+  NB_ICONS.lock = '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>';
+  nbTopbar('Home');
+</script>
+
+<div class="shell">
+  <nav class="snav reveal reveal-1">
+    <h2>Setup</h2>
+    <div class="grp">Workspace</div>
+    <a class="itm" href="#"><svg class="i" data-icon="building"></svg> General</a>
+    <a class="itm" href="#"><svg class="i" data-icon="dollar"></svg> Billing <span class="soon">Soon</span></a>
+    <div class="grp">People &amp; access</div>
+    <a class="itm" href="#"><svg class="i" data-icon="user"></svg> Users</a>
+    <a class="itm" aria-current="page" href="#"><svg class="i" data-icon="eye"></svg> Roles &amp; permissions</a>
+    <div class="grp">Customization</div>
+    <a class="itm" href="setup-1-console.html"><svg class="i" data-icon="grip"></svg> Object manager</a>
+    <a class="itm" href="#"><svg class="i" data-icon="filter"></svg> Picklists</a>
+    <div class="grp">Operations</div>
+    <a class="itm" href="#"><svg class="i" data-icon="zap"></svg> Integrations</a>
+    <a class="itm" href="#"><svg class="i" data-icon="clock"></svg> Audit log</a>
+  </nav>
+
+  <main class="main">
+    <div class="studio">
+      <!-- Role rail -->
+      <nav class="rrail reveal reveal-2">
+        <span class="eyebrow">Roles</span>
+        <button class="role"><span class="rdot" style="background:var(--brand)"></span> Owner <svg class="i lk" data-icon="lock"></svg><span class="avs"><span class="av">CL</span></span><span class="cnt">1</span></button>
+        <button class="role"><span class="rdot" style="background:#7c3aed /* role color (user-chosen swatch) */"></span> Admin <svg class="i lk" data-icon="lock"></svg><span class="avs"><span class="av">AF</span></span><span class="cnt">1</span></button>
+        <button class="role"><span class="rdot" style="background:#0284c7 /* role color (user-chosen swatch) */"></span> Member <svg class="i lk" data-icon="lock"></svg><span class="avs"><span class="av">JM</span></span><span class="cnt">1</span></button>
+        <button class="role"><span class="rdot" style="background:var(--ink-subtle)"></span> Viewer <svg class="i lk" data-icon="lock"></svg><span class="cnt" style="margin-left:auto">0</span></button>
+        <button class="role on"><span class="rdot" style="background:#0e9f6e /* role color (user-chosen swatch) */"></span> Sales Ops <span class="avs"><span class="av">AF</span><span class="av">SR</span></span><span class="cnt">2</span></button>
+        <div class="rail-foot">
+          <button class="btn ghost"><svg class="i" data-icon="plus" style="width:13px;height:13px"></svg> New role</button>
+          <button class="btn ghost subtle" style="font-size:var(--text-xs)">Duplicate current</button>
+        </div>
+      </nav>
+
+      <!-- Editor -->
+      <section class="editor">
+        <div class="card ehead reveal reveal-1">
+          <span class="rdot" style="width:10px;height:10px;background:#0e9f6e /* role color (user-chosen swatch) */"></span>
+          <h1>Sales Ops</h1>
+          <span class="pill info plain">Custom</span>
+          <span class="key">sales-ops</span>
+          <span class="dirty">2 unsaved changes</span>
+          <button class="btn ghost">Discard</button>
+          <button class="btn primary"><svg class="i" data-icon="check" style="width:13px;height:13px"></svg> Save</button>
+        </div>
+
+        <!-- Members -->
+        <div class="card reveal reveal-2" style="overflow:hidden">
+          <div class="chead"><h2>Members</h2><span class="hint">2 people hold this role</span><button class="btn ghost"><svg class="i" data-icon="plus" style="width:12px;height:12px"></svg> Add member</button></div>
+          <div class="mrow"><span class="mav">AF</span><span><div class="nm">Ana Ferreira</div><div class="em">ana@lamro.com</div></span><button class="sel">Move to… <svg class="i" data-icon="chevron-down" style="width:10px;height:10px"></svg></button></div>
+          <div class="mrow" style="border-bottom:0"><span class="mav">SR</span><span><div class="nm">Sam Rivera</div><div class="em">sam@lamro.com</div></span><button class="sel">Move to… <svg class="i" data-icon="chevron-down" style="width:10px;height:10px"></svg></button></div>
+          <div class="cfoot" style="border-top:1px solid var(--divider)">Delete requires zero members — move them here first.</div>
+        </div>
+
+        <!-- Workspace permissions -->
+        <div class="card reveal reveal-3" style="overflow:hidden">
+          <div class="chead"><h2>Workspace permissions</h2><span class="hint">What this role can do outside of records</span></div>
+          <div class="pgrp eyebrow">Workspace</div>
+          <div class="prow"><span><div class="t">Update workspace settings</div><div class="d">Edit org name, slug, and logo.</div></span><span class="sw"></span></div>
+          <div class="prow"><span><div class="t">Delete workspace</div><div class="d">Permanently delete this org and all of its data.</div></span><span class="sw"></span></div>
+          <div class="prow"><span><div class="t">Transfer ownership</div><div class="d">Hand the Owner role to another member.</div></span><span class="sw"></span></div>
+          <div class="prow"><span><div class="t">Manage billing</div><div class="d">Change plans, payment methods, and invoices.</div></span><span class="sw"></span></div>
+          <div class="pgrp eyebrow">Members</div>
+          <div class="prow"><span><div class="t">Invite members</div><div class="d">Send email invites to join this workspace.</div></span><span class="sw on"></span></div>
+          <div class="prow"><span><div class="t">Remove members</div><div class="d">Deactivate members and free their seats.</div></span><span class="sw"></span></div>
+          <div class="prow"><span><div class="t">Change member roles</div><div class="d">Move members between existing roles.</div></span><span class="sw"></span></div>
+          <div class="prow"><span><div class="t">Manage roles &amp; permissions</div><div class="d">Create custom roles and edit the per-object permission grid.</div></span><span class="sw"></span></div>
+          <div class="pgrp eyebrow">Data model</div>
+          <div class="prow"><span><div class="t">Manage the data model</div><div class="d">Create and edit objects, fields, record types, picklist sets…</div></span><span class="sw"></span></div>
+          <div class="pgrp eyebrow">Migration</div>
+          <div class="prow"><span><div class="t">Run Salesforce migration <span class="chg" title="Unsaved change"></span></div><div class="d">Connect an org and run imports.</div></span><span class="sw on"></span></div>
+          <div class="pgrp eyebrow">Automation</div>
+          <div class="prow"><span><div class="t">Manage automations</div><div class="d">Create, edit, and pause workflow automations.</div></span><span class="sw"></span></div>
+          <div class="pgrp eyebrow">API keys</div>
+          <div class="prow"><span><div class="t">Manage personal API keys</div><div class="d">Create and revoke keys scoped to your own access.</div></span><span class="sw"></span></div>
+          <div class="prow"><span><div class="t">Manage workspace API keys</div><div class="d">Create and revoke org-wide keys.</div></span><span class="sw"></span></div>
+          <div class="pgrp eyebrow">Saved views</div>
+          <div class="prow"><span><div class="t">See saved views</div><div class="d">Browse workspace lists, reports, and dashboards.</div></span><span class="sw on"></span></div>
+          <div class="prow"><span><div class="t">Create / edit saved views</div><div class="d">Create and modify shared views.</div></span><span class="sw on"></span></div>
+        </div>
+
+        <!-- Object access -->
+        <div class="card flush reveal reveal-3" style="overflow:hidden">
+          <div class="chead"><h2>Object access</h2><span class="hint">Rows inherit the default unless overridden</span></div>
+          <div class="otoolbar">
+            <span class="tsearch"><svg class="i" data-icon="search" style="width:12px;height:12px"></svg> Search objects…</span>
+            <button class="fchip"><svg class="i" data-icon="filter" style="width:11px;height:11px"></svg> Only overrides <span class="num" style="opacity:.7">2</span></button>
+          </div>
+          <table class="tbl">
+            <thead><tr><th style="padding-left:16px">Object</th><th class="c">Create</th><th class="c">Read</th><th class="c">Update</th><th class="c">Delete</th><th>Access</th></tr></thead>
+            <tbody>
+              <tr class="defrow">
+                <td style="padding-left:16px"><span class="oname"><svg class="i" data-icon="grip" style="width:14px;height:14px;color:var(--ink-muted)"></svg> All objects · default</span></td>
+                <td class="c"><span class="cb"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb on"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb"><svg class="i" data-icon="check"></svg></span></td>
+                <td><span class="pill neutral plain">default</span></td>
+              </tr>
+              <tr>
+                <td style="padding-left:16px"><span class="oname"><span class="obj-chip">A</span> Account</span></td>
+                <td class="c"><span class="cb inh"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb inh on"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb inh"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb inh"><svg class="i" data-icon="check"></svg></span></td>
+                <td><span class="pill neutral plain">Inherits default</span></td>
+              </tr>
+              <tr>
+                <td style="padding-left:16px"><span class="oname"><span class="obj-chip">C</span> Contact</span></td>
+                <td class="c"><span class="cb inh"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb inh on"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb inh"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb inh"><svg class="i" data-icon="check"></svg></span></td>
+                <td><span class="pill neutral plain">Inherits default</span></td>
+              </tr>
+              <tr>
+                <td style="padding-left:16px"><span class="oname"><span class="obj-chip">D</span> Deal <span class="chg" title="Unsaved change"></span></span></td>
+                <td class="c"><span class="cb on"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb on"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb on"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb"><svg class="i" data-icon="check"></svg></span></td>
+                <td><span class="pill info plain">Override</span><a class="reset" href="#"><svg class="i" data-icon="refresh"></svg> Reset</a></td>
+              </tr>
+              <tr>
+                <td style="padding-left:16px"><span class="oname"><span class="obj-chip">A</span> Activity</span></td>
+                <td class="c"><span class="cb inh"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb inh on"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb inh"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb inh"><svg class="i" data-icon="check"></svg></span></td>
+                <td><span class="pill neutral plain">Inherits default</span></td>
+              </tr>
+              <tr>
+                <td style="padding-left:16px"><span class="oname"><span class="obj-chip">P</span> Property</span></td>
+                <td class="c"><span class="cb"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb on"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb on"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb"><svg class="i" data-icon="check"></svg></span></td>
+                <td><span class="pill info plain">Override</span><a class="reset" href="#"><svg class="i" data-icon="refresh"></svg> Reset</a></td>
+              </tr>
+              <tr>
+                <td style="padding-left:16px"><span class="oname"><span class="obj-chip">L</span> Lease</span></td>
+                <td class="c"><span class="cb inh"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb inh on"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb inh"><svg class="i" data-icon="check"></svg></span></td>
+                <td class="c"><span class="cb inh"><svg class="i" data-icon="check"></svg></span></td>
+                <td><span class="pill neutral plain">Inherits default</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- AI tools -->
+        <div class="card reveal reveal-4" style="overflow:hidden">
+          <div class="chead"><h2>AI tools</h2><span class="hint">Tools respect object access — a tool can never see more than this grid allows</span></div>
+          <div class="pgrp eyebrow">Read</div>
+          <div class="prow"><span class="cb on"><svg class="i" data-icon="check"></svg></span><span><div class="t">Search records</div><div class="d">Full-text search across objects this role can read.</div></span></div>
+          <div class="prow"><span class="cb on"><svg class="i" data-icon="check"></svg></span><span><div class="t">Aggregate records</div><div class="d">Count, sum, and group records for reporting.</div></span></div>
+          <div class="prow"><span class="cb on"><svg class="i" data-icon="check"></svg></span><span><div class="t">Run query</div><div class="d">Execute structured queries against readable objects.</div></span></div>
+          <div class="prow"><span class="cb on"><svg class="i" data-icon="check"></svg></span><span><div class="t">Get record</div><div class="d">Fetch a single record by id.</div></span></div>
+          <div class="prow"><span class="cb on"><svg class="i" data-icon="check"></svg></span><span><div class="t">Inspect metadata</div><div class="d">Read object and field definitions.</div></span></div>
+          <div class="pgrp eyebrow">Write</div>
+          <div class="prow"><span class="cb"><svg class="i" data-icon="check"></svg></span><span><div class="t">Create record</div><div class="d">Insert new records on writable objects.</div></span></div>
+          <div class="prow"><span class="cb"><svg class="i" data-icon="check"></svg></span><span><div class="t">Update record</div><div class="d">Modify field values on writable objects.</div></span></div>
+          <div class="pgrp eyebrow">Destructive</div>
+          <div class="prow"><span class="cb"><svg class="i" data-icon="check"></svg></span><span><div class="t">Delete record <span class="pill warning" style="margin-left:4px">off for all roles by default</span></div><div class="d">Permanently remove records.</div></span></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>nbBadge('P1', 'Role studio');</script>
+</body>
+</html>

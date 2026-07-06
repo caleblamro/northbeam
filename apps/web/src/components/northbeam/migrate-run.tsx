@@ -6,6 +6,7 @@
 // stays available while the import runs and after it lands. Completed/failed
 // runs render a summary with a "Run again" action.
 
+import { ObjChip } from '@/components/northbeam/app-bits';
 import {
   MAX_RECORDS_PER_OBJECT,
   ObjectMappingCard,
@@ -17,9 +18,9 @@ import { Callout } from '@/components/ui/callout';
 import { LoadingScreen } from '@/components/ui/loading-screen';
 import { Progress } from '@/components/ui/progress';
 import { trpc } from '@/lib/api';
-import { useCurrentRole } from '@/lib/can';
-import { can } from '@northbeam/core/roles';
-import { AlertCircle, AlertTriangle, ArrowRight, Loader2, RefreshCw } from 'lucide-react';
+import { useCan, useCurrentRole } from '@/lib/can';
+import { cn } from '@/lib/cn';
+import { AlertCircle, AlertTriangle, ArrowRight, Check, Loader2, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 
@@ -49,8 +50,11 @@ export function RunScreen({ runId, onStartOver }: { runId: string; onStartOver: 
     onSuccess: () => utils.salesforce.getRun.invalidate({ runId }),
   });
 
+  // `role` gates the "is the role loaded yet" check below; `mayRun` is the
+  // grant-based permission (works for custom roles, unlike the old rank-based
+  // can()).
   const role = useCurrentRole();
-  const mayRun = role != null && can(role, 'migration.run');
+  const mayRun = useCan('migration.run');
   const { mutate: executeMutate } = execute;
   const autoExecuted = useRef(false);
 
@@ -99,42 +103,19 @@ export function RunScreen({ runId, onStartOver }: { runId: string; onStartOver: 
     </div>
   );
 
-  if (r.status === 'completed' || r.status === 'failed') {
+  if (r.status === 'failed') {
     return (
       <div className="reveal flex flex-col gap-4">
-        <SectionCard title={r.status === 'completed' ? 'Migration complete' : 'Migration failed'}>
-          {r.status === 'failed' && stats.error != null && (
+        <SectionCard title="Migration failed">
+          {stats.error != null && (
             <Callout variant="danger" icon={AlertCircle} className="mb-4">
               {String(stats.error)}
             </Callout>
           )}
           <StatsRow stats={stats} />
           {capNote}
-          {Array.isArray(stats.skippedViews) && stats.skippedViews.length > 0 && (
-            <p className="mt-3 text-muted-foreground text-sm">
-              {stats.skippedViews.length} report
-              {stats.skippedViews.length === 1 ? '' : 's'} couldn&apos;t be translated (
-              {(stats.skippedViews as Array<{ label: string; reason: string }>)
-                .slice(0, 3)
-                .map((s) => s.label)
-                .join(', ')}
-              {stats.skippedViews.length > 3 ? ', …' : ''}).
-            </p>
-          )}
           <div className="mt-5 flex flex-wrap gap-2">
-            {r.status === 'completed' &&
-              activeObjects.map((o) => {
-                const meta = o.meta as { targetKey?: string; labelPlural?: string };
-                return (
-                  <Link key={o.id} href={`/${meta.targetKey ?? o.sfObject}`}>
-                    <Button variant="outline">
-                      View {meta.labelPlural ?? o.sfLabel ?? o.sfObject}
-                      <ArrowRight />
-                    </Button>
-                  </Link>
-                );
-              })}
-            {r.status === 'failed' && mayRun && (
+            {mayRun && (
               <Button disabled={execute.isPending} onClick={() => executeMutate({ runId })}>
                 {execute.isPending && <Loader2 className="animate-spin" />}
                 Retry import
@@ -152,6 +133,258 @@ export function RunScreen({ runId, onStartOver }: { runId: string; onStartOver: 
           </div>
         </SectionCard>
         {mappingCards}
+      </div>
+    );
+  }
+
+  if (r.status === 'completed') {
+    // ── The arrival (M3): headline backed by an audit-grade sync report. All
+    // numbers below come from the run itself — nothing invented.
+    const allFields = activeObjects.flatMap((o) => o.fields);
+    const mappedCount = allFields.filter((f) => f.status === 'mapped').length;
+    const reviewCount = allFields.filter((f) => f.status === 'review').length;
+    const skipCount = allFields.filter((f) => f.status === 'skip').length;
+    const mappedConf = allFields.filter((f) => f.status !== 'skip').map((f) => f.confidence);
+    const avgConf =
+      mappedConf.length > 0
+        ? Math.round(mappedConf.reduce((a, b) => a + b, 0) / mappedConf.length)
+        : null;
+    const recordsRead = stats.records ?? null;
+    const importedN = stats.imported ?? null;
+    const referencesN = stats.refsResolved ?? null;
+    const reportsN = stats.reportsImported ?? null;
+    const dashboardsN = stats.dashboardsImported ?? null;
+    const capOverflow = sfTotal - cappedTotal;
+    const skippedViews = Array.isArray(stats.skippedViews)
+      ? (stats.skippedViews as Array<{ label: string; reason: string }>)
+      : [];
+
+    const steps: Array<{
+      name: string;
+      state: 'ok' | 'warn';
+      big: string;
+      of?: string;
+      detail: string;
+      pct: number;
+    }> = [
+      {
+        name: 'Discover',
+        state: 'ok',
+        big: String(stats.fields ?? allFields.length),
+        of: 'fields',
+        detail: `${stats.objects ?? activeObjects.length} objects read over the describe API`,
+        pct: 100,
+      },
+      {
+        name: 'Map',
+        state: reviewCount > 0 ? 'warn' : 'ok',
+        big: String(mappedCount),
+        of: `/ ${allFields.length}`,
+        detail: `${avgConf != null ? `avg ${avgConf}% confidence · ` : ''}${
+          reviewCount > 0 ? `${reviewCount} flagged · ` : ''
+        }${skipCount} skipped`,
+        pct: allFields.length > 0 ? Math.round((mappedCount / allFields.length) * 100) : 100,
+      },
+      {
+        name: 'Build',
+        state: 'ok',
+        big: String(activeObjects.length),
+        of: activeObjects.length === 1 ? 'table' : 'tables',
+        detail: 'typed columns + indexes in your org’s schema',
+        pct: 100,
+      },
+      {
+        name: 'Import',
+        state: capOverflow > 0 ? 'warn' : 'ok',
+        big: String(importedN ?? 0),
+        of: recordsRead != null ? `/ ${recordsRead}` : undefined,
+        detail:
+          capOverflow > 0
+            ? `${MAX_RECORDS_PER_OBJECT}-record cap per object — ${capOverflow.toLocaleString()} remain in Salesforce`
+            : 'every discovered record imported',
+        pct:
+          recordsRead && recordsRead > 0
+            ? Math.min(100, Math.round(((importedN ?? 0) / recordsRead) * 100))
+            : 100,
+      },
+      {
+        name: 'Link',
+        state: 'ok',
+        big: String(referencesN ?? 0),
+        of: 'references',
+        detail: 'resolved to native references by Salesforce Id',
+        pct: 100,
+      },
+      {
+        name: 'Rebuild',
+        state: skippedViews.length > 0 ? 'warn' : 'ok',
+        big: String(reportsN ?? 0),
+        of: reportsN === 1 ? 'report' : 'reports',
+        detail: `${dashboardsN ?? 0} dashboard${dashboardsN === 1 ? '' : 's'}${
+          skippedViews.length > 0 ? ` · ${skippedViews.length} couldn’t translate` : ''
+        }`,
+        pct: 100,
+      },
+    ];
+
+    const gaps: Array<{ text: string; anchor?: string }> = [];
+    if (reviewCount > 0) {
+      gaps.push({
+        text: `${reviewCount} field${reviewCount === 1 ? ' needs' : 's need'} a mapping decision.`,
+        anchor: '#mapping',
+      });
+    }
+    if (skippedViews.length > 0) {
+      gaps.push({
+        text: `${skippedViews.length} Salesforce report${
+          skippedViews.length === 1 ? '' : 's'
+        } couldn't be translated (${skippedViews
+          .slice(0, 3)
+          .map((s) => s.label)
+          .join(', ')}${skippedViews.length > 3 ? ', …' : ''}).`,
+      });
+    }
+    if (capOverflow > 0) {
+      gaps.push({
+        text: `${capOverflow.toLocaleString()} records sit beyond the ${MAX_RECORDS_PER_OBJECT}-per-object cap.`,
+      });
+    }
+
+    return (
+      <div className="reveal flex flex-col gap-6">
+        <div>
+          <h1 className="font-semibold text-3xl tracking-[-0.025em]">Your CRM has arrived.</h1>
+          <p className="mt-2 text-[0.9375rem] text-muted-foreground tabular-nums">
+            {recordsRead != null && (
+              <>
+                <span className="font-medium text-foreground">{recordsRead.toLocaleString()}</span>{' '}
+                records read ·{' '}
+              </>
+            )}
+            <span className="font-medium text-foreground">{(importedN ?? 0).toLocaleString()}</span>{' '}
+            imported ·{' '}
+            <span className="font-medium text-foreground">
+              {(referencesN ?? 0).toLocaleString()}
+            </span>{' '}
+            references linked
+          </p>
+        </div>
+
+        <StatsRow stats={stats} />
+
+        {/* Sync report — one instrument card per pipeline stage. */}
+        <div>
+          <p className="mb-2 font-semibold text-[10.5px] text-muted-foreground uppercase tracking-[0.12em]">
+            Sync report
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {steps.map((s) => (
+              <div
+                key={s.name}
+                className="flex flex-col gap-1.5 rounded-lg border border-border bg-card p-4 shadow-xs"
+              >
+                <div className="flex items-center gap-2">
+                  {s.state === 'ok' ? (
+                    <Check className="size-3.5 text-[var(--success)]" />
+                  ) : (
+                    <AlertTriangle className="size-3.5 text-[var(--warning)]" />
+                  )}
+                  <span className="font-semibold text-sm">{s.name}</span>
+                </div>
+                <div className="font-medium text-xl tabular-nums tracking-[-0.01em]">
+                  {s.big}{' '}
+                  {s.of && (
+                    <span className="font-normal text-base text-muted-foreground">{s.of}</span>
+                  )}
+                </div>
+                <p className="text-muted-foreground text-xs leading-snug">{s.detail}</p>
+                <span className="mt-auto block h-1 overflow-hidden rounded-full bg-muted">
+                  <span
+                    className={cn(
+                      'block h-full rounded-full',
+                      s.state === 'ok' ? 'bg-[var(--accent)]' : 'bg-[var(--warning)]',
+                    )}
+                    style={{ width: `${s.pct}%` }}
+                  />
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {gaps.length > 0 && (
+          <div className="rounded-lg border border-[var(--warning-border)] bg-[var(--warning-bg)] px-5 py-4">
+            <p className="flex items-center gap-2 font-semibold text-[var(--warning)] text-sm">
+              <AlertTriangle className="size-3.5" />
+              What didn't come across
+            </p>
+            <ul className="mt-2 flex flex-col gap-1 text-sm">
+              {gaps.map((g) => (
+                <li key={g.text} className="text-foreground/80 tabular-nums">
+                  {g.text}{' '}
+                  {g.anchor && (
+                    <a href={g.anchor} className="font-medium text-link">
+                      Review mapping →
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Per-object arrival cards. */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {activeObjects.map((o) => {
+            const meta = o.meta as { targetKey?: string; labelPlural?: string };
+            // recordCount is what Salesforce HOLDS (capped) — per-object
+            // import success isn't tracked, so say "records", not "imported".
+            const recordsRead = Math.min(o.recordCount, MAX_RECORDS_PER_OBJECT);
+            return (
+              <Link
+                key={o.id}
+                href={`/${meta.targetKey ?? o.sfObject}`}
+                className="group flex flex-col rounded-lg border border-border bg-card p-4 shadow-xs transition-colors hover:border-[var(--border-strong)] hover:bg-muted/40"
+              >
+                <ObjChip label={meta.labelPlural ?? o.sfLabel ?? o.sfObject} size={26} />
+                <span className="mt-3 font-medium text-sm">
+                  {meta.labelPlural ?? o.sfLabel ?? o.sfObject}
+                </span>
+                <span className="text-muted-foreground text-xs tabular-nums">
+                  {recordsRead.toLocaleString()} {recordsRead === 1 ? 'record' : 'records'}
+                </span>
+                <span className="mt-3 inline-flex items-center gap-1 font-medium text-link text-sm">
+                  Browse
+                  <ArrowRight className="size-3 transition-transform group-hover:translate-x-0.5" />
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+
+        <div className="migrate-beamline" />
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {mayRun && (
+              <Button variant="outline" onClick={onStartOver}>
+                <RefreshCw />
+                Run again
+              </Button>
+            )}
+            <Link href="/setup/integrations">
+              <Button variant="ghost">Manage connection</Button>
+            </Link>
+          </div>
+          <Link href="/pipeline">
+            <Button>
+              Go to your pipeline
+              <ArrowRight />
+            </Button>
+          </Link>
+        </div>
+
+        <div id="mapping">{mappingCards}</div>
       </div>
     );
   }
