@@ -13,6 +13,7 @@ import {
   displayName,
   getRecordType,
   grantShare,
+  listObjects,
   listSharesForRecord,
   listValidationRules,
   recomputeAndPersist,
@@ -136,6 +137,39 @@ export const recordRouter = router({
         })),
         refLabels,
       };
+    }),
+
+  /** Cross-object record search for the ⌘K palette / global search bar.
+   *  Mirrors `list`'s ACL exactly (per-object read gate, private-visibility
+   *  share resolution) — do NOT relax this to the searchRefs shape, which
+   *  skips ACL. Results are name matches only, a handful per object. */
+  search: protectedProcedure
+    .input(
+      z.object({ q: z.string().min(1).max(200), perObject: z.number().min(1).max(10).optional() }),
+    )
+    .query(async ({ ctx, input }) => {
+      const per = input.perObject ?? 3;
+      const objects = await listObjects(ctx.db, ctx.auth.organizationId);
+      const groups = await Promise.all(
+        objects
+          .filter((o) => !o.archivedAt)
+          .map(async (o) => {
+            // Non-throwing read gate: silently skip objects this caller can't
+            // see instead of failing the whole cross-object search.
+            const authed = await ctx.records.readable(o.key);
+            if (!authed) return [];
+            const { rows } = await ctx.records.searchRefs(o.key, input.q, per);
+            return rows.map((r) => ({
+              objectKey: authed.object.key,
+              objectLabel: authed.object.label,
+              icon: authed.object.icon,
+              color: authed.object.color,
+              id: r.id,
+              name: displayName(authed.fields, r.data, authed.object.nameExpression),
+            }));
+          }),
+      );
+      return groups.flat().slice(0, 30);
     }),
 
   get: protectedProcedure

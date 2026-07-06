@@ -703,8 +703,11 @@ export function translateFlow(
     );
   }
   if (!start.object) return reference('flow', 'record trigger has no object');
+  // resolutionForSfObject already normalizes casing/suffix differences between
+  // flow metadata and API names — don't re-check exact set membership here (it
+  // defeats the fuzzy match; the other call sites rely on `!res` alone).
   const res = resolutionForSfObject(resolutions, start.object);
-  if (!res || !(importedSfObjects.has(start.object) || resolutions.has(start.object))) {
+  if (!res) {
     return reference('flow', `object '${start.object}' was not part of this import`, start.object);
   }
 

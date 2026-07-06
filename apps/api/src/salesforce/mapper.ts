@@ -228,9 +228,14 @@ export function mapSObject(
           reason = `references '${target}', which is not in this import`;
         }
       } else {
-        status = 'review';
-        confidence = 20;
-        reason = `polymorphic lookup (${f.referenceTo.slice(0, 3).join('/')}…)`;
+        // Polymorphic lookups (WhoId/WhatId) can't be one uuid column — the
+        // value's target object varies per row. The original field is skipped
+        // and replaced by per-target reference fields emitted below; reference
+        // resolution joins on salesforce_id, so a value pointing at a
+        // different target simply doesn't match that column (no-op).
+        status = 'skip';
+        confidence = 0;
+        reason = `polymorphic lookup (${f.referenceTo.slice(0, 3).join('/')}…) — split into per-target fields`;
       }
     } else if (type === 'currency' || type === 'percent' || type === 'number') {
       if (f.scale > 0) config.scale = f.scale;
@@ -263,6 +268,39 @@ export function mapSObject(
       reason,
       populatedPct: pct,
     });
+
+    // Polymorphic split: one mapped reference field per in-set target (capped —
+    // OnQ's WhatId lists dozens of targets; only the ones actually being
+    // imported are useful). All splits read the SAME sfField; the resolver's
+    // salesforce_id join means each column only binds rows whose value points
+    // at its target.
+    if (type === 'reference' && f.referenceTo.length > 1) {
+      const targets = f.referenceTo
+        .filter(
+          (t) =>
+            t !== 'User' &&
+            (t === d.name || Boolean(STANDARD_TARGETS[t]) || (opts.importSet?.has(t) ?? false)),
+        )
+        .slice(0, 8);
+      for (const target of targets) {
+        const targetKey = STANDARD_TARGETS[target] ?? sfToKey(target);
+        const splitKey = uniqueKey(`${sfToKey(f.name)}_${targetKey}`);
+        fields.push({
+          ...base,
+          key: splitKey,
+          columnName: fieldColumnName(splitKey),
+          label: `${f.label} (${target})`,
+          type: 'reference',
+          pgType: pgTypeFor('reference', {}),
+          config: { targetObject: targetKey, relationshipName: f.relationshipName ?? undefined },
+          required: false,
+          status: 'mapped',
+          confidence: 70,
+          reason: `split from polymorphic ${f.name} → ${target}`,
+          populatedPct: pct,
+        });
+      }
+    }
   }
 
   // Formula transpile pass — runs after every field has its final key so refs

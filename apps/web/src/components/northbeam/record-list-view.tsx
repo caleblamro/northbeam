@@ -97,7 +97,13 @@ export function RecordListView({
     const explicit = searchParams.get('view');
     const stored = viewsQ.data ?? [];
     const found = explicit ? stored.find((v) => v.id === explicit) : null;
-    return found ?? stored.find((v) => v.isDefault) ?? stored[0] ?? null;
+    // Unpinned default: a LIST view or nothing — landing on /property should
+    // show records (the synthetic All-records fallback), never whichever
+    // imported dashboard happens to sort first. Dashboards/reports stay
+    // reachable via ?view= and the view picker.
+    return (
+      found ?? stored.find((v) => v.isDefault) ?? stored.find((v) => v.type === 'list') ?? null
+    );
   }, [searchParams, viewsQ.data]);
 
   // Effective filter set = static (caller-pinned) + view's stored filters

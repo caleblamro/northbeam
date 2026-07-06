@@ -4,12 +4,16 @@
 // tile grid grouped by section. Tiles are click-to-navigate; the small pin icon
 // in the corner toggles whether the tile shows up in the top tabs row.
 
+import { trpc } from '@/lib/api';
 import { LAUNCHER_TILES, type NavItem } from '@/lib/nav';
 import { type PinnedTab, usePinnedTabs } from '@/lib/pinned-tabs';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Icon } from './icons';
+import { Icon, type IconName } from './icons';
 import { Popover } from './primitives';
+
+// Standard objects already have curated Workspace tiles.
+const STATIC_OBJECT_KEYS = new Set(['account', 'contact', 'deal', 'activity']);
 
 // 9-dot waffle — drawn inline so it reads as a true Salesforce affordance rather
 // than a generic grid icon. Each dot is currentColor; the parent button sets it.
@@ -58,14 +62,33 @@ export function AppLauncher() {
     }
   }, [open]);
 
+  // Custom/imported objects get their own launcher section so they're
+  // reachable outside the migration tab. Standard objects keep curated tiles.
+  const objectsQ = trpc.object.list.useQuery(undefined, { enabled: open });
+  const allSections = useMemo(() => {
+    const objectItems: NavItem[] = (objectsQ.data ?? [])
+      .filter((o) => !STATIC_OBJECT_KEYS.has(o.key))
+      .map((o) => ({
+        label: o.labelPlural,
+        href: `/${o.key}`,
+        icon: (o.icon || 'cube') as IconName,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return objectItems.length > 0
+      ? [...LAUNCHER_TILES, { label: 'Objects', items: objectItems }]
+      : LAUNCHER_TILES;
+  }, [objectsQ.data]);
+
   const sections = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return LAUNCHER_TILES;
-    return LAUNCHER_TILES.map((s) => ({
-      ...s,
-      items: s.items.filter((i) => i.label.toLowerCase().includes(needle)),
-    })).filter((s) => s.items.length > 0);
-  }, [q]);
+    if (!needle) return allSections;
+    return allSections
+      .map((s) => ({
+        ...s,
+        items: s.items.filter((i) => i.label.toLowerCase().includes(needle)),
+      }))
+      .filter((s) => s.items.length > 0);
+  }, [q, allSections]);
 
   const go = (item: NavItem) => {
     setOpen(false);
