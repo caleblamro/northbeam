@@ -302,7 +302,7 @@ export const NODE_CATALOG: { [T in FlowNodeType]: FlowNodeCatalogEntry<T> } = {
   },
   ai_step: {
     type: 'ai_step',
-    label: 'AI step',
+    label: 'Claude step',
     icon: Sparkles,
     tone: 'accent',
     category: 'action',
@@ -322,7 +322,7 @@ export const NODE_CATALOG: { [T in FlowNodeType]: FlowNodeCatalogEntry<T> } = {
     icon: Bot,
     tone: 'accent',
     category: 'action',
-    hint: 'Hand the record to an AI agent with tools',
+    hint: 'Hand the record to an agent with tools',
     summary: (node) => {
       const writes = node.config.toolIds.some(
         (t) =>

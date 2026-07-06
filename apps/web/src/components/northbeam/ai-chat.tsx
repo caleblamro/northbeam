@@ -152,7 +152,7 @@ export function AiChatSurface({
     <div className="flex h-[calc(100dvh-140px)] min-h-[480px] flex-col gap-4">
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="ghost" size="icon-sm" aria-label="Back to AI hub" asChild>
+        <Button variant="ghost" size="icon-sm" aria-label="Back to Build" asChild>
           <Link href="/ai">
             <ArrowLeft />
           </Link>

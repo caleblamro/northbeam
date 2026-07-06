@@ -16,7 +16,7 @@ export default function AgentsSetupPage() {
       <EmptyState
         icon={Bot}
         title="Not available"
-        body="You need permission to manage AI agents for this workspace."
+        body="You need permission to manage agents for this workspace."
       />
     );
   }

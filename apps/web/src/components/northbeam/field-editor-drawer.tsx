@@ -70,7 +70,7 @@ const TYPE_DESC: Record<FieldType, string> = {
   address: 'A structured street address',
   formula: 'Computed from other fields on save',
   rollup: 'Aggregates child records, like SUM of deals',
-  ai: 'Computed by AI from the record',
+  ai: 'Computed automatically from the record',
 };
 
 /** The subset of a field def the drawer reads. Structural — the rows from

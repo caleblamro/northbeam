@@ -138,7 +138,7 @@ export function AgentsManager() {
   return (
     <SectionCard
       icon={Bot}
-      title="AI agents"
+      title="Agents"
       action={
         <Button size="sm" onClick={openCreate}>
           <Plus />

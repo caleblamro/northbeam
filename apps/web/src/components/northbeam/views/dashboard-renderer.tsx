@@ -42,7 +42,7 @@ export function DashboardView({ view, objectKey }: ViewRendererProps) {
   const refine = (
     <AiAffordance
       revealOnHover
-      label="Refine with AI"
+      label="Refine in Build"
       onClick={() =>
         composer.open({ objectKey, prompt: cfg.prompt, artifact: artifact ?? undefined })
       }

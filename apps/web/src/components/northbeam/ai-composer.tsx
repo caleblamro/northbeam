@@ -701,7 +701,7 @@ export function AiComposerSurface({ children }: { children: ReactNode }) {
           >
             <span className="flex items-center gap-2 text-xs">
               <Sparkles className="size-3.5 text-link" />
-              <span className="font-medium">AI preview</span>
+              <span className="font-medium">Build preview</span>
               <span className="text-muted-foreground">
                 {isGenerating ? (
                   <span className="inline-flex items-center gap-1.5">
@@ -798,7 +798,7 @@ export function AiComposerDrawer() {
           transition={{ duration: 0.32, ease: EASE }}
           className="fixed inset-y-0 right-0 z-40 flex flex-col border-l bg-background shadow-xl"
           style={{ width: COMPOSER_WIDTH }}
-          aria-label="AI composer"
+          aria-label="Build composer"
         >
           {/* Header — identity glyph + quiet controls. The hairline under it
               becomes an accent "activity beam" while a generation streams. */}
@@ -1164,14 +1164,14 @@ function ToolsPopover() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="AI tools">
+        <Button variant="ghost" size="icon-sm" aria-label="Agent tools">
           <Wrench />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-3">
         <p className="font-medium text-sm">Research tools</p>
         <p className="mt-0.5 text-muted-foreground text-xs">
-          What the AI may look at while composing. Auto-approve runs a tool without asking;
+          What the agent may look at while composing. Auto-approve runs a tool without asking;
           otherwise each call pauses for your OK.
         </p>
         <div className="mt-3 flex flex-col gap-2.5">
@@ -1193,7 +1193,7 @@ function ToolsPopover() {
           ))}
           {tools.data && tools.data.length === 0 && (
             <p className="text-muted-foreground text-xs">
-              Your role has no AI tools enabled — ask an admin.
+              Your role has no tools enabled — ask an admin.
             </p>
           )}
         </div>

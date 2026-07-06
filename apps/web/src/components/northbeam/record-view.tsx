@@ -72,7 +72,7 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
   const detailRefine = (
     <AiAffordance
       revealOnHover
-      label={detailArtifact ? 'Refine this layout with AI' : 'Design this page with AI'}
+      label={detailArtifact ? 'Refine this layout' : 'Design this page'}
       onClick={() =>
         composer.open({
           objectKey,

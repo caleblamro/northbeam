@@ -237,7 +237,7 @@ export function ReportView({ view, objectKey, objectLabel, fields }: ViewRendere
       titleAction={
         <AiAffordance
           size="sm"
-          label="Ask AI about this report"
+          label="Ask about this report"
           onClick={() => composer.open({ objectKey })}
         />
       }

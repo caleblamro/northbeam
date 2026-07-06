@@ -92,7 +92,7 @@ const SETUP_NAV: SetupNavGroup[] = [
       },
       {
         href: '/setup/agents',
-        label: 'AI agents',
+        label: 'Agents',
         icon: Sparkles,
         permission: 'ai.agents.manage',
       },

@@ -1,12 +1,13 @@
 'use client';
 
-// Setup → Roles & permissions. Directus-style two-pane editor: role rail +
-// per-object CRUD grid. The whole surface is gated on 'org.roles.manage' (the
-// nav hides it otherwise; the API enforces it regardless).
+// Setup → Roles & permissions — the P2×P3 surface: persona cards (members +
+// capability meters + manage menu) over the access matrix (roles as columns,
+// every permission — workspace, object CRUD, AI tools — as rows, instant
+// saves). Gated on 'org.roles.manage' (the nav hides it otherwise; the API
+// enforces it regardless).
 
-import { AiToolPolicyMatrix } from '@/components/northbeam/ai-tool-policy';
 import { EmptyState } from '@/components/northbeam/empty-state';
-import { RolesManager } from '@/components/northbeam/roles-manager';
+import { RolesAccess } from '@/components/northbeam/roles-access';
 import { useCan } from '@/lib/can';
 import { ShieldHalf } from 'lucide-react';
 
@@ -21,10 +22,5 @@ export default function RolesSetupPage() {
       />
     );
   }
-  return (
-    <div className="flex flex-col gap-5">
-      <RolesManager />
-      <AiToolPolicyMatrix />
-    </div>
-  );
+  return <RolesAccess />;
 }

@@ -41,7 +41,9 @@ export const LAUNCHER_TILES: NavSection[] = [
   {
     label: 'Insights',
     items: [
-      { label: 'AI', href: '/ai', icon: 'sparkle', accent: true },
+      // "Build", never "AI", by explicit product decision — and the tile
+      // carries NO accent: it must look exactly like every other tile.
+      { label: 'Build', href: '/ai', icon: 'hammer' },
       { label: 'Pipeline', href: '/pipeline', icon: 'funnel' },
       // Reports + Dashboards consolidated into Views — they're all saved
       // views; /reports and /dashboards redirect there.
@@ -87,7 +89,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   },
   '/pipeline': { title: 'Pipeline', subtitle: 'Your deal funnel, stage by stage.' },
   '/ai': {
-    title: 'AI',
+    title: 'Build',
     subtitle: 'Chat with your workspace — research your data and compose live dashboards.',
   },
   '/reports': {
@@ -105,7 +107,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   },
   '/migrate': {
     title: 'Migrate from Salesforce',
-    subtitle: "One-click import — Northbeam's AI maps your objects and fields.",
+    subtitle: 'One-click import — Northbeam maps your objects and fields automatically.',
   },
   '/settings': { title: 'Setup', subtitle: 'Manage your workspace, team, and billing.' },
   '/setup': { title: 'Setup', subtitle: 'Manage your workspace, team, and billing.' },
@@ -130,7 +132,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   },
   '/setup/agents': {
     title: 'Setup',
-    subtitle: 'AI agent presets — prompts, models, tools, and who can use them.',
+    subtitle: 'Agent presets — prompts, models, tools, and who can use them.',
   },
   '/automations': {
     title: 'Automations',

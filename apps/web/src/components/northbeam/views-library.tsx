@@ -213,7 +213,7 @@ export function ViewsLibrary() {
         <EmptyState
           icon={LayoutDashboard}
           title="No views yet"
-          body="Save a list, build a report, or ask the AI for a dashboard — everything lands here."
+          body="Save a list, build a report, or ask Build for a dashboard — everything lands here."
         />
       </SectionCard>
     );

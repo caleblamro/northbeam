@@ -41,7 +41,7 @@ export default function AuditSetupPage() {
         <EmptyState
           icon={FileClock}
           title="Nothing recorded yet"
-          body="Audit events show up here the moment someone changes a record, edits a view, or runs AI generation."
+          body="Audit events show up here the moment someone changes a record, edits a view, or composes with Build."
           size="sm"
         />
       ) : (

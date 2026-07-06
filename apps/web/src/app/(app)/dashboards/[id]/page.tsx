@@ -46,7 +46,7 @@ export default function WorkspaceDashboardPage() {
   const refine = (
     <AiAffordance
       revealOnHover
-      label="Refine with AI"
+      label="Refine in Build"
       onClick={() => composer.open({ prompt: cfg.prompt, artifact: artifact ?? undefined })}
     />
   );
@@ -60,7 +60,7 @@ export default function WorkspaceDashboardPage() {
           <EmptyState
             icon={LayoutDashboard}
             title="No content yet"
-            body="This dashboard has no components. Refine it with AI to fill it in."
+            body="This dashboard has no components. Refine it in Build to fill it in."
             size="sm"
           />
         </SectionCard>

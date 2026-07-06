@@ -13,14 +13,14 @@ export type CmdItem = {
   href?: string;
 };
 
-export const CMD_GROUP_ORDER = ['AI', 'Quick actions', 'Go to', 'Records'] as const;
+export const CMD_GROUP_ORDER = ['Build', 'Quick actions', 'Go to', 'Records'] as const;
 
 export const CMD_ITEMS: CmdItem[] = [
   {
     id: 'ai-generate',
-    group: 'AI',
-    icon: 'sparkle',
-    label: 'Compose with AI',
+    group: 'Build',
+    icon: 'hammer',
+    label: 'Compose with Build',
     sub: 'Chat a dashboard into the current page against your live data',
   },
   {
