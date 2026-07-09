@@ -244,6 +244,7 @@ export {
 export { pgTypeFor, toDb, fromDb } from './dynamic/pgtypes.js';
 export {
   bulkInsertRecords,
+  resolveReferenceAnyBySfid,
   resolveReferencesBySfid,
   type ImportRow,
 } from './dynamic/bulk.js';

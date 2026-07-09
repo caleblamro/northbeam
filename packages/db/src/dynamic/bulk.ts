@@ -136,3 +136,41 @@ export async function resolveReferencesBySfid(
   }
   return updated;
 }
+
+/** resolveReferencesBySfid for polymorphic `reference_any` columns: the stored
+ *  value is the composite text form `"<objectKey>:<uuid>"` (see pgtypes.ts).
+ *  A Salesforce id exists in at most one target object, so calling this once
+ *  per candidate target with the same pairs is safe — non-matching pairs
+ *  simply don't join. */
+export async function resolveReferenceAnyBySfid(
+  db: DbExecutor,
+  opts: {
+    orgId: string;
+    object: ObjectRow;
+    field: FieldRow;
+    targetObject: ObjectRow;
+    pairs: Array<{ sfId: string; refSfId: string }>;
+  },
+): Promise<number> {
+  const { orgId, object, field, targetObject, pairs } = opts;
+  if (!pairs.length) return 0;
+  const tbl = sql.raw(qualified(orgId, object.tableName));
+  const tgt = sql.raw(qualified(orgId, targetObject.tableName));
+
+  const CHUNK = 5000;
+  let updated = 0;
+  for (let i = 0; i < pairs.length; i += CHUNK) {
+    const chunk = pairs.slice(i, i + CHUNK);
+    const tuples = chunk.map((p) => sql`(${p.sfId}, ${p.refSfId})`);
+    const res = await db.execute(
+      sql`update ${tbl}
+          set ${col(field.columnName)} = ${targetObject.key} || ':' || t.${col(SYS.id)}::text
+          from (values ${sql.join(tuples, sql`, `)}) as v(sfid, refsfid)
+          join ${tgt} t on t.${col(SYS.salesforceId)} = v.refsfid
+          where ${tbl}.${col(SYS.salesforceId)} = v.sfid
+          returning ${tbl}.${col(SYS.id)}`,
+    );
+    updated += rowsInResult(res);
+  }
+  return updated;
+}

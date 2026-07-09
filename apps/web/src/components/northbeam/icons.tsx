@@ -11,6 +11,7 @@ import {
   Bell,
   Bold,
   BookOpen,
+  Box,
   Building2,
   Calendar,
   Check,
@@ -96,6 +97,8 @@ const MAP: Record<string, LucideIcon> = {
   house: Home,
   'users-three': Users,
   buildings: Building2,
+  // objectDef.icon default for Salesforce-created objects (import.ts ensureDefs).
+  cube: Box,
   'currency-circle-dollar': CircleDollarSign,
   lightning: Zap,
   'chart-line-up': TrendingUp,

@@ -25,6 +25,7 @@ import {
   formatDurationMinutes,
 } from '@northbeam/db/field-types';
 import { Check, Link as LinkIcon, MapPin } from 'lucide-react';
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AddressInput, formatAddressOneLine } from './address-input';
 import { DatePicker, formatLongDate } from './date-picker';
@@ -414,8 +415,22 @@ export function FieldValue({
         </span>
       );
     }
-    case 'reference':
-      return <span>{referenceLabel ?? String(value)}</span>;
+    case 'reference': {
+      // The value IS the target record's id — always render it as navigation.
+      // stopPropagation so links inside clickable list rows don't double-fire.
+      const target = cfg.targetObject;
+      const label = referenceLabel ?? String(value);
+      if (!target) return <span>{label}</span>;
+      return (
+        <Link
+          href={`/${target}/${String(value)}`}
+          className="text-primary hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {label}
+        </Link>
+      );
+    }
     case 'date':
     case 'datetime':
       return <span className="tabular-nums">{formatFieldValueText(field, value)}</span>;

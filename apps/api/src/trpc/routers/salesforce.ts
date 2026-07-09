@@ -20,6 +20,24 @@ import { permissionProcedure, protectedProcedure, router } from '../trpc.js';
 
 const SAMPLE_SIZE = 200;
 
+// Standard SF business objects with no Northbeam standard equivalent — they
+// import as new objects. Without this allowlist, discover only surfaces
+// STANDARD_TARGETS + custom (__c) objects, silently hiding e.g. an org's
+// 40k Contracts and 200k Leads.
+const EXTRA_STANDARD_OBJECTS = new Set([
+  'Contract',
+  'Lead',
+  'Case',
+  'Campaign',
+  'CampaignMember',
+  'Order',
+  'Product2',
+  'Asset',
+  'WorkOrder',
+  'WorkOrderLineItem',
+  'ServiceAppointment',
+]);
+
 function asTrpcError(err: unknown): TRPCError {
   if (err instanceof NoConnectionError) {
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: 'salesforce_not_connected' });
@@ -56,7 +74,9 @@ export const salesforceRouter = router({
       const global = await client.globalDescribe();
       const candidates = global.sobjects.filter(
         (s) =>
-          (STANDARD_TARGETS[s.name] || s.name.endsWith('__c')) &&
+          (STANDARD_TARGETS[s.name] ||
+            EXTRA_STANDARD_OBJECTS.has(s.name) ||
+            s.name.endsWith('__c')) &&
           s.queryable &&
           s.createable &&
           !s.name.endsWith('__History') &&
@@ -86,7 +106,21 @@ export const salesforceRouter = router({
    *  Admin+ like execute — mapping hits the live Salesforce API and writes the
    *  run/mapping tables, so the whole migration surface shares one gate. */
   createRun: permissionProcedure('migration.run')
-    .input(z.object({ objects: z.array(z.string()).min(1).max(25) }))
+    .input(
+      z.object({
+        objects: z.array(z.string()).min(1).max(300),
+        // Targeted import: restrict the record phase to the subtree reachable
+        // from these roots. Config/DDL still imports for every object above.
+        scope: z
+          .object({
+            kind: z.literal('subtree'),
+            rootSfObject: z.string(),
+            rootSfIds: z.array(z.string()).min(1).max(200),
+            label: z.string().optional(),
+          })
+          .optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const orgId = ctx.auth.organizationId;
       const conn = await getConnection(ctx.db, orgId);
@@ -97,7 +131,12 @@ export const salesforceRouter = router({
 
         const [run] = await ctx.db
           .insert(schema.migrationRun)
-          .values({ organizationId: orgId, connectionId: conn.id, status: 'mapping' })
+          .values({
+            organizationId: orgId,
+            connectionId: conn.id,
+            status: 'mapping',
+            scope: input.scope ?? null,
+          })
           .returning();
         if (!run) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
 

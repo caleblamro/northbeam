@@ -31,7 +31,9 @@ import { type ObjectResolution, buildResolution } from './report-mapper.js';
 // Working-slice caps, same philosophy as REPORT_IMPORT_CAP: each Metadata
 // fetch is one (large) Tooling round trip, so these bound the phase.
 export const FLOW_FETCH_CAP = 100;
-export const FLOW_TRANSLATE_CAP = 25;
+// One Tooling API metadata fetch per flow — 200 comfortably covers a real
+// org's active flow inventory (OnQ: 90) without risking a runaway.
+export const FLOW_TRANSLATE_CAP = 200;
 export const WORKFLOW_RULE_CAP = 50;
 export const APEX_TRIGGER_CAP = 100;
 const MAX_SKIP_NOTES = 25;

@@ -780,6 +780,9 @@ export const migrationRun = pgTable(
         viewsSkipped?: number;
         reportsError?: string;
         skippedViews?: Array<{ label: string; reason: string }>;
+        // Targeted (scoped) runs: crawl telemetry.
+        crawlRounds?: number;
+        crawlIds?: number;
         // Automation import phase (import-flows.ts) — same best-effort
         // contract: its own error slot, never fails the run.
         flowsFound?: number;
@@ -795,6 +798,15 @@ export const migrationRun = pgTable(
       }>()
       .notNull()
       .default({}),
+    // Targeted import: restrict the record phase to the relationship subtree
+    // reachable from these root records (config/DDL still applies to every
+    // mapped object). Null = unscoped run (MAX_RECORDS_PER_OBJECT sample).
+    scope: jsonb('scope').$type<{
+      kind: 'subtree';
+      rootSfObject: string;
+      rootSfIds: string[];
+      label?: string;
+    } | null>(),
     startedAt: timestamp('started_at'),
     completedAt: timestamp('completed_at'),
     createdAt: timestamp('created_at').notNull().defaultNow(),

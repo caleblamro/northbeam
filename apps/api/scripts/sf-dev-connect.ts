@@ -8,7 +8,7 @@
 // (default: testOrg). The CLI token is short-lived — re-run when it expires.
 
 import { execSync } from 'node:child_process';
-import { createDb, upsertConnection } from '@northbeam/db';
+import { createDb, upsertConnection, withOrgContext } from '@northbeam/db';
 import { encryptSecret } from '../src/lib/crypto.js';
 
 const [orgId, alias = 'testOrg'] = process.argv.slice(2);
@@ -43,12 +43,16 @@ if (accessToken.startsWith('[REDACTED')) {
 }
 
 const db = createDb();
-await upsertConnection(db, {
-  orgId,
-  instanceUrl,
-  accessTokenEnc: encryptSecret(accessToken),
-  refreshTokenEnc: null,
-  connectedBy: null,
-});
+// RLS on salesforce_connection checks the app.org_id GUC — same as the API's
+// protectedProcedure; a bare insert from a script is rejected (42501).
+await withOrgContext(db, orgId, (tx) =>
+  upsertConnection(tx, {
+    orgId,
+    instanceUrl,
+    accessTokenEnc: encryptSecret(accessToken),
+    refreshTokenEnc: null,
+    connectedBy: null,
+  }),
+);
 console.log(`✓ connected org ${orgId} → ${instanceUrl} (via sf CLI alias '${alias}')`);
 process.exit(0);

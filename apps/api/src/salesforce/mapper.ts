@@ -233,7 +233,10 @@ export function mapSObject(
       } else {
         // Polymorphic SF lookup (WhoId/WhatId) → native reference_any. Constrain
         // to the targets in this import; empty targetObjects = any object. It's
-        // 'mapped' as long as at least one referenced object imports.
+        // 'mapped' as long as at least one referenced object imports. (This
+        // supersedes the per-target column-split approach from the direct-
+        // integration branch — the crawler consumes config.targetObjects for
+        // its traversal edges instead.)
         emitType = 'reference_any';
         config.targetObjects = f.referenceTo
           .filter((t) => t !== 'User')
@@ -282,6 +285,7 @@ export function mapSObject(
       reason,
       populatedPct: pct,
     });
+
   }
 
   // Formula transpile pass — runs after every field has its final key so refs

@@ -20,6 +20,7 @@ import {
   fieldColumnName,
   getObjectByKey,
   pgTypeFor,
+  resolveReferenceAnyBySfid,
   resolveReferencesBySfid,
   schema,
   withOrgContext,
@@ -34,15 +35,25 @@ import type { MappedObject, ProposedField } from './mapper.js';
 
 const BATCH = 500;
 
-// Deliberate product cap, not a placeholder: a migration imports at most this
-// many records per object — it's a working slice of the org, not a full sync.
+// Deliberate product cap, not a placeholder: an UNSCOPED migration imports at
+// most this many records per object — it's a working slice of the org, not a
+// full sync. Scoped (subtree) runs use SCOPED_MAX_RECORDS_PER_OBJECT instead.
 export const MAX_RECORDS_PER_OBJECT = 100;
+
+// Scoped runs pull the full relationship subtree of the chosen roots; the cap
+// is a runaway guard (a pathological hub record), not a sampling device.
+export const SCOPED_MAX_RECORDS_PER_OBJECT = 20000;
+const CRAWL_MAX_ROUNDS = 6;
+// SOQL id-list chunk: 200 ids ≈ 4.4KB of WHERE clause, well under SOQL limits.
+const ID_CHUNK = 200;
 
 type Plan = {
   mappingId: string;
   obj: MappedObject; // meta minus fields
   fields: ProposedField[]; // post-review: status reflects user edits
 };
+
+type RunScope = NonNullable<typeof schema.migrationRun.$inferSelect.scope>;
 
 type Stats = NonNullable<typeof schema.migrationRun.$inferSelect.stats>;
 
@@ -83,6 +94,13 @@ export async function executeRun(
     );
 
     const plans = await run((tx) => loadPlans(tx, orgId, runId));
+    const [runRow] = await run((tx) =>
+      tx
+        .select({ scope: schema.migrationRun.scope })
+        .from(schema.migrationRun)
+        .where(eq(schema.migrationRun.id, runId)),
+    );
+    const scope = runRow?.scope ?? null;
     stats.objects = plans.length;
     stats.fields = plans.reduce(
       (n, p) => n + p.fields.filter((f) => f.status === 'mapped').length,
@@ -100,6 +118,16 @@ export async function executeRun(
     // 2 — owner map (SF user id → workspace user id, by email)
     const ownerMap = await run((tx) => buildOwnerMap(tx, client, orgId));
 
+    // 2b — scoped runs: crawl the relationship subtree from the root records.
+    // Objects that collect zero ids still got their defs/DDL in step 1 —
+    // "config imports for everything, records only for the subtree".
+    let scopedIds: Map<string, Set<string>> | null = null;
+    if (scope?.kind === 'subtree') {
+      stats.currentObject = `Crawling ${scope.label ?? scope.rootSfObject} subtree`;
+      await writeStats();
+      scopedIds = await crawlSubtree(client, plans, scope, stats, writeStats);
+    }
+
     // 3 — stream + insert per object; collect reference pairs for the final pass
     const refTasks: Array<{
       objectKey: string;
@@ -107,6 +135,15 @@ export async function executeRun(
       targetKey: string;
       pairs: Array<{ sfId: string; refSfId: string }>;
     }> = [];
+    // Polymorphic (reference_any) pairs resolve against EVERY candidate target —
+    // a Salesforce id matches at most one target table, so extras no-op.
+    const refAnyTasks: Array<{
+      objectKey: string;
+      fieldKey: string;
+      targetKeys: string[];
+      pairs: Array<{ sfId: string; refSfId: string }>;
+    }> = [];
+    const allRunKeys = plans.map((p) => p.obj.targetKey);
 
     for (const plan of plans) {
       stats.currentObject = plan.obj.label;
@@ -118,11 +155,30 @@ export async function executeRun(
 
       const active = plan.fields.filter((f) => f.status === 'mapped' && fieldByKey.has(f.key));
       const refActive = active.filter((f) => f.type === 'reference' && f.config.targetObject);
-      const dataActive = active.filter((f) => f.type !== 'reference');
+      // reference_any values arrive as raw SF ids — they can't go through the
+      // data path (toDb would null anything that isn't "objectKey:uuid"); they
+      // resolve in the final pass like plain references.
+      const refAnyActive = active.filter((f) => f.type === 'reference_any');
+      const dataActive = active.filter(
+        (f) => f.type !== 'reference' && f.type !== 'reference_any',
+      );
       const dataFieldRows = dataActive.map((f) => fieldByKey.get(f.key) as FieldRow);
+
+      // Mirror the resolved record name into the object's nameExpression field
+      // when the mapping didn't populate it (e.g. Account.Name is a compound
+      // parent on person-account orgs → skipped, yet the seeded account object
+      // displays via the 'name' field — otherwise every account is 'Untitled').
+      const nameExpr = loaded.object.nameExpression;
+      const nameMirror =
+        nameExpr && !nameExpr.includes('|') ? fieldByKey.get(nameExpr.trim()) : undefined;
+      if (nameMirror && !dataFieldRows.some((f) => f.key === nameMirror.key)) {
+        dataFieldRows.push(nameMirror);
+      }
 
       const refPairs = new Map<string, Array<{ sfId: string; refSfId: string }>>();
       for (const rf of refActive) refPairs.set(rf.key, []);
+      const refAnyPairs = new Map<string, Array<{ sfId: string; refSfId: string }>>();
+      for (const rf of refAnyActive) refAnyPairs.set(rf.key, []);
 
       const select = [
         ...new Set(
@@ -136,9 +192,17 @@ export async function executeRun(
           ].filter((s): s is string => Boolean(s)),
         ),
       ];
-      // LIMIT enforces the per-object cap at the source — queryAll never
-      // streams more than MAX_RECORDS_PER_OBJECT rows for this object.
-      const soql = `SELECT ${select.join(', ')} FROM ${plan.obj.sfObject} LIMIT ${MAX_RECORDS_PER_OBJECT}`;
+      // Scoped runs fetch exactly the crawled ids (chunked WHERE Id IN …);
+      // unscoped runs keep the LIMIT sample, enforced at the source so
+      // queryAll never streams more than MAX_RECORDS_PER_OBJECT rows.
+      const objectIds = scopedIds ? [...(scopedIds.get(plan.obj.sfObject) ?? [])] : null;
+      if (objectIds && objectIds.length === 0) continue; // config-only object
+      const soqls = objectIds
+        ? chunks(objectIds, ID_CHUNK).map(
+            (chunk) =>
+              `SELECT ${select.join(', ')} FROM ${plan.obj.sfObject} WHERE Id IN (${quoteIds(chunk)})`,
+          )
+        : [`SELECT ${select.join(', ')} FROM ${plan.obj.sfObject} LIMIT ${MAX_RECORDS_PER_OBJECT}`];
       const rtMap = rtMaps.get(plan.obj.targetKey) ?? new Map<string, string>();
 
       let batch: ImportRow[] = [];
@@ -158,7 +222,7 @@ export async function executeRun(
         await writeStats();
       };
 
-      for await (const raw of client.queryAll(soql)) {
+      for await (const raw of streamQueries(client, soqls)) {
         const sfId = String(raw.Id);
         const data: Record<string, unknown> = {};
         for (const pf of dataActive) data[pf.key] = convert(pf, raw[pf.sfField]);
@@ -168,12 +232,22 @@ export async function executeRun(
             refPairs.get(pf.key)?.push({ sfId, refSfId: v });
           }
         }
+        for (const pf of refAnyActive) {
+          const v = raw[pf.sfField];
+          if (typeof v === 'string' && v) {
+            refAnyPairs.get(pf.key)?.push({ sfId, refSfId: v });
+          }
+        }
         const nameRaw = plan.obj.nameFieldSf ? raw[plan.obj.nameFieldSf] : null;
+        const resolvedName = nameRaw
+          ? String(nameRaw)
+          : displayName(loaded.fields, data, loaded.object.nameExpression);
+        if (nameMirror && (data[nameMirror.key] == null || data[nameMirror.key] === '')) {
+          data[nameMirror.key] = resolvedName;
+        }
         batch.push({
           salesforceId: sfId,
-          name: nameRaw
-            ? String(nameRaw)
-            : displayName(loaded.fields, data, loaded.object.nameExpression),
+          name: resolvedName,
           ownerId:
             plan.obj.hasOwner && typeof raw.OwnerId === 'string'
               ? (ownerMap.get(raw.OwnerId) ?? null)
@@ -199,11 +273,42 @@ export async function executeRun(
           pairs: refPairs.get(rf.key) ?? [],
         });
       }
+      for (const rf of refAnyActive) {
+        const configured = (rf.config.targetObjects ?? []) as string[];
+        refAnyTasks.push({
+          objectKey: plan.obj.targetKey,
+          fieldKey: rf.key,
+          // Empty targetObjects = "any object" — try every object in the run.
+          targetKeys: (configured.length ? configured : allRunKeys).filter((k) =>
+            allRunKeys.includes(k),
+          ),
+          pairs: refAnyPairs.get(rf.key) ?? [],
+        });
+      }
     }
 
     // 4 — resolve references (after ALL objects are loaded, so forward refs work)
     stats.currentObject = 'Resolving references';
     await writeStats();
+    for (const task of refAnyTasks) {
+      if (!task.pairs.length) continue;
+      for (const targetKey of task.targetKeys) {
+        const result = await run(async (tx) => {
+          const child = await getObjectByKey(tx, orgId, task.objectKey);
+          const target = await getObjectByKey(tx, orgId, targetKey);
+          const field = child?.fields.find((f) => f.key === task.fieldKey);
+          if (!child || !target || !field) return 0;
+          return resolveReferenceAnyBySfid(tx, {
+            orgId,
+            object: child.object,
+            field,
+            targetObject: target.object,
+            pairs: task.pairs,
+          });
+        });
+        stats.refsResolved = (stats.refsResolved ?? 0) + result;
+      }
+    }
     for (const task of refTasks) {
       const result = await run(async (tx) => {
         const child = await getObjectByKey(tx, orgId, task.objectKey);
@@ -290,6 +395,163 @@ async function loadPlans(db: DbExecutor, orgId: string, runId: string): Promise<
   return plans;
 }
 
+/** BFS the relationship graph from the scope's root records, using only the
+ *  reference edges that exist in this run's mapping.
+ *
+ *  Direction matters: only DESCENDANTS expand (rows whose lookup points at a
+ *  frontier id keep crawling downward). Parents — the lookup values OF
+ *  collected rows — are fetched so references resolve to real records, but
+ *  they are DEAD ENDS: expanding from a parent would turn every shared hub
+ *  (a market, a management company, a vendor account) into a new root and
+ *  sweep in unrelated subtrees — "import 50 accounts" must not become
+ *  "import the org". Bounded by CRAWL_MAX_ROUNDS + SCOPED_MAX_RECORDS_PER_OBJECT. */
+async function crawlSubtree(
+  client: SalesforceClient,
+  plans: Plan[],
+  scope: RunScope,
+  stats: Stats,
+  writeStats: () => Promise<void>,
+): Promise<Map<string, Set<string>>> {
+  const keyToSf = new Map(plans.map((p) => [p.obj.targetKey, p.obj.sfObject]));
+  type Edge = { childSf: string; refField: string; targetSf: string };
+  const edges: Edge[] = [];
+  const seenEdge = new Set<string>();
+  for (const p of plans) {
+    for (const f of p.fields) {
+      // Any reference with a known target is a traversal edge — including
+      // review/skip fields (a lookup the user chose not to import as a COLUMN
+      // still relates records; ignoring it would silently truncate subtrees).
+      // Polymorphic reference_any fields contribute one edge per candidate
+      // target in the run (SOQL `WHERE WhoId IN (…)` is valid per target).
+      const targetKeys =
+        f.type === 'reference'
+          ? [String(f.config.targetObject ?? '')]
+          : f.type === 'reference_any'
+            ? ((f.config.targetObjects ?? []) as string[])
+            : [];
+      for (const targetKey of targetKeys) {
+        const targetSf = keyToSf.get(targetKey);
+        if (!targetSf) continue;
+        const k = `${p.obj.sfObject}|${f.sfField}|${targetSf}`;
+        if (seenEdge.has(k)) continue; // reference_any targets share one sfField
+        seenEdge.add(k);
+        edges.push({ childSf: p.obj.sfObject, refField: f.sfField, targetSf });
+      }
+    }
+  }
+  // Parent pulls batch all ref fields of one object into a single SELECT.
+  const parentEdges = new Map<string, Edge[]>();
+  for (const e of edges) {
+    parentEdges.set(e.childSf, [...(parentEdges.get(e.childSf) ?? []), e]);
+  }
+
+  // SF id keyPrefix → sObject name, for attributing polymorphic lookup VALUES
+  // to their actual object. One API call; scoped to this run's objects.
+  const prefixToSf = new Map<string, string>();
+  try {
+    const global = await client.globalDescribe();
+    const inRun = new Set(plans.map((p) => p.obj.sfObject));
+    for (const s of global.sobjects) {
+      if (s.keyPrefix && inRun.has(s.name)) prefixToSf.set(s.keyPrefix, s.name);
+    }
+  } catch {
+    // Prefix attribution is an optimization — fall back to per-edge targets.
+  }
+
+  const collected = new Map<string, Set<string>>(plans.map((p) => [p.obj.sfObject, new Set()]));
+  const rootSet = collected.get(scope.rootSfObject);
+  if (!rootSet) return collected; // root object isn't part of this run
+  let frontier = new Map<string, Set<string>>([[scope.rootSfObject, new Set()]]);
+  for (const id of scope.rootSfIds) {
+    rootSet.add(id);
+    frontier.get(scope.rootSfObject)?.add(id);
+  }
+
+  for (let round = 0; round < CRAWL_MAX_ROUNDS; round++) {
+    const next = new Map<string, Set<string>>();
+    const collect = (sfObject: string, id: string, expand: boolean) => {
+      const seen = collected.get(sfObject);
+      if (!seen || seen.has(id) || seen.size >= SCOPED_MAX_RECORDS_PER_OBJECT) return;
+      seen.add(id);
+      if (!expand) return; // parent: fetch it, never crawl from it
+      const n = next.get(sfObject) ?? new Set<string>();
+      n.add(id);
+      next.set(sfObject, n);
+    };
+
+    // Descendants: SELECT Id FROM child WHERE <lookup> IN (frontier of its
+    // target) — these keep expanding.
+    for (const e of edges) {
+      const ids = frontier.get(e.targetSf);
+      if (!ids?.size) continue;
+      for (const chunk of chunks([...ids], ID_CHUNK)) {
+        const soql = `SELECT Id FROM ${e.childSf} WHERE ${e.refField} IN (${quoteIds(chunk)})`;
+        try {
+          for await (const r of client.queryAll<{ Id: string }>(soql)) {
+            collect(e.childSf, r.Id, true);
+          }
+        } catch {
+          // Non-filterable/odd field — skip the edge rather than fail the run.
+        }
+      }
+    }
+
+    // Parents: SELECT <all lookups> FROM child WHERE Id IN (frontier of
+    // child) — fetched as dead ends so reference columns resolve. Polymorphic
+    // fields produce one edge per candidate target sharing an sfField; the
+    // keyPrefix map attributes each VALUE to its actual object so a WhoId
+    // contact id doesn't also get queued under lead.
+    for (const [childSf, es] of parentEdges) {
+      const ids = frontier.get(childSf);
+      if (!ids?.size) continue;
+      const fields = [...new Set(es.map((e) => e.refField))];
+      for (const chunk of chunks([...ids], ID_CHUNK)) {
+        const soql = `SELECT ${fields.join(', ')} FROM ${childSf} WHERE Id IN (${quoteIds(chunk)})`;
+        try {
+          for await (const r of client.queryAll<Record<string, unknown>>(soql)) {
+            for (const e of es) {
+              const v = r[e.refField];
+              if (typeof v !== 'string' || !v) continue;
+              const byPrefix = prefixToSf.get(v.slice(0, 3));
+              collect(byPrefix ?? e.targetSf, v, false);
+            }
+          }
+        } catch {
+          // Best-effort, same as above.
+        }
+      }
+    }
+
+    stats.crawlRounds = round + 1;
+    stats.crawlIds = [...collected.values()].reduce((n, s) => n + s.size, 0);
+    await writeStats();
+    if ([...next.values()].every((s) => s.size === 0)) break;
+    frontier = next;
+  }
+  return collected;
+}
+
+function chunks<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/** SF ids are alphanumeric; strip anything else so ids can't break out of the
+ *  quoted SOQL literal. */
+function quoteIds(ids: string[]): string {
+  return ids.map((id) => `'${id.replace(/[^a-zA-Z0-9]/g, '')}'`).join(',');
+}
+
+async function* streamQueries(
+  client: SalesforceClient,
+  soqls: string[],
+): AsyncGenerator<Record<string, unknown>> {
+  for (const soql of soqls) {
+    for await (const raw of client.queryAll<Record<string, unknown>>(soql)) yield raw;
+  }
+}
+
 /** Materialize object_def / field_def / record_type rows + the physical table.
  *  Returns the SF-record-type-id → record_type.id map for this object. */
 async function ensureDefs(db: DbExecutor, orgId: string, plan: Plan): Promise<Map<string, string>> {
@@ -297,6 +559,13 @@ async function ensureDefs(db: DbExecutor, orgId: string, plan: Plan): Promise<Ma
   let existing = await getObjectByKey(db, orgId, obj.targetKey);
 
   if (!existing) {
+    // Display name: point nameExpression at the imported field that carries
+    // the SF name (e.g. Contract → contract_number). Without this, rows of
+    // created objects render as 'Untitled' whenever the fallback keys
+    // (name/subject/title) don't exist.
+    const nameKey =
+      plan.fields.find((pf) => pf.status === 'mapped' && pf.sfField === obj.nameFieldSf)?.key ??
+      null;
     await db.insert(schema.objectDef).values({
       organizationId: orgId,
       key: obj.targetKey,
@@ -306,6 +575,7 @@ async function ensureDefs(db: DbExecutor, orgId: string, plan: Plan): Promise<Ma
       icon: 'cube',
       color: '#635bff', // --brand (apps/web tokens.css)
       layout: obj.layout,
+      nameExpression: nameKey,
       source: 'salesforce',
     });
   }

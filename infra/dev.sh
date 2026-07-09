@@ -63,7 +63,7 @@ pnpm --filter @northbeam/db push
 echo "→ provisioning app role + RLS enforcement..."
 pnpm --filter @northbeam/db setup:rls
 
-# 4. start long-running apps via turbo (web + api)
-echo "→ starting apps (web → :3000 · api → :8000)..."
+# 4. start long-running apps via turbo (web + api + job worker)
+echo "→ starting apps (web → :3000 · api → :8000 · worker)..."
 echo
-exec pnpm exec turbo run dev
+exec pnpm exec turbo run dev dev:worker
