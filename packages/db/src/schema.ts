@@ -272,6 +272,10 @@ export const objectDef = pgTable(
     formatRules: jsonb('format_rules').$type<FormatRule[]>().notNull().default([]),
     // System objects are the standard four — present in every workspace, not deletable.
     isSystem: boolean('is_system').notNull().default(false),
+    /** Singleton objects hold exactly one record (a config/settings record, à la
+     *  Directus singletons). The UI opens straight to that record's edit form;
+     *  it's get-or-created on first access. No list view, no record types. */
+    isSingleton: boolean('is_singleton').notNull().default(false),
     source: text('source').$type<DefSource>().notNull().default('custom'),
     /** Soft-archive: hidden from pickers and blocked for writes, reads stay
      *  live. NULL = active. Hard delete exists only for custom objects. */

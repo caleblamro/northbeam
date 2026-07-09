@@ -33,6 +33,7 @@ describe('FIELD_TYPES registry', () => {
       'picklist',
       'multipicklist',
       'reference',
+      'reference_any',
       'address',
       'formula',
       'rollup',

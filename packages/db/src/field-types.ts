@@ -67,6 +67,22 @@ export const FIELD_TYPES = [
     group: 'Relationship',
     storage: 'ref',
   },
+  {
+    // Polymorphic lookup — points at a record on ANY (or a chosen subset of)
+    // objects, à la Salesforce WhoId/WhatId. Stored as a single `text` column
+    // holding "objectKey:uuid" (self-describing — no companion type column),
+    // so a bare uuid is always resolvable back to its object.
+    id: 'reference_any',
+    label: 'Lookup (any object)',
+    icon: 'arrows-merge',
+    group: 'Relationship',
+    storage: 'ref',
+    // SF-import + model support is complete; hidden from the manual field
+    // picker until the polymorphic config + two-step record-input UI ships (a
+    // user shouldn't create a field they can't yet fill in). The importer
+    // inserts field_defs directly, so migration still produces these.
+    unavailable: true,
+  },
   // ── Structured composite ────────────────────────────────────────────────
   {
     id: 'address',
@@ -228,14 +244,42 @@ export type PicklistFieldConfig = BaseFieldConfig & {
   controllingField?: string;
 };
 
-/** reference (lookup) — `targetObject` is semantically required. */
+/** reference (single lookup) — `targetObject` required.
+ *  reference_any (polymorphic) — `targetObjects` optional; empty/omitted = any
+ *  object. Both share this config; only the relevant key is read per type. */
 export type ReferenceFieldConfig = BaseFieldConfig & {
-  /** object_def.key the lookup points at. */
+  /** object_def.key the lookup points at (single-target `reference`). */
   targetObject?: string;
+  /** allowed object_def.keys for a polymorphic `reference_any`. Empty/omitted
+   *  means any object in the workspace is a valid target. */
+  targetObjects?: string[];
   /** reverse name, e.g. account → "contacts" */
   relationshipName?: string;
   onDelete?: 'setNull' | 'cascade' | 'restrict';
 };
+
+/** A polymorphic-reference value: which object the record lives on + its id.
+ *  Serialized to the `text` column as "object:id". */
+export type PolyRef = { object: string; id: string };
+
+/** Serialize a PolyRef (or accept an already-serialized string) to "object:id". */
+export function formatPolyRef(v: PolyRef | string): string {
+  if (typeof v === 'string') return v;
+  return `${v.object}:${v.id}`;
+}
+
+/** Parse a stored "object:id" polymorphic reference. Returns null when malformed
+ *  (missing object or id) so callers can skip it. */
+export function parsePolyRef(v: unknown): PolyRef | null {
+  if (v && typeof v === 'object' && 'object' in v && 'id' in v) {
+    const o = v as PolyRef;
+    return o.object && o.id ? o : null;
+  }
+  if (typeof v !== 'string') return null;
+  const i = v.indexOf(':');
+  if (i <= 0 || i === v.length - 1) return null;
+  return { object: v.slice(0, i), id: v.slice(i + 1) };
+}
 
 /** formula — `formula` and `returnType` are semantically required. */
 export type FormulaFieldConfig = BaseFieldConfig & {
@@ -280,6 +324,7 @@ export type FieldConfigForType = {
   picklist: PicklistFieldConfig;
   multipicklist: PicklistFieldConfig;
   reference: ReferenceFieldConfig;
+  reference_any: ReferenceFieldConfig;
   address: AddressFieldConfig;
   formula: FormulaFieldConfig;
   rollup: RollupFieldConfig;
@@ -488,6 +533,9 @@ function baseSchemaFor(field: FieldDefForSchema): z.ZodType<unknown> {
     }
     case 'reference':
       return z.string().uuid('Pick a record from the list.');
+    case 'reference_any':
+      // "objectKey:uuid" — validated loosely; the input widget guarantees shape.
+      return z.string().min(3, 'Pick a record from the list.');
     case 'address':
       return AddressValueSchema;
     case 'formula':

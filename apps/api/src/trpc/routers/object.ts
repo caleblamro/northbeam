@@ -98,6 +98,8 @@ export const objectRouter = router({
         color: z.string().min(1).max(20).optional(),
         description: z.string().max(500).optional(),
         defaultVisibility: z.enum(['public', 'private']).optional(),
+        /** Singleton = one config/settings record, no list view. */
+        isSingleton: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -124,6 +126,7 @@ export const objectRouter = router({
             listColumns: [],
           },
           isSystem: false,
+          isSingleton: input.isSingleton ?? false,
           source: 'custom',
         })
         .returning();
@@ -145,17 +148,20 @@ export const objectRouter = router({
       const created = await getObjectByKey(ctx.db, orgId, key);
       if (!created) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
       await createObjectTable(ctx.db, orgId, created.object, created.fields);
-      await ctx.db.insert(schema.view).values({
-        organizationId: orgId,
-        objectId: inserted.id,
-        key: 'all',
-        label: `All ${input.labelPlural}`,
-        type: 'list',
-        icon: 'list',
-        sharedWith: [{ kind: 'org' }],
-        ownerId: null,
-        isDefault: true,
-      });
+      // Singletons open straight to their one record — no list view to seed.
+      if (!inserted.isSingleton) {
+        await ctx.db.insert(schema.view).values({
+          organizationId: orgId,
+          objectId: inserted.id,
+          key: 'all',
+          label: `All ${input.labelPlural}`,
+          type: 'list',
+          icon: 'list',
+          sharedWith: [{ kind: 'org' }],
+          ownerId: null,
+          isDefault: true,
+        });
+      }
       await writeAuditEvent(ctx.db, {
         organizationId: orgId,
         userId: ctx.auth.userId,

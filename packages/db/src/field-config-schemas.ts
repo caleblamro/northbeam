@@ -84,6 +84,14 @@ const ReferenceConfigSchema = BaseConfigSchema.extend({
   onDelete: z.enum(['setNull', 'cascade', 'restrict']).optional(),
 });
 
+// Polymorphic lookup: no single target required. `targetObjects` optionally
+// constrains which objects are valid; empty/omitted = any object.
+const PolyReferenceConfigSchema = BaseConfigSchema.extend({
+  targetObjects: z.array(z.string().min(1)).optional(),
+  relationshipName: z.string().optional(),
+  onDelete: z.enum(['setNull', 'cascade', 'restrict']).optional(),
+});
+
 const FormulaConfigSchema = BaseConfigSchema.extend({
   formula: z
     .string()
@@ -154,6 +162,7 @@ export const FieldConfigSchemas = {
   picklist: PicklistConfigSchema,
   multipicklist: PicklistConfigSchema,
   reference: ReferenceConfigSchema,
+  reference_any: PolyReferenceConfigSchema,
   address: AddressConfigSchema,
   formula: FormulaConfigSchema,
   rollup: RollupConfigSchema,

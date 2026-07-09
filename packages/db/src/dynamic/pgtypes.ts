@@ -1,6 +1,13 @@
 // FieldType ⇄ Postgres mapping + value coercion for the native data model.
 
-import { type FieldConfig, type FieldType, parseDurationMinutes } from '../field-types.js';
+import {
+  type FieldConfig,
+  type FieldType,
+  type PolyRef,
+  formatPolyRef,
+  parseDurationMinutes,
+  parsePolyRef,
+} from '../field-types.js';
 
 /** Field types that are computed/non-writable (engine- or system-populated). */
 export const COMPUTED: ReadonlySet<FieldType> = new Set<FieldType>([
@@ -50,7 +57,8 @@ export function pgTypeFor(type: FieldType, _config: FieldConfig = {}): string {
     case 'reference':
       return 'uuid';
     default:
-      // text, textarea, email, phone, url, picklist, formula, rollup, ai
+      // text, textarea, email, phone, url, picklist, formula, rollup, ai,
+      // reference_any ("objectKey:uuid" string)
       return 'text';
   }
 }
@@ -78,6 +86,10 @@ export function toDb(type: FieldType, v: unknown): unknown {
       return Array.isArray(v) ? (v as unknown[]).map(String) : [String(v)];
     case 'reference':
       return String(v);
+    case 'reference_any':
+      // Normalize {object,id} or an already-serialized "object:id" to the
+      // stored text form. Returns null for anything malformed.
+      return parsePolyRef(v) ? formatPolyRef(parsePolyRef(v) as PolyRef) : null;
     case 'duration': {
       // Accepts canonical minutes (number) or "1h3m" / "90m" / "2:30" text.
       if (typeof v === 'number') return Number.isFinite(v) ? Math.round(v) : null;

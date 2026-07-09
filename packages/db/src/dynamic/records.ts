@@ -5,7 +5,7 @@
 
 import { type SQL, and, eq, sql } from 'drizzle-orm';
 import type { DbExecutor } from '../client.js';
-import type { FieldConfig } from '../field-types.js';
+import { type FieldConfig, parsePolyRef } from '../field-types.js';
 import {
   type FieldRow,
   type ObjectRow,
@@ -331,6 +331,27 @@ export async function createRecord(
   return rowToRecord(fields, row);
 }
 
+/** The one record for a singleton object — the first row if it exists, else a
+ *  freshly-created empty one. The sole creation path for singletons, so the
+ *  "exactly one row" invariant is app-enforced here (matching the rest of the
+ *  dynamic layer, where constraints live in code, not DDL). */
+export async function getOrCreateSingletonRecord(
+  db: DbExecutor,
+  opts: { orgId: string; object: ObjectRow; fields: FieldRow[]; ownerId?: string | null },
+): Promise<RecordRow> {
+  const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
+  const res = await db.execute(sql`select * from ${tbl} limit 1`);
+  const row = asRows(res)[0];
+  if (row) return rowToRecord(opts.fields, row);
+  return createRecord(db, {
+    orgId: opts.orgId,
+    object: opts.object,
+    fields: opts.fields,
+    data: {},
+    ownerId: opts.ownerId ?? null,
+  });
+}
+
 export async function updateRecord(
   db: DbExecutor,
   opts: {
@@ -408,23 +429,37 @@ export async function resolveRefLabels(
 ): Promise<Record<string, string>> {
   const labels: Record<string, string> = {};
   const refFields = fields.filter(
-    (f) => f.type === 'reference' && (f.config as FieldConfig | null)?.targetObject,
+    (f) =>
+      (f.type === 'reference' && (f.config as FieldConfig | null)?.targetObject) ||
+      f.type === 'reference_any',
   );
   if (!refFields.length) return labels;
 
-  // Bucket all referenced ids by target object key. Multiple ref fields can
-  // point at the same object — collapse them so we only query that object once.
+  // Bucket all referenced ids by target object key. Single-target lookups use
+  // the field's configured target; polymorphic (reference_any) values carry
+  // their own "object:id" so each is bucketed by its embedded object. Either
+  // way we query each target object exactly once.
   const idsByTarget = new Map<string, Set<string>>();
-  for (const rf of refFields) {
-    const target = (rf.config as FieldConfig).targetObject as string;
-    let bucket = idsByTarget.get(target);
-    if (!bucket) {
-      bucket = new Set<string>();
-      idsByTarget.set(target, bucket);
+  const bucketFor = (target: string): Set<string> => {
+    let b = idsByTarget.get(target);
+    if (!b) {
+      b = new Set<string>();
+      idsByTarget.set(target, b);
     }
-    for (const r of rows) {
-      const v = r.data[rf.key];
-      if (typeof v === 'string' && v.length) bucket.add(v);
+    return b;
+  };
+  for (const rf of refFields) {
+    if (rf.type === 'reference_any') {
+      for (const r of rows) {
+        const p = parsePolyRef(r.data[rf.key]);
+        if (p) bucketFor(p.object).add(p.id);
+      }
+    } else {
+      const target = (rf.config as FieldConfig).targetObject as string;
+      for (const r of rows) {
+        const v = r.data[rf.key];
+        if (typeof v === 'string' && v.length) bucketFor(target).add(v);
+      }
     }
   }
 

@@ -190,6 +190,9 @@ export function mapSObject(
     }
 
     const { type, confident } = pickType(f);
+    // Emitted type can differ from the raw pick (a polymorphic SF reference maps
+    // to our reference_any), so track it separately from the classification.
+    let emitType = type;
     const key = uniqueKey(sfToKey(f.name));
     const config: FieldConfig = {};
     let status: ProposedField['status'] = confident ? 'mapped' : 'review';
@@ -228,9 +231,25 @@ export function mapSObject(
           reason = `references '${target}', which is not in this import`;
         }
       } else {
-        status = 'review';
-        confidence = 20;
-        reason = `polymorphic lookup (${f.referenceTo.slice(0, 3).join('/')}…)`;
+        // Polymorphic SF lookup (WhoId/WhatId) → native reference_any. Constrain
+        // to the targets in this import; empty targetObjects = any object. It's
+        // 'mapped' as long as at least one referenced object imports.
+        emitType = 'reference_any';
+        config.targetObjects = f.referenceTo
+          .filter((t) => t !== 'User')
+          .map((t) => STANDARD_TARGETS[t] ?? sfToKey(t))
+          .filter((k, i, a) => a.indexOf(k) === i);
+        config.relationshipName = f.relationshipName ?? undefined;
+        const anyInSet = f.referenceTo.some(
+          (t) => t === d.name || Boolean(STANDARD_TARGETS[t]) || (opts.importSet?.has(t) ?? false),
+        );
+        if (anyInSet) {
+          confidence = 75;
+        } else {
+          status = 'review';
+          confidence = 30;
+          reason = `polymorphic lookup (${f.referenceTo.slice(0, 3).join('/')}…) — no targets in this import`;
+        }
       }
     } else if (type === 'currency' || type === 'percent' || type === 'number') {
       if (f.scale > 0) config.scale = f.scale;
@@ -251,11 +270,11 @@ export function mapSObject(
       ...base,
       key,
       columnName: fieldColumnName(key),
-      type,
+      type: emitType,
       pgType:
-        type === 'formula'
+        emitType === 'formula'
           ? pgTypeFor(config.returnType ?? 'text', config)
-          : pgTypeFor(type, config),
+          : pgTypeFor(emitType, config),
       config,
       required: !f.nillable && f.createable && type !== 'checkbox',
       status,

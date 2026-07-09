@@ -67,6 +67,7 @@ const TYPE_DESC: Record<FieldType, string> = {
   picklist: 'Pick one value from a list',
   multipicklist: 'Pick several values from a list',
   reference: 'A link to a record on another object',
+  reference_any: 'A link to a record on any object (polymorphic)',
   address: 'A structured street address',
   formula: 'Computed from other fields on save',
   rollup: 'Aggregates child records, like SUM of deals',
