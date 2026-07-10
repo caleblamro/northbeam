@@ -4,9 +4,9 @@ import { z } from 'zod';
 // Dev port layout:
 //   apps/web   3000   (Next.js)
 //   apps/api   8000
-const DEV_API_PORT = 8000;
+const DEV_API_PORT = 14301;
 const DEV_API_URL = `http://localhost:${DEV_API_PORT}`;
-const DEV_WEB_URL = 'http://localhost:3000';
+const DEV_WEB_URL = 'http://localhost:14300';
 
 const Schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -17,7 +17,7 @@ const Schema = z.object({
   DATABASE_ADMIN_URL: z.string().url().optional(),
   /** BullMQ backing store. The Salesforce import queue + any future async work
    *  push here. Local dev uses the redis service from infra/docker-compose. */
-  REDIS_URL: z.string().url().default('redis://localhost:6379'),
+  REDIS_URL: z.string().url().default('redis://localhost:14303'),
 
   // Better Auth — base URL the auth handler builds callback links against.
   // Defaults to the dev API URL so a fresh / partially-configured .env still

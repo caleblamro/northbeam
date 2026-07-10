@@ -1,6 +1,6 @@
 # apps/api — Claude conventions
 
-Hono server hosting Better Auth, tRPC, and Salesforce OAuth callbacks. Runs on `:8000`.
+Hono server hosting Better Auth, tRPC, and Salesforce OAuth callbacks. Runs on `:14301`.
 
 ## Where to put a new thing
 
@@ -29,7 +29,7 @@ Records live in per-org Postgres schemas (`org_<id>.t_<key>`), so most queries d
 ## Test the change
 
 - `pnpm --filter @northbeam/api typecheck` — must be clean.
-- `pnpm --filter @northbeam/api dev` — tsx watch on `:8000`. Requires Postgres and `BETTER_AUTH_SECRET` in `.env.local`.
+- `pnpm --filter @northbeam/api dev` — tsx watch on `:14301`. Requires Postgres and `BETTER_AUTH_SECRET` in `.env.local`.
 - Magic links print to the API console in dev unless `RESEND_API_KEY` is set.
 
 ## Common pitfalls

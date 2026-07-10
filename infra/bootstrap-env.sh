@@ -24,16 +24,16 @@ POSTGRES_DB=northbeam
 # push/migrate) and scripts/setup-app-role.ts use the owner role below.
 POSTGRES_APP_USER=northbeam_app
 POSTGRES_APP_PASSWORD=northbeam_app
-DATABASE_URL=postgresql://northbeam_app:northbeam_app@localhost:5432/northbeam
-DATABASE_ADMIN_URL=postgresql://northbeam:northbeam@localhost:5432/northbeam
+DATABASE_URL=postgresql://northbeam_app:northbeam_app@localhost:14302/northbeam
+DATABASE_ADMIN_URL=postgresql://northbeam:northbeam@localhost:14302/northbeam
 
 # Better Auth
 BETTER_AUTH_SECRET=${SECRET}
-BETTER_AUTH_URL=http://localhost:8000
-PUBLIC_WEB_URL=http://localhost:3000
+BETTER_AUTH_URL=http://localhost:14301
+PUBLIC_WEB_URL=http://localhost:14300
 
-# Web → API (client). Defaults to :8000 if unset.
-NEXT_PUBLIC_API_URL=http://localhost:8000
+# Web → API (client). Defaults to :14301 if unset.
+NEXT_PUBLIC_API_URL=http://localhost:14301
 ENV
 
 echo "→ wrote .env.local (BETTER_AUTH_SECRET generated)"
