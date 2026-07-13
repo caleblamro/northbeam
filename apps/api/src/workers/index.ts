@@ -9,6 +9,7 @@ import { env } from '../lib/env.js';
 import { startComputeWorker } from './compute-worker.js';
 import { startFlowWorker } from './flow-worker.js';
 import { startSfImportWorker } from './sf-import-worker.js';
+import { startSfSyncWorker } from './sf-sync-worker.js';
 
 // Fail-fast on missing env, and refuse an RLS-bypassing DB connection —
 // workers write org data and must be subject to the same isolation as the API.
@@ -26,9 +27,12 @@ logger.info({ worker: 'compute' }, 'worker.started');
 const flows = startFlowWorker();
 logger.info({ worker: 'flow-runs' }, 'worker.started');
 
+const sfSync = startSfSyncWorker();
+logger.info({ worker: 'sf-sync' }, 'worker.started');
+
 async function shutdown(signal: NodeJS.Signals) {
   logger.info({ signal }, 'worker.shutting_down');
-  await Promise.all([sfImport.close(), compute.close(), flows.close()]);
+  await Promise.all([sfImport.close(), compute.close(), flows.close(), sfSync.close()]);
   process.exit(0);
 }
 

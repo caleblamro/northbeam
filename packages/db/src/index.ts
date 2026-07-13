@@ -178,7 +178,9 @@ export {
   updateRecord,
   updateRecordOwner,
   deleteRecord,
+  recordIdsBySalesforceIds,
   resolveRefLabels,
+  setRecordSalesforceId,
   labelsForIds,
   listRelated,
   listChildrenByRef,
@@ -248,6 +250,17 @@ export {
   resolveReferencesBySfid,
   type ImportRow,
 } from './dynamic/bulk.js';
+// Two-way Salesforce sync: write-back outbox + poll cursors.
+export {
+  markDirtyForSync,
+  getOutboxRow,
+  clearOutboxRow,
+  listOutboxRecords,
+  getCursor,
+  setCursor,
+  type SfSyncOutboxRow,
+  type SfSyncCursorRow,
+} from './queries/sf-sync.js';
 // Salesforce connection persistence (ciphertext tokens only).
 export {
   getConnection,

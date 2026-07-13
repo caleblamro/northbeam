@@ -14,6 +14,8 @@ import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { env } from '../../lib/env.js';
 import { enqueueImport } from '../../queue/sf-import.js';
+import { cancelPoll, schedulePoll } from '../../queue/sf-sync.js';
+import { invalidateWritebackToggle } from '../../salesforce/capture.js';
 import { NoConnectionError, clientForOrg, flagIfAuthError } from '../../salesforce/client.js';
 import { STANDARD_TARGETS, mapSObject } from '../../salesforce/mapper.js';
 import { permissionProcedure, protectedProcedure, router } from '../trpc.js';
@@ -58,13 +60,47 @@ export const salesforceRouter = router({
       status: (conn?.status ?? null) as ConnStatus | null,
       instanceUrl: conn?.instanceUrl ?? null,
       connectedAt: conn?.createdAt ?? null,
+      writebackEnabled: conn?.writebackEnabled ?? false,
+      pollEnabled: conn?.pollEnabled ?? false,
     };
   }),
 
   disconnect: permissionProcedure('migration.run').mutation(async ({ ctx }) => {
+    await cancelPoll(ctx.auth.organizationId).catch(() => {});
     await deleteConnection(ctx.db, ctx.auth.organizationId);
+    invalidateWritebackToggle(ctx.auth.organizationId);
     return { ok: true as const };
   }),
+
+  /** Two-way sync gates. Write-back mutates the customer's Salesforce org and
+   *  polling consumes API quota — admin-only, default OFF, explicit per org. */
+  setSync: permissionProcedure('migration.run')
+    .input(
+      z.object({
+        writebackEnabled: z.boolean().optional(),
+        pollEnabled: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const orgId = ctx.auth.organizationId;
+      const conn = await getConnection(ctx.db, orgId);
+      if (!conn) throw new TRPCError({ code: 'PRECONDITION_FAILED' });
+      await ctx.db
+        .update(schema.salesforceConnection)
+        .set({
+          ...(input.writebackEnabled !== undefined
+            ? { writebackEnabled: input.writebackEnabled }
+            : {}),
+          ...(input.pollEnabled !== undefined ? { pollEnabled: input.pollEnabled } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.salesforceConnection.id, conn.id));
+      invalidateWritebackToggle(orgId);
+      // The repeatable poll job lives/dies with the toggle.
+      if (input.pollEnabled === true) ctx.postCommit.push(() => schedulePoll(orgId));
+      if (input.pollEnabled === false) ctx.postCommit.push(() => cancelPoll(orgId));
+      return { ok: true as const };
+    }),
 
   /** Importable objects in the connected org: the standard five + every custom
    *  object, with record counts. */

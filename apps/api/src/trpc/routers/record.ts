@@ -28,6 +28,7 @@ import {
 } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { captureRecordChange } from '../../salesforce/capture.js';
 import type { Context } from '../context.js';
 import { DateGrainSchema, ReportAggSchema, ReportHavingSchema } from '../report-config.js';
 import { FilterEntrySchema } from '../schemas.js';
@@ -304,6 +305,15 @@ export const recordRouter = router({
           name: displayName(fields, created.data, object.nameExpression),
         },
       });
+      // Write-back capture: a locally-created record on a mapped object gets
+      // an SF counterpart (the worker POSTs and stamps salesforce_id back).
+      const syncEnqueue = await captureRecordChange(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        objectKey: object.key,
+        recordId: created.id,
+        changedKeys: Object.keys(created.data),
+      });
+      if (syncEnqueue) ctx.postCommit.push(syncEnqueue);
       return { ...created, data: { ...created.data, ...computed } };
     }),
 
@@ -372,6 +382,15 @@ export const recordRouter = router({
           changed,
         },
       });
+      // Write-back capture (no-op unless the org enabled sync). Outbox row
+      // commits with this tx; the enqueue runs post-commit.
+      const syncEnqueue = await captureRecordChange(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        objectKey: object.key,
+        recordId: input.id,
+        changedKeys: changed,
+      });
+      if (syncEnqueue) ctx.postCommit.push(syncEnqueue);
       return row ? { ...row, data: { ...row.data, ...computed } } : row;
     }),
 

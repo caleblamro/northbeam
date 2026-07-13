@@ -701,6 +701,30 @@ export class SalesforceClient {
     return Buffer.from(await res.arrayBuffer());
   }
 
+  /* ── Writes (the write-back sync path — everything else here is read-only;
+        callers gate these behind the per-org writebackEnabled toggle) ────── */
+
+  /** Create one record. Returns the new Salesforce id. */
+  async createRecord(sobject: string, fields: Record<string, unknown>): Promise<string> {
+    const res = await this.request(`/services/data/${this.apiVersion}/sobjects/${sobject}/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+    const body = (await res.json()) as { id?: string; success?: boolean };
+    if (!body.id) throw new SalesforceError(500, `create ${sobject}: no id in response`);
+    return body.id;
+  }
+
+  /** Patch specific fields on one record (204 on success). */
+  async updateRecord(sobject: string, id: string, fields: Record<string, unknown>): Promise<void> {
+    await this.request(`/services/data/${this.apiVersion}/sobjects/${sobject}/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+  }
+
   /* ── Analytics (reports + dashboards) ─────────────────────────────────── */
 
   /** All reports the connected user can see, most recently modified first.

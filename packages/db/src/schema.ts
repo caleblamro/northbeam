@@ -9,6 +9,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
@@ -740,10 +741,62 @@ export const salesforceConnection = pgTable(
     accessTokenEnc: text('access_token_enc'),
     refreshTokenEnc: text('refresh_token_enc'),
     connectedBy: text('connected_by').references(() => user.id, { onDelete: 'set null' }),
+    // Two-way sync gates. Both default OFF: write-back mutates the customer's
+    // Salesforce org and polling consumes API quota — enabling either is an
+    // explicit admin decision per workspace.
+    writebackEnabled: boolean('writeback_enabled').notNull().default(false),
+    pollEnabled: boolean('poll_enabled').notNull().default(false),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   () => [orgIsolation('salesforce_connection_org_isolation')],
+);
+
+/** Write-back outbox: one row per record with un-synced local edits. dirtyKeys
+ *  is the UNION of field keys changed since the last successful push, so rapid
+ *  edits coalesce into one PATCH and a worker retry never loses keys. Rows are
+ *  written inside the mutating transaction (atomic with the edit) and cleared
+ *  by the sync worker after Salesforce accepts the write. */
+export const sfSyncOutbox = pgTable(
+  'sf_sync_outbox',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    objectKey: text('object_key').notNull(),
+    recordId: uuid('record_id').notNull(),
+    dirtyKeys: jsonb('dirty_keys').$type<string[]>().notNull().default([]),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('sf_sync_outbox_record').on(t.organizationId, t.objectKey, t.recordId),
+    orgIsolation('sf_sync_outbox_org_isolation'),
+  ],
+);
+
+/** Poll cursor: high-water SystemModstamp per imported object. The poller only
+ *  pulls changes for records that already exist locally (subtree discipline);
+ *  the cursor bounds the modstamp probe so steady-state polls are one cheap
+ *  id+modstamp SOQL per object. */
+export const sfSyncCursor = pgTable(
+  'sf_sync_cursor',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    objectKey: text('object_key').notNull(),
+    sfObject: text('sf_object').notNull(),
+    /** ISO SystemModstamp of the newest change applied (or probed past). */
+    lastModstamp: text('last_modstamp').notNull(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('sf_sync_cursor_object').on(t.organizationId, t.objectKey),
+    orgIsolation('sf_sync_cursor_org_isolation'),
+  ],
 );
 
 // One migration job. Goes mapping → ready → running → completed/failed.

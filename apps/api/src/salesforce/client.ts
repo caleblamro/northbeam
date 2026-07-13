@@ -188,6 +188,14 @@ class RefreshingSalesforceClient extends SalesforceClient {
     return this.withRefresh((c) => c.downloadBlob(path));
   }
 
+  override createRecord(sobject: string, fields: Record<string, unknown>) {
+    return this.withRefresh((c) => c.createRecord(sobject, fields));
+  }
+
+  override updateRecord(sobject: string, id: string, fields: Record<string, unknown>) {
+    return this.withRefresh((c) => c.updateRecord(sobject, id, fields));
+  }
+
   override listReports(limit?: number) {
     return this.withRefresh((c) => c.listReports(limit));
   }

@@ -11,8 +11,11 @@
 import {
   type Database,
   type DbExecutor,
+  type FieldConfig,
   type FieldRow,
   type ImportRow,
+  type ObjectLayout,
+  type PicklistOption,
   addField,
   bulkInsertRecords,
   createObjectTable,
@@ -159,9 +162,7 @@ export async function executeRun(
       // data path (toDb would null anything that isn't "objectKey:uuid"); they
       // resolve in the final pass like plain references.
       const refAnyActive = active.filter((f) => f.type === 'reference_any');
-      const dataActive = active.filter(
-        (f) => f.type !== 'reference' && f.type !== 'reference_any',
-      );
+      const dataActive = active.filter((f) => f.type !== 'reference' && f.type !== 'reference_any');
       const dataFieldRows = dataActive.map((f) => fieldByKey.get(f.key) as FieldRow);
 
       // Mirror the resolved record name into the object's nameExpression field
@@ -557,6 +558,7 @@ async function* streamQueries(
 async function ensureDefs(db: DbExecutor, orgId: string, plan: Plan): Promise<Map<string, string>> {
   const { obj } = plan;
   let existing = await getObjectByKey(db, orgId, obj.targetKey);
+  const preExisted = Boolean(existing);
 
   if (!existing) {
     // Display name: point nameExpression at the imported field that carries
@@ -636,6 +638,12 @@ async function ensureDefs(db: DbExecutor, orgId: string, plan: Plan): Promise<Ma
   if (existing) {
     await createObjectTable(db, orgId, existing.object, existing.fields);
     for (const f of existing.fields) await addField(db, orgId, existing.object, f);
+    // Mapped standard objects keep their curated seed config — but the import
+    // must still surface: (a) SF picklist values the seed vocabulary lacks
+    // (merged into the field's options or its global picklist), and (b) layout
+    // sections for imported fields the curated layout doesn't show — otherwise
+    // imported data exists but is invisible on the record page.
+    if (preExisted) await mergeIntoMappedObject(db, orgId, plan, existing);
   }
 
   await db
@@ -649,6 +657,82 @@ async function ensureDefs(db: DbExecutor, orgId: string, plan: Plan): Promise<Ma
     );
 
   return rtMap;
+}
+
+/** Reconcile an import into a PRE-EXISTING (seeded standard) object without
+ *  overwriting its curated config:
+ *  1. Picklist option union — SF values missing from the seed vocabulary are
+ *     appended to the field's own options, or to its global picklist when the
+ *     field delegates options there (e.g. deal `stage`). Without this,
+ *     imported values render as raw strings and the stage path can't place
+ *     records.
+ *  2. Layout append — mapped fields the curated layout doesn't show are added
+ *     as trailing sections (ids prefixed `sf_`), so imported data is visible
+ *     on the record page. Both passes are idempotent (set-difference based). */
+async function mergeIntoMappedObject(
+  db: DbExecutor,
+  orgId: string,
+  plan: Plan,
+  loaded: NonNullable<Awaited<ReturnType<typeof getObjectByKey>>>,
+): Promise<void> {
+  const byKey = new Map(loaded.fields.map((f) => [f.key, f]));
+
+  for (const pf of plan.fields) {
+    if (pf.status !== 'mapped') continue;
+    if (pf.type !== 'picklist' && pf.type !== 'multipicklist') continue;
+    const existing = byKey.get(pf.key);
+    if (!existing || (existing.type !== 'picklist' && existing.type !== 'multipicklist')) continue;
+    const incoming = (pf.config.options ?? []) as PicklistOption[];
+    if (!incoming.length) continue;
+    const cfg = (existing.config ?? {}) as FieldConfig;
+    if (cfg.globalPicklistId) {
+      const [gpl] = await db
+        .select()
+        .from(schema.globalPicklist)
+        .where(
+          and(
+            eq(schema.globalPicklist.id, cfg.globalPicklistId),
+            eq(schema.globalPicklist.organizationId, orgId),
+          ),
+        );
+      if (!gpl) continue;
+      const have = new Set(gpl.values.map((o) => o.value));
+      const missing = incoming.filter((o) => !have.has(o.value));
+      if (missing.length) {
+        await db
+          .update(schema.globalPicklist)
+          .set({ values: [...gpl.values, ...missing], updatedAt: new Date() })
+          .where(eq(schema.globalPicklist.id, gpl.id));
+      }
+    } else {
+      const own = (cfg.options ?? []) as PicklistOption[];
+      const have = new Set(own.map((o) => o.value));
+      const missing = incoming.filter((o) => !have.has(o.value));
+      if (missing.length) {
+        await db
+          .update(schema.fieldDef)
+          .set({ config: { ...cfg, options: [...own, ...missing] } })
+          .where(eq(schema.fieldDef.id, existing.id));
+      }
+    }
+  }
+
+  const layout = (loaded.object.layout ?? { sections: [] }) as ObjectLayout;
+  const shown = new Set((layout.sections ?? []).flatMap((s) => s.fields));
+  const mappedKeys = new Set(plan.fields.filter((f) => f.status === 'mapped').map((f) => f.key));
+  const extraSections = (plan.obj.layout?.sections ?? [])
+    .map((s) => ({
+      ...s,
+      id: `sf_${s.id}`,
+      fields: s.fields.filter((k) => !shown.has(k) && mappedKeys.has(k) && byKey.has(k)),
+    }))
+    .filter((s) => s.fields.length > 0);
+  if (extraSections.length) {
+    await db
+      .update(schema.objectDef)
+      .set({ layout: { ...layout, sections: [...(layout.sections ?? []), ...extraSections] } })
+      .where(eq(schema.objectDef.id, loaded.object.id));
+  }
 }
 
 async function buildOwnerMap(
