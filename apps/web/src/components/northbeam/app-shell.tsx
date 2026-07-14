@@ -30,6 +30,7 @@ import {
 import { AppTopbar } from './app-topbar';
 import { CommandPalette } from './command-legacy';
 import { Spinner } from './primitives';
+import { useRecordVisitTracker } from './use-record-visit';
 
 // Lets a page inject action buttons into the layout-owned page header without
 // re-declaring the header. Actions are static per page, so we register on mount.
@@ -114,6 +115,8 @@ function ShellFrame({
   const [hideHead, setHideHead] = useState(false);
   const meta = pageMetaFor(pathname);
   const composer = useAiComposer();
+  // Record-page visits register in the recents list (nav tab menus, palette).
+  useRecordVisitTracker();
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {

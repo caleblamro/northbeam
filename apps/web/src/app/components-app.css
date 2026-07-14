@@ -2299,6 +2299,32 @@
 .shelltab-cell[data-active="true"] .shelltab svg {
   color: var(--ink);
 }
+/* Lightning-style tab menu chevron — sibling of the tab link, revealed on
+   hover/active exactly like the unpin button. */
+.shelltab__menu {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--ink-subtle);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.shelltab-cell:hover .shelltab__menu,
+.shelltab-cell[data-active="true"] .shelltab__menu,
+.shelltab__menu[data-state="open"] {
+  opacity: 1;
+}
+.shelltab__menu:hover,
+.shelltab__menu[data-state="open"] {
+  background: var(--surface-muted, rgba(0, 0, 0, 0.06));
+  color: var(--ink);
+}
+
 .shelltab__close {
   display: grid;
   place-items: center;
@@ -2314,7 +2340,33 @@
   transition: opacity 0.12s, background 0.12s, color 0.12s;
 }
 .shelltab-cell:hover .shelltab__close,
-.shelltab-cell[data-active="true"] .shelltab__close {
+.shelltab-cell[data-active="true"] /* Lightning-style tab menu chevron — sibling of the tab link, revealed on
+   hover/active exactly like the unpin button. */
+.shelltab__menu {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--ink-subtle);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.shelltab-cell:hover .shelltab__menu,
+.shelltab-cell[data-active="true"] .shelltab__menu,
+.shelltab__menu[data-state="open"] {
+  opacity: 1;
+}
+.shelltab__menu:hover,
+.shelltab__menu[data-state="open"] {
+  background: var(--surface-muted, rgba(0, 0, 0, 0.06));
+  color: var(--ink);
+}
+
+.shelltab__close {
   opacity: 1;
 }
 .shelltab__close:hover {

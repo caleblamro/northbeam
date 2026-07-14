@@ -752,6 +752,30 @@ export const salesforceConnection = pgTable(
   () => [orgIsolation('salesforce_connection_org_isolation')],
 );
 
+/** Flat per-record comments (the Chatter-equivalent tab on record pages).
+ *  Records live in per-org schemas, so the reference is (objectKey, recordId)
+ *  rather than an FK; deleting a record orphans its comments harmlessly and
+ *  org deletion cascades via organizationId. */
+export const recordComment = pgTable(
+  'record_comment',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    objectKey: text('object_key').notNull(),
+    recordId: uuid('record_id').notNull(),
+    authorId: text('author_id').references(() => user.id, { onDelete: 'set null' }),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('record_comment_record').on(t.organizationId, t.objectKey, t.recordId),
+    orgIsolation('record_comment_org_isolation'),
+  ],
+);
+
 /** Write-back outbox: one row per record with un-synced local edits. dirtyKeys
  *  is the UNION of field keys changed since the last successful push, so rapid
  *  edits coalesce into one PATCH and a worker retry never loses keys. Rows are
