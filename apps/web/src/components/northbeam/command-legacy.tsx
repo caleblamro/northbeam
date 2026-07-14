@@ -3,10 +3,14 @@
 
 'use client';
 
+import { trpc } from '@/lib/api';
 import { CMD_GROUP_ORDER, CMD_ITEMS, type CmdItem } from '@/lib/cmd-data';
 import { useEffect, useMemo, useState } from 'react';
-import { Icon } from '../northbeam/icons';
+import { Icon, type IconName } from '../northbeam/icons';
 import { Avatar, useDismiss } from '../northbeam/primitives';
+
+// Standard objects already have curated 'Go to' entries in CMD_ITEMS.
+const STATIC_OBJECT_KEYS = new Set(['account', 'contact', 'deal', 'activity']);
 
 export function CommandPalette({
   open,
@@ -29,11 +33,39 @@ export function CommandPalette({
     }
   }, [open]);
 
+  // Live record search — debounced so a keystroke burst is one request. The
+  // results render as a 'Records' group ahead of the static commands.
+  const [debouncedQ, setDebouncedQ] = useState('');
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQ(q.trim()), 250);
+    return () => window.clearTimeout(t);
+  }, [q]);
+  const recordsQ = trpc.record.search.useQuery(
+    { q: debouncedQ },
+    { enabled: open && debouncedQ.length >= 2, placeholderData: (prev) => prev },
+  );
+
+  // Every object (incl. imported custom ones) gets a 'Go to' entry; the four
+  // standard objects keep their curated static tiles.
+  const objectsQ = trpc.object.list.useQuery(undefined, { enabled: open });
+  const items = useMemo(() => {
+    const objectNav: CmdItem[] = (objectsQ.data ?? [])
+      .filter((o) => !STATIC_OBJECT_KEYS.has(o.key))
+      .map((o) => ({
+        id: `go-obj:${o.key}`,
+        group: 'Go to',
+        icon: (o.icon || 'cube') as IconName,
+        label: o.labelPlural,
+        href: `/${o.key}`,
+      }));
+    return [...CMD_ITEMS, ...objectNav];
+  }, [objectsQ.data]);
+
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return CMD_ITEMS;
-    return CMD_ITEMS.filter((it) => `${it.label} ${it.sub ?? ''}`.toLowerCase().includes(s));
-  }, [q]);
+    if (!s) return items;
+    return items.filter((it) => `${it.label} ${it.sub ?? ''}`.toLowerCase().includes(s));
+  }, [q, items]);
 
   const grouped = useMemo(() => {
     const m: Record<string, CmdItem[]> = {};
@@ -42,14 +74,25 @@ export function CommandPalette({
       list.push(it);
       m[it.group] = list;
     }
-    const blocks = CMD_GROUP_ORDER.filter((g) => m[g]).map((g) => ({
-      group: g,
-      items: m[g] as CmdItem[],
-    }));
+    if (debouncedQ.length >= 2) {
+      m.Records = (recordsQ.data ?? []).map((r) => ({
+        id: `rec:${r.objectKey}:${r.id}`,
+        group: 'Records',
+        icon: (r.icon || 'cube') as IconName,
+        label: r.name,
+        meta: r.objectLabel,
+        href: `/${r.objectKey}/${r.id}`,
+      }));
+      if (m.Records.length === 0) delete m.Records;
+    }
+    const order = debouncedQ.length >= 2 ? ['Records', ...CMD_GROUP_ORDER] : [...CMD_GROUP_ORDER];
+    const blocks = [...new Set(order)]
+      .filter((g) => m[g]?.length)
+      .map((g) => ({ group: g, items: m[g] as CmdItem[] }));
     const flat: CmdItem[] = [];
     for (const b of blocks) for (const it of b.items) flat.push(it);
     return { blocks, flat };
-  }, [filtered]);
+  }, [filtered, recordsQ.data, debouncedQ]);
 
   const choose = (it: CmdItem) => {
     onSelect?.(it);

@@ -22,7 +22,7 @@
     "push": "dotenv -e ../../.env.local -- drizzle-kit push",
     "generate": "dotenv -e ../../.env.local -- drizzle-kit generate",
     "migrate": "dotenv -e ../../.env.local -- drizzle-kit migrate",
-    "studio": "dotenv -e ../../.env.local -- drizzle-kit studio",
+    "studio": "dotenv -e ../../.env.local -- drizzle-kit studio --port 14304",
     "seed:org": "dotenv -e ../../.env.local -- tsx ./src/scripts/seed-org.ts",
     "setup:rls": "dotenv -e ../../.env.local -- tsx ./src/scripts/setup-app-role.ts",
     "clean": "rm -rf .turbo dist"

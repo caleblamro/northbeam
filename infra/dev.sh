@@ -5,7 +5,7 @@
 #   2. Brings up docker (postgres) and waits for healthchecks
 #   3. Syncs the schema via `drizzle-kit push` — instant, no migration files to
 #      manage during iteration. For prod, run `pnpm db:generate` + `pnpm db:migrate`.
-#   4. Hands off to `turbo run dev` (web → :3000, api → :8000, in parallel)
+#   4. Hands off to `turbo run dev` (web → :14300, api → :14301, in parallel)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -30,12 +30,12 @@ if ! grep -q '^DATABASE_ADMIN_URL=' .env.local; then
   OLD_ADMIN_URL="postgresql://northbeam:northbeam@localhost:5432/northbeam"
   if grep -q "^DATABASE_URL=${OLD_ADMIN_URL}$" .env.local; then
     echo "→ upgrading .env.local for the RLS app role (northbeam_app)"
-    sed -i.bak "s|^DATABASE_URL=${OLD_ADMIN_URL}$|DATABASE_URL=postgresql://northbeam_app:northbeam_app@localhost:5432/northbeam|" .env.local
+    sed -i.bak "s|^DATABASE_URL=${OLD_ADMIN_URL}$|DATABASE_URL=postgresql://northbeam_app:northbeam_app@localhost:14302/northbeam|" .env.local
     rm -f .env.local.bak
     {
       echo ""
       echo "# Owner connection for drizzle push/migrate + scripts/setup-app-role.ts"
-      echo "DATABASE_ADMIN_URL=${OLD_ADMIN_URL}"
+      echo "DATABASE_ADMIN_URL=postgresql://northbeam:northbeam@localhost:14302/northbeam"
       echo "POSTGRES_APP_USER=northbeam_app"
       echo "POSTGRES_APP_PASSWORD=northbeam_app"
     } >> .env.local
@@ -63,7 +63,7 @@ pnpm --filter @northbeam/db push
 echo "→ provisioning app role + RLS enforcement..."
 pnpm --filter @northbeam/db setup:rls
 
-# 4. start long-running apps via turbo (web + api)
-echo "→ starting apps (web → :3000 · api → :8000)..."
+# 4. start long-running apps via turbo (web + api + job worker)
+echo "→ starting apps (web → :14300 · api → :14301 · worker)..."
 echo
-exec pnpm exec turbo run dev
+exec pnpm exec turbo run dev dev:worker

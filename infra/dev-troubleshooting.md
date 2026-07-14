@@ -39,7 +39,7 @@ Most failures are one of:
 In local dev, magic links are printed to the **API server console** (the `pnpm dev` terminal, look at the `@northbeam/api` lane). Search for `Magic link:`:
 
 ```
-[api] Magic link: http://localhost:3000/verify?token=...
+[api] Magic link: http://localhost:14300/verify?token=...
 ```
 
 If you don't see it, check that the email mutation actually fired (look for a recent `auth.requestMagicLink` log line). If `RESEND_API_KEY` is set, the link goes to email instead — clear that variable to fall back to console printing.
@@ -67,10 +67,10 @@ The package alias works without a build step (workspace source resolution), so a
 
 ## Port in use
 
-Web is :3000, API is :8000. To find what's holding a port:
+Web is :14300, API is :14301. To find what's holding a port:
 
 ```bash
-lsof -nP -iTCP:3000 -sTCP:LISTEN
+lsof -nP -iTCP:14300 -sTCP:LISTEN
 ```
 
 Kill the offending process, then re-run `pnpm dev`.

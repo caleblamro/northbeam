@@ -31,6 +31,18 @@ export const STANDARD_TARGETS: Record<string, string> = {
   Event: 'activity',
 };
 
+// `<SObject>.<FieldName>` → seed field key on the mapped standard object.
+// Only for fields whose auto-derived key diverges from the seed vocabulary;
+// same-name fields (Amount → amount, Industry → industry) align without help.
+const STANDARD_FIELD_ALIASES: Record<string, string> = {
+  'Opportunity.StageName': 'stage',
+  'Opportunity.AccountId': 'account',
+  'Contact.AccountId': 'account',
+  'Contact.ReportsToId': 'reports_to',
+  'Task.ActivityDate': 'due_date',
+  'Event.ActivityDate': 'due_date',
+};
+
 // System/audit/plumbing fields that map to system columns or carry no user value.
 const SYSTEM_FIELDS = new Set([
   'Id',
@@ -193,7 +205,12 @@ export function mapSObject(
     // Emitted type can differ from the raw pick (a polymorphic SF reference maps
     // to our reference_any), so track it separately from the classification.
     let emitType = type;
-    const key = uniqueKey(sfToKey(f.name));
+    // Standard-field aliases: when mapping onto a seeded standard object, a
+    // handful of well-known SF fields must land IN the seed field rather than
+    // beside it (StageName → stage_name would leave the seeded `stage` — and
+    // the stage path UI — permanently empty). SF standard field names are
+    // identical in every org, so this table is org-agnostic.
+    const key = uniqueKey(STANDARD_FIELD_ALIASES[`${d.name}.${f.name}`] ?? sfToKey(f.name));
     const config: FieldConfig = {};
     let status: ProposedField['status'] = confident ? 'mapped' : 'review';
     let confidence = confident ? 90 : 40;
@@ -233,7 +250,10 @@ export function mapSObject(
       } else {
         // Polymorphic SF lookup (WhoId/WhatId) → native reference_any. Constrain
         // to the targets in this import; empty targetObjects = any object. It's
-        // 'mapped' as long as at least one referenced object imports.
+        // 'mapped' as long as at least one referenced object imports. (This
+        // supersedes the per-target column-split approach from the direct-
+        // integration branch — the crawler consumes config.targetObjects for
+        // its traversal edges instead.)
         emitType = 'reference_any';
         config.targetObjects = f.referenceTo
           .filter((t) => t !== 'User')

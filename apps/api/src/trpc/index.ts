@@ -4,6 +4,7 @@
 import { agentRouter } from './routers/agent.js';
 import { aiRouter } from './routers/ai.js';
 import { auditRouter } from './routers/audit.js';
+import { commentRouter } from './routers/comment.js';
 import { authRouter } from './routers/auth.js';
 import { automationRouter } from './routers/automation.js';
 import { fieldRouter } from './routers/field.js';
@@ -26,6 +27,7 @@ export const appRouter = router({
   agent: agentRouter,
   ai: aiRouter,
   audit: auditRouter,
+  comment: commentRouter,
   auth: authRouter,
   automation: automationRouter,
   field: fieldRouter,

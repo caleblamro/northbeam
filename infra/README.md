@@ -1,6 +1,6 @@
 # infra
 
-`docker-compose.dev.yml` runs local Postgres (user/pass/db all `northbeam`, port 5432).
+`docker-compose.dev.yml` runs local Postgres (user/pass/db all `northbeam`, host port 14302).
 
 ```sh
 docker compose -f infra/docker-compose.dev.yml up -d

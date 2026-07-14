@@ -18,8 +18,8 @@ import { useState } from 'react';
 import superjson from 'superjson';
 import { trpc } from './trpc';
 
-// Dev default: apps/api lives on :8000. Override via NEXT_PUBLIC_API_URL.
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+// Dev default: apps/api lives on :14301. Override via NEXT_PUBLIC_API_URL.
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:14301';
 
 export function ApiProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(

@@ -2,11 +2,13 @@
 // with automatic token refresh on 401 (access token expiry).
 
 import {
+  type Database,
   type DbExecutor,
   type SalesforceConnectionRow,
   getConnection,
   rotateTokens,
   setConnectionStatus,
+  withOrgContext,
 } from '@northbeam/db';
 import {
   type QueryResult,
@@ -186,6 +188,14 @@ class RefreshingSalesforceClient extends SalesforceClient {
     return this.withRefresh((c) => c.downloadBlob(path));
   }
 
+  override createRecord(sobject: string, fields: Record<string, unknown>) {
+    return this.withRefresh((c) => c.createRecord(sobject, fields));
+  }
+
+  override updateRecord(sobject: string, id: string, fields: Record<string, unknown>) {
+    return this.withRefresh((c) => c.updateRecord(sobject, id, fields));
+  }
+
   override listReports(limit?: number) {
     return this.withRefresh((c) => c.listReports(limit));
   }
@@ -237,6 +247,21 @@ class RefreshingSalesforceClient extends SalesforceClient {
 
 export async function clientForOrg(db: DbExecutor, orgId: string): Promise<SalesforceClient> {
   const conn = await getConnection(db, orgId);
+  if (!conn || conn.status !== 'connected' || !conn.accessTokenEnc) throw new NoConnectionError();
+  return new RefreshingSalesforceClient(db, orgId, conn, decryptSecret(conn.accessTokenEnc));
+}
+
+/** Worker-safe variant. Background processes hold the root pool (no request
+ *  transaction), so the connection row is invisible to RLS until the read is
+ *  wrapped in an org context. The client itself keeps the root executor: its
+ *  only writes are the 401-refresh path, which is unreachable with dev CLI
+ *  tokens (no refresh token stored) — OAuth background refresh would need the
+ *  same withOrgContext treatment inside attemptTokenRefresh. */
+export async function clientForOrgBackground(
+  db: Database,
+  orgId: string,
+): Promise<SalesforceClient> {
+  const conn = await withOrgContext(db, orgId, (tx) => getConnection(tx, orgId));
   if (!conn || conn.status !== 'connected' || !conn.accessTokenEnc) throw new NoConnectionError();
   return new RefreshingSalesforceClient(db, orgId, conn, decryptSecret(conn.accessTokenEnc));
 }

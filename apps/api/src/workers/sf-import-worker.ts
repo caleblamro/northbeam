@@ -13,7 +13,7 @@ import { Worker } from 'bullmq';
 import { env } from '../lib/env.js';
 import { redis } from '../queue/connection.js';
 import { SF_IMPORT_QUEUE, type SfImportJobData } from '../queue/sf-import.js';
-import { clientForOrg } from '../salesforce/client.js';
+import { clientForOrgBackground } from '../salesforce/client.js';
 import { executeRun } from '../salesforce/import.js';
 
 let cachedDb: Database | undefined;
@@ -28,7 +28,7 @@ export function startSfImportWorker(): Worker<SfImportJobData> {
     async (job) => {
       const { orgId, runId } = job.data;
       logger.info({ orgId, runId }, 'sf-import.start');
-      const client = await clientForOrg(db(), orgId);
+      const client = await clientForOrgBackground(db(), orgId);
       await executeRun(db(), client, orgId, runId);
       logger.info({ orgId, runId }, 'sf-import.complete');
     },

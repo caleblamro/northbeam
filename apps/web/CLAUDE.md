@@ -43,7 +43,7 @@ Every `(app)/<page>` is a Client Component (`'use client'`) that:
 ## Test the change
 
 - `pnpm --filter @northbeam/web typecheck` — should be clean before submitting.
-- `pnpm --filter @northbeam/web dev` — runs Next on :3000. The API must be running on :8000 separately (or use `pnpm dev` at the root to spin both via Turbo).
+- `pnpm --filter @northbeam/web dev` — runs Next on :14300. The API must be running on :14301 separately (or use `pnpm dev` at the root to spin both via Turbo).
 
 ## Page composition discipline
 
@@ -94,6 +94,6 @@ The end state is one set of primitives + Northbeam-specific wrappers that compos
 
 ## Common pitfalls
 
-- **Cross-origin cookies**: auth cookies live on the API origin (`:8000`), not on the web origin. RSCs cannot read them. Always bootstrap auth client-side via `trpc.me.bootstrap`.
+- **Cross-origin cookies**: auth cookies live on the API origin (`:14301`), not on the web origin. RSCs cannot read them. Always bootstrap auth client-side via `trpc.me.bootstrap`.
 - **Adding an icon**: register the Phosphor → lucide mapping in `components/northbeam/icons.tsx`. Verify the lucide name exists (`node -e "console.log(!!require('lucide-react').XYZ)"`).
 - **`tabular-nums` for numbers**: the design uses `font-variant-numeric: tabular-nums` for every numeric column — keep it consistent.

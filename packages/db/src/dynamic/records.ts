@@ -407,6 +407,43 @@ export async function updateRecordOwner(
   return asRows(res).length > 0;
 }
 
+/** salesforce_id → local uuid for the ids that exist locally. The poll sync
+ *  uses this both to intersect "changed in SF" with "known here" and to
+ *  resolve inbound reference values. */
+export async function recordIdsBySalesforceIds(
+  db: DbExecutor,
+  opts: { orgId: string; object: ObjectRow; salesforceIds: string[] },
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!opts.salesforceIds.length) return out;
+  const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
+  const CHUNK = 5000;
+  for (let i = 0; i < opts.salesforceIds.length; i += CHUNK) {
+    const chunk = opts.salesforceIds.slice(i, i + CHUNK);
+    const res = await db.execute(
+      sql`select ${col(SYS.id)} as id, ${col(SYS.salesforceId)} as sfid from ${tbl}
+          where ${col(SYS.salesforceId)} = any(${chunk})`,
+    );
+    for (const r of asRows(res) as Array<{ id: string; sfid: string }>) out.set(r.sfid, r.id);
+  }
+  return out;
+}
+
+/** Stamp the Salesforce id onto a locally-created record after write-back
+ *  creates its SF counterpart. System column — updateRecord ignores it. */
+export async function setRecordSalesforceId(
+  db: DbExecutor,
+  opts: { orgId: string; object: ObjectRow; id: string; salesforceId: string },
+): Promise<boolean> {
+  const tbl = sql.raw(qualified(opts.orgId, opts.object.tableName));
+  const res = await db.execute(
+    sql`update ${tbl} set ${col(SYS.salesforceId)} = ${opts.salesforceId}, ${col(SYS.updatedAt)} = now()
+        where ${col(SYS.id)} = ${opts.id}::uuid and ${col(SYS.salesforceId)} is null
+        returning ${col(SYS.id)}`,
+  );
+  return asRows(res).length > 0;
+}
+
 export async function deleteRecord(
   db: DbExecutor,
   opts: { orgId: string; object: ObjectRow; id: string },

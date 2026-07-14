@@ -13,6 +13,7 @@ import {
   displayName,
   getRecordType,
   grantShare,
+  listObjects,
   listSharesForRecord,
   listValidationRules,
   recomputeAndPersist,
@@ -27,6 +28,7 @@ import {
 } from '@northbeam/db';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { captureRecordChange } from '../../salesforce/capture.js';
 import type { Context } from '../context.js';
 import { DateGrainSchema, ReportAggSchema, ReportHavingSchema } from '../report-config.js';
 import { FilterEntrySchema } from '../schemas.js';
@@ -136,6 +138,39 @@ export const recordRouter = router({
         })),
         refLabels,
       };
+    }),
+
+  /** Cross-object record search for the ⌘K palette / global search bar.
+   *  Mirrors `list`'s ACL exactly (per-object read gate, private-visibility
+   *  share resolution) — do NOT relax this to the searchRefs shape, which
+   *  skips ACL. Results are name matches only, a handful per object. */
+  search: protectedProcedure
+    .input(
+      z.object({ q: z.string().min(1).max(200), perObject: z.number().min(1).max(10).optional() }),
+    )
+    .query(async ({ ctx, input }) => {
+      const per = input.perObject ?? 3;
+      const objects = await listObjects(ctx.db, ctx.auth.organizationId);
+      const groups = await Promise.all(
+        objects
+          .filter((o) => !o.archivedAt)
+          .map(async (o) => {
+            // Non-throwing read gate: silently skip objects this caller can't
+            // see instead of failing the whole cross-object search.
+            const authed = await ctx.records.readable(o.key);
+            if (!authed) return [];
+            const { rows } = await ctx.records.searchRefs(o.key, input.q, per);
+            return rows.map((r) => ({
+              objectKey: authed.object.key,
+              objectLabel: authed.object.label,
+              icon: authed.object.icon,
+              color: authed.object.color,
+              id: r.id,
+              name: displayName(authed.fields, r.data, authed.object.nameExpression),
+            }));
+          }),
+      );
+      return groups.flat().slice(0, 30);
     }),
 
   get: protectedProcedure
@@ -270,6 +305,15 @@ export const recordRouter = router({
           name: displayName(fields, created.data, object.nameExpression),
         },
       });
+      // Write-back capture: a locally-created record on a mapped object gets
+      // an SF counterpart (the worker POSTs and stamps salesforce_id back).
+      const syncEnqueue = await captureRecordChange(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        objectKey: object.key,
+        recordId: created.id,
+        changedKeys: Object.keys(created.data),
+      });
+      if (syncEnqueue) ctx.postCommit.push(syncEnqueue);
       return { ...created, data: { ...created.data, ...computed } };
     }),
 
@@ -338,6 +382,15 @@ export const recordRouter = router({
           changed,
         },
       });
+      // Write-back capture (no-op unless the org enabled sync). Outbox row
+      // commits with this tx; the enqueue runs post-commit.
+      const syncEnqueue = await captureRecordChange(ctx.db, {
+        orgId: ctx.auth.organizationId,
+        objectKey: object.key,
+        recordId: input.id,
+        changedKeys: changed,
+      });
+      if (syncEnqueue) ctx.postCommit.push(syncEnqueue);
       return row ? { ...row, data: { ...row.data, ...computed } } : row;
     }),
 

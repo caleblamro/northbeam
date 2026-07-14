@@ -54,6 +54,16 @@ export function RecordListView({
     { id: string; data: Record<string, unknown> } | 'new' | null
   >(null);
 
+  // ?new=1 opens the create drawer on arrival (the nav tab menus' "New" action
+  // deep-links here). Strip the param so closing the drawer doesn't reopen it.
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setEditing('new');
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('new');
+    router.replace(`${pathname}${params.size ? `?${params}` : ''}`, { scroll: false });
+  }, [searchParams, router, pathname]);
+
   // Filters live in the URL so refresh + share-the-link both work. The
   // searchParams object is reactive — useMemo just avoids re-parsing JSON on
   // every render.
@@ -97,7 +107,13 @@ export function RecordListView({
     const explicit = searchParams.get('view');
     const stored = viewsQ.data ?? [];
     const found = explicit ? stored.find((v) => v.id === explicit) : null;
-    return found ?? stored.find((v) => v.isDefault) ?? stored[0] ?? null;
+    // Unpinned default: a LIST view or nothing — landing on /property should
+    // show records (the synthetic All-records fallback), never whichever
+    // imported dashboard happens to sort first. Dashboards/reports stay
+    // reachable via ?view= and the view picker.
+    return (
+      found ?? stored.find((v) => v.isDefault) ?? stored.find((v) => v.type === 'list') ?? null
+    );
   }, [searchParams, viewsQ.data]);
 
   // Effective filter set = static (caller-pinned) + view's stored filters

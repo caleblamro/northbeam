@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { trpc } from '@/lib/api';
 import { useCanObject } from '@/lib/can';
 import { cn } from '@/lib/cn';
@@ -32,6 +33,7 @@ import { ObjChip } from './app-bits';
 import { HidePageHead } from './app-shell';
 import { EmptyState } from './empty-state';
 import { type FieldDefLite, FieldInput, FieldValue, READONLY_FIELD_TYPES } from './field-render';
+import { RecordComments } from './record-comments';
 import { RecordFormDrawer } from './record-form';
 import { RecordPeek } from './record-peek';
 import { StagePath, findStageField } from './stage-path';
@@ -231,12 +233,34 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
     </div>
   );
 
-  // The pre-detail-view layout, unchanged — still the default when no detail
-  // view is saved for this object.
+  // The built-in workspace — Lightning-style tab set. Still the default when
+  // no saved detail view exists for this object.
   function BuiltInWorkspace() {
+    const relatedCount = tableGroups.reduce((n, g) => n + g.rows.length, 0);
     return (
-      <div className="mt-6 grid items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]">
-        <div className="flex min-w-0 flex-col gap-5">
+      <Tabs defaultValue="details" className="mt-5">
+        <TabsList>
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="related">
+            Related
+            {relatedCount > 0 && (
+              <Badge variant="default" size="sm">
+                {relatedCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="activity">
+            Activity
+            {(activityGroup?.rows.length ?? 0) > 0 && (
+              <Badge variant="default" size="sm">
+                {activityGroup?.rows.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="comments">Comments</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="details" className="mt-4 flex flex-col gap-5">
           {sections.map((sec, si) => {
             const cols = sec.cols ?? 2;
             // Imported layouts (Salesforce especially) can repeat a field
@@ -276,14 +300,29 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
               </section>
             );
           })}
+        </TabsContent>
 
+        <TabsContent value="related" className="mt-4 flex flex-col gap-5">
+          {tableGroups.length === 0 && (
+            <EmptyState
+              icon={Users}
+              size="sm"
+              title="Nothing related yet"
+              body="Records that reference this one will appear here, grouped by object."
+            />
+          )}
           {tableGroups.map((g) => {
             const gByKey = new Map(g.fields.map((f) => [f.key, f as FieldDefLite]));
             const gLayout = (g.object.layout ?? {}) as ObjectLayout;
-            const cols = (gLayout.listColumns ?? [])
-              .map((k) => gByKey.get(k))
-              .filter(Boolean)
-              .slice(0, 4) as FieldDefLite[];
+            // Reference columns render raw ids here (the related payload has
+            // no refLabels) — skip them; the Name link is the navigation.
+            const cols = (
+              (gLayout.listColumns ?? [])
+                .map((k) => gByKey.get(k))
+                .filter(Boolean) as FieldDefLite[]
+            )
+              .filter((c) => c.type !== 'reference' && c.type !== 'reference_any')
+              .slice(0, 4);
             return (
               <section
                 key={`${g.object.key}.${g.via.key}`}
@@ -332,21 +371,10 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
               </section>
             );
           })}
-        </div>
+        </TabsContent>
 
-        {/* Right rail: the record's activity feed. */}
-        <aside className="flex min-w-0 flex-col gap-5">
+        <TabsContent value="activity" className="mt-4">
           <section className="overflow-hidden rounded-lg border border-border bg-card">
-            <div className="flex items-center gap-2.5 border-border border-b px-5 py-3">
-              <h2 className="flex-1 font-medium text-[0.9375rem] text-foreground tracking-[-0.005em]">
-                Activity
-              </h2>
-              {activityGroup && (
-                <Badge variant="default" size="sm">
-                  {activityGroup.rows.length}
-                </Badge>
-              )}
-            </div>
             <div className="px-5 py-4">
               {activityGroup ? (
                 <ActivityTimeline
@@ -371,8 +399,12 @@ export function RecordView({ objectKey, id }: { objectKey: string; id: string })
               )}
             </div>
           </section>
-        </aside>
-      </div>
+        </TabsContent>
+
+        <TabsContent value="comments" className="mt-4">
+          <RecordComments objectKey={objectKey} recordId={id} />
+        </TabsContent>
+      </Tabs>
     );
   }
 }
